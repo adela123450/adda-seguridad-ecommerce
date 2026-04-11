@@ -3,7 +3,7 @@ export const Newsletter = () => {
     <section className="relative overflow-hidden py-20 min-h-[420px]">
       {/* Fondo completo */}
       <div
-        className="absolute inset-0 bg-cover bg-no-repeat"
+        className="absolute inset-0 bg-cover bg-center opacity-70 h-full"
         style={{
           backgroundImage: "url('/background-blanco.jpg')",
           backgroundPosition: "right center",
@@ -11,12 +11,12 @@ export const Newsletter = () => {
       />
 
       {/* Capa suave para mejorar lectura */}
-      <div className="absolute inset-0 bg-slate-100/5" />
+      <div className="absolute inset-0 bg-slate-100/5"/>
 
       {/* Contenido */}
-      <div className="container relative z-10 flex min-h-[420px] items-center px-6 md:px-10 lg:px-16">
-        <div className="w-full bg-white p-8 shadow-lg md:w-[55%] lg:w-[42%]">
-          <p className="text-xs font-semibold uppercase text-black">
+      <div className="container z-10 relative p-5 md:p-0 items-center justify-between">
+        <div className="w-full text-black bg-white p-12 space-y5  border-[1px] border-slate-300 md:w-[50%] lg:w-[40%] lg:ml-16">
+          <p className="text-xs uppercase font-semibold">
             Suscríbete a nuestro boletín y recibe promociones exclusivas
           </p>
 

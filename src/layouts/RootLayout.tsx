@@ -2,7 +2,7 @@ import { Outlet, useLocation } from "react-router-dom";
 import { Navbar } from "../components/shared/Navbar";
 import { Footer } from "../components/shared/Footer";
 import { Newsletter } from "../components/home/Newsletter";
-import { Banner } from "../components/home/banner";
+import { Banner } from "../components/home/Banner";
 
 export const RootLayout = () => {
 
