@@ -1,25 +1,30 @@
+import { CardProduct } from "../Products/CardProduct";
+
 interface Props {
-    title: string;
-    products: any[];
+  title: string;
+  products: any[];
 }
 
-export const ProductGrid = ({title, products}: Props) => {
+export const ProductGrid = ({ title, products }: Props) => {
   return (
     <div className="my-32">
-        <h2 className="text-3xl font-semibold text-center mb-8 md:text-4x1 lg:text-5x1">
-            {title}
-        </h2>
-        <div className="grid grid-cols-1 gap-4 gap-y-8 sm:grid-cols-2 lg:grid-cols-4">
-            {products.map((product) => (
-                
-                <div 
-                    className="flex flex-col gap-6 relative"
-                    key={product.id} 
-                    >
-                    <h3>{product.title}</h3>
-                </div>
-            ))}
-        </div>
+      <h2 className="mb-8 text-center text-3xl font-semibold md:text-4xl lg:text-5xl">
+        {title}
+      </h2>
+
+      <div className="grid grid-cols-1 gap-4 gap-y-8 sm:grid-cols-2 lg:grid-cols-4">
+        {products.map((product) => (
+          <CardProduct
+            key={product.id}
+            name={product.name}
+            price={product.price}
+            colors={product.colors}
+            img={product.images?.[0] || "/img/img-banner.jpg"}
+            slug={product.slug}
+            variants={product.variants}
+          />
+        ))}
+      </div>
     </div>
-    );
+  );
 };
