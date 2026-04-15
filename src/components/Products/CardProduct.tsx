@@ -30,9 +30,9 @@ export const CardProduct = ({
   const stock = selectedVariant?.stock || 0;
 
   return (
-    <div className="relative flex flex-col gap-6 group">
+    <div className="relative flex flex-col gap-4 group w-full max-w-[260px]">
       <Link to={`/product/${slug}`}>
-        <div className="flex h-[350px] w-full items-center justify-center py-2 lg:h-[250px]">
+        <div className="flex h-[250px] w-full items-center justify-center">
           <img
             src={img}
             alt={name}

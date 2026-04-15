@@ -15,7 +15,7 @@ export const RootLayout = () => {
         <Banner />
       )}
 
-      <main className="container my-8 flex-1">
+      <main className="max-w-7xl mx-auto px-4 my-8 flex-1 w-full">
         <Outlet />
       </main>
 

@@ -4,10 +4,13 @@ import { ProductGrid } from "../components/home/ProducGrid";
 import { initialData } from "../data/initialData";
 
 export const HomePage = () => {
-  const newProducts = initialData.products.filter((product) => product.isNew);
-  const featuredProducts = initialData.products.filter(
-    (product) => product.isFeatured
-  );
+  const newProducts = initialData.products
+    .filter((product) => product.isNew)
+    .slice(0, 4);
+
+  const featuredProducts = initialData.products
+    .filter((product) => product.isFeatured)
+    .slice(0, 4);
 
   return (
     <div>
