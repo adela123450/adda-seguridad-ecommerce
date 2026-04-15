@@ -1,68 +1,66 @@
-import { useState } from "react";
 import { Link } from "react-router-dom";
 
 interface Props {
   img: string;
   name: string;
-  price: number;
+  brand: string;
+  formattedPrice: string;
   slug: string;
-  colors: { name: string; color: string }[];
-  variants: any[];
+  stockLabel: string;
 }
 
 export const CardProduct = ({
   img,
   name,
-  price,
+  brand,
+  formattedPrice,
   slug,
-  colors,
-  variants,
+  stockLabel,
 }: Props) => {
-  const [activeColor] = useState<{
-    name: string;
-    color: string;
-  }>(colors?.[0] || { name: "Default", color: "#000000" });
-
-  const selectedVariant = variants?.find(
-    (variant) => variant.color === activeColor.color
-  );
-
-  const stock = selectedVariant?.stock || 0;
-
   return (
-    <div className="relative flex flex-col gap-4 group w-full max-w-[260px]">
-      <Link to={`/product/${slug}`}>
-        <div className="flex h-[250px] w-full items-center justify-center">
+    <article className="group flex w-full max-w-[270px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md">
+      <Link to={`/product/${slug}`} className="block">
+        <div className="flex h-[220px] w-full items-center justify-center overflow-hidden rounded-xl bg-slate-100">
           <img
             src={img}
             alt={name}
-            className="h-full w-full object-contain"
+            className="h-full w-full object-contain transition duration-300 group-hover:scale-105"
           />
         </div>
       </Link>
 
-      <div className="flex flex-col gap-1 items-center">
-        <p className="text-[15px] font-medium">{name}</p>
-        <p className="text-[15px] font-medium">${price}</p>
+      <div className="mt-4 flex flex-1 flex-col">
+        <p className="text-sm font-medium text-slate-500">{brand}</p>
 
-        <div className="flex gap-3">
-          {colors.map((color) => (
-            <span
-              key={color.color}
-              className="grid place-items-center w-5 h-5 rounded-full cursor-pointer"
-            >
-              <span
-                className="w-[14px] h-[14px] rounded-full"
-                style={{ backgroundColor: color.color }}
-              />
-            </span>
-          ))}
-        </div>
+        <h3 className="mt-1 min-h-[48px] text-base font-semibold text-slate-800">
+          {name}
+        </h3>
 
-        <div className="absolute top-2 left-2">
-          {stock === 0 && <span>Agotado</span>}
+        <p className="mt-3 text-xl font-bold text-slate-900">
+          {formattedPrice}
+        </p>
+
+        <p
+          className={`mt-2 text-sm font-medium ${
+            stockLabel === "Agotado"
+              ? "text-red-600"
+              : stockLabel === "Pocas unidades"
+              ? "text-amber-600"
+              : "text-emerald-600"
+          }`}
+        >
+          {stockLabel}
+        </p>
+
+        <div className="mt-4">
+          <Link
+            to={`/product/${slug}`}
+            className="inline-flex w-full items-center justify-center rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700"
+          >
+            Ver detalle
+          </Link>
         </div>
       </div>
-    </div>
+    </article>
   );
 };

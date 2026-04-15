@@ -4,9 +4,19 @@ export const initialData = {
       id: "1",
       name: "Cámara Domo Hikvision 2MP",
       brand: "Hikvision",
+      category: "camara-domo",
+      subcategory: "2mp",
       price: 180000,
       slug: "camara-domo-hikvision-2mp",
       images: ["/img/camara-domo.jpg"],
+      description:
+        "Cámara domo para vigilancia interior con resolución 2MP y visión nocturna.",
+      details: [
+        { label: "Resolución", value: "2MP" },
+        { label: "Uso", value: "Interior" },
+        { label: "Visión nocturna", value: "IR nocturno" },
+        { label: "Lente", value: "2.8 mm" },
+      ],
       features: ["2MP", "IR nocturno", "Interior"],
       colors: [{ name: "Blanco", color: "#FFFFFF" }],
       variants: [
@@ -18,14 +28,23 @@ export const initialData = {
       isNew: true,
       isFeatured: true,
     },
-
     {
       id: "2",
       name: "Cámara Bullet Dahua 5MP",
       brand: "Dahua",
+      category: "camara-bullet",
+      subcategory: "5mp",
       price: 250000,
       slug: "camara-bullet-dahua-5mp",
       images: ["/img/camara-bullet.jpg"],
+      description:
+        "Cámara bullet para exterior con resolución 5MP y protección IP67.",
+      details: [
+        { label: "Resolución", value: "5MP" },
+        { label: "Uso", value: "Exterior" },
+        { label: "Protección", value: "IP67" },
+        { label: "Lente", value: "3.6 mm" },
+      ],
       features: ["5MP", "Exterior", "IP67"],
       colors: [{ name: "Blanco", color: "#FFFFFF" }],
       variants: [
@@ -37,14 +56,23 @@ export const initialData = {
       isNew: true,
       isFeatured: false,
     },
-
     {
       id: "3",
       name: "Cámara Solar Imou",
       brand: "Imou",
+      category: "camara-solar",
+      subcategory: "wifi",
       price: 320000,
       slug: "camara-solar-imou",
       images: ["/img/camara-solar.jpg"],
+      description:
+        "Cámara solar con conectividad WiFi para vigilancia exterior autónoma.",
+      details: [
+        { label: "Tipo", value: "Solar" },
+        { label: "Conectividad", value: "WiFi" },
+        { label: "Uso", value: "Exterior" },
+        { label: "Alimentación", value: "Panel solar" },
+      ],
       features: ["Panel solar", "WiFi", "Exterior"],
       colors: [{ name: "Blanco", color: "#FFFFFF" }],
       variants: [
@@ -56,14 +84,23 @@ export const initialData = {
       isNew: false,
       isFeatured: true,
     },
-
     {
       id: "4",
       name: "Cámara Pinhole Espía",
       brand: "Genérico",
+      category: "camara-pinhole",
+      subcategory: "1080p",
       price: 150000,
       slug: "camara-pinhole",
       images: ["/img/camara-pinhole.jpg"],
+      description:
+        "Cámara oculta compacta tipo pinhole con grabación en 1080p.",
+      details: [
+        { label: "Resolución", value: "1080p" },
+        { label: "Tipo", value: "Oculta" },
+        { label: "Tamaño", value: "Mini" },
+        { label: "Uso", value: "Interior" },
+      ],
       features: ["Oculta", "Mini", "1080p"],
       colors: [{ name: "Negro", color: "#000000" }],
       variants: [
@@ -75,14 +112,23 @@ export const initialData = {
       isNew: false,
       isFeatured: true,
     },
-
     {
       id: "5",
       name: "DVR Hikvision 8 Canales",
       brand: "Hikvision",
+      category: "dvr",
+      subcategory: "8-canales",
       price: 400000,
       slug: "dvr-hikvision-8ch",
       images: ["/img/dvr.jpg"],
+      description:
+        "Grabador DVR de 8 canales con salida HDMI y grabación Full HD.",
+      details: [
+        { label: "Canales", value: "8" },
+        { label: "Resolución", value: "1080p" },
+        { label: "Salida", value: "HDMI" },
+        { label: "Tipo", value: "DVR" },
+      ],
       features: ["8 canales", "1080p", "HDMI"],
       colors: [{ name: "Negro", color: "#000000" }],
       variants: [
@@ -94,14 +140,23 @@ export const initialData = {
       isNew: true,
       isFeatured: true,
     },
-
     {
       id: "6",
       name: "XVR Dahua 16 Canales",
       brand: "Dahua",
+      category: "xvr",
+      subcategory: "16-canales",
       price: 650000,
       slug: "xvr-dahua-16ch",
       images: ["/img/xvr.jpg"],
+      description:
+        "Grabador XVR de 16 canales con soporte 4K y compresión H.265+.",
+      details: [
+        { label: "Canales", value: "16" },
+        { label: "Resolución", value: "4K" },
+        { label: "Compresión", value: "H.265+" },
+        { label: "Tipo", value: "XVR" },
+      ],
       features: ["16 canales", "4K", "H.265+"],
       colors: [{ name: "Negro", color: "#000000" }],
       variants: [
@@ -113,14 +168,23 @@ export const initialData = {
       isNew: false,
       isFeatured: true,
     },
-
     {
       id: "7",
       name: "NVR Hikvision 8 Canales",
       brand: "Hikvision",
+      category: "nvr",
+      subcategory: "8-canales",
       price: 550000,
       slug: "nvr-hikvision-8ch",
       images: ["/img/nvr.jpg"],
+      description:
+        "Grabador NVR IP de 8 canales para sistemas de videovigilancia en red.",
+      details: [
+        { label: "Canales", value: "8" },
+        { label: "Tipo", value: "IP" },
+        { label: "Resolución", value: "4K" },
+        { label: "Uso", value: "Videovigilancia en red" },
+      ],
       features: ["IP", "8 canales", "4K"],
       colors: [{ name: "Negro", color: "#000000" }],
       variants: [
@@ -132,14 +196,23 @@ export const initialData = {
       isNew: true,
       isFeatured: false,
     },
-
     {
       id: "8",
       name: "Memoria Micro SD 128GB",
       brand: "Sandisk",
+      category: "micro-sd",
+      subcategory: "128gb",
       price: 60000,
       slug: "micro-sd-128gb",
       images: ["/img/microsd.jpg"],
+      description:
+        "Memoria micro SD de 128GB para almacenamiento local en cámaras.",
+      details: [
+        { label: "Capacidad", value: "128GB" },
+        { label: "Clase", value: "10" },
+        { label: "Uso", value: "Almacenamiento local" },
+        { label: "Compatibilidad", value: "Cámaras y grabadores" },
+      ],
       features: ["128GB", "Clase 10"],
       colors: [{ name: "Negro", color: "#000000" }],
       variants: [
@@ -151,14 +224,23 @@ export const initialData = {
       isNew: false,
       isFeatured: true,
     },
-
     {
       id: "9",
       name: "Disco Duro 1TB WD Purple",
       brand: "Western Digital",
+      category: "disco-duro",
+      subcategory: "1tb",
       price: 220000,
       slug: "disco-duro-1tb-wd",
       images: ["/img/disco.jpg"],
+      description:
+        "Disco duro WD Purple de 1TB diseñado para videovigilancia 24/7.",
+      details: [
+        { label: "Capacidad", value: "1TB" },
+        { label: "Línea", value: "WD Purple" },
+        { label: "Uso", value: "Vigilancia 24/7" },
+        { label: "Compatibilidad", value: "DVR / XVR / NVR" },
+      ],
       features: ["1TB", "Vigilancia", "24/7"],
       colors: [{ name: "Morado", color: "#800080" }],
       variants: [

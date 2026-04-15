@@ -9,7 +9,6 @@ export const ProductGrid = ({ title, products }: Props) => {
   return (
     <section className="my-24">
       <div className="max-w-7xl mx-auto px-4">
-
         <h2 className="mb-10 text-center text-3xl font-semibold md:text-4xl lg:text-5xl">
           {title}
         </h2>
@@ -18,16 +17,15 @@ export const ProductGrid = ({ title, products }: Props) => {
           {products.map((product) => (
             <CardProduct
               key={product.id}
+              img={product.img}
               name={product.name}
-              price={product.price}
-              colors={product.colors}
-              img={product.images?.[0] || "/img/img-banner.jpg"}
+              brand={product.brand}
+              formattedPrice={product.formattedPrice}
               slug={product.slug}
-              variants={product.variants}
+              stockLabel={product.stockLabel}
             />
           ))}
         </div>
-
       </div>
     </section>
   );
