@@ -52,18 +52,33 @@ export const prepareProducts = (products: Product[]) => {
       slug: product.slug,
       img: product.images?.[0] || "/img/placeholder.jpg",
       price: product.price,
+
       formattedPrice: new Intl.NumberFormat("es-CO", {
         style: "currency",
         currency: "COP",
         minimumFractionDigits: 0,
       }).format(product.price),
+
       description: product.description,
       details: product.details,
       features: product.features,
+
       stock,
       stockLabel,
+
       isNew: product.isNew,
       isFeatured: product.isFeatured,
     };
   });
+};
+
+export const getPreparedProductBySlug = (
+  products: Product[],
+  slug: string
+) => {
+  const preparedProducts = prepareProducts(products);
+
+  return preparedProducts.find(
+    (product) => product.slug === slug
+  );
 };
