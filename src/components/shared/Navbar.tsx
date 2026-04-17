@@ -1,4 +1,5 @@
-import { Link, NavLink } from "react-router-dom";
+import { useState } from "react";
+import { Link, NavLink, useNavigate } from "react-router-dom";
 import { navbarLinks } from "../../constants/links";
 import {
   HiOutlineSearch,
@@ -13,6 +14,27 @@ import { useFavorites } from "../../hooks/useFavorites";
 export const Navbar = () => {
   const { totalItems } = useCart();
   const { totalFavorites } = useFavorites();
+  const navigate = useNavigate();
+
+  const [searchTerm, setSearchTerm] = useState("");
+
+  const handleSearch = () => {
+    const query = searchTerm.trim();
+
+    if (!query) {
+      navigate("/Equipos de seguridad");
+      return;
+    }
+
+    navigate(
+      `/Equipos de seguridad?q=${encodeURIComponent(query)}`
+    );
+  };
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    handleSearch();
+  };
 
   return (
     <header className="flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4 text-black lg:px-12">
@@ -35,9 +57,20 @@ export const Navbar = () => {
       </nav>
 
       <div className="flex items-center gap-5">
-        <button aria-label="Buscar">
-          <HiOutlineSearch size={25} />
-        </button>
+        <form onSubmit={handleSubmit} className="hidden items-center gap-2 md:flex">
+          <div className="flex items-center rounded-xl border border-slate-300 px-3 py-2">
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Buscar equipos..."
+              className="w-[180px] bg-transparent text-sm outline-none lg:w-[220px]"
+            />
+            <button type="submit" aria-label="Buscar">
+              <HiOutlineSearch size={22} />
+            </button>
+          </div>
+        </form>
 
         <Link
           to="/favoritos"
