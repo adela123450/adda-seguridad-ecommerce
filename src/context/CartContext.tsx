@@ -7,7 +7,7 @@ import {
 } from "react";
 import type { ReactNode } from "react";
 
-type CartItem = {
+export type CartItem = {
   id: string;
   name: string;
   slug: string;
@@ -36,15 +36,26 @@ type Props = {
 
 export const CartProvider = ({ children }: Props) => {
   const [cart, setCart] = useState<CartItem[]>(() => {
-    const storedCart = localStorage.getItem("cart");
-    return storedCart ? JSON.parse(storedCart) : [];
+    try {
+      const storedCart = localStorage.getItem("cart");
+      return storedCart ? JSON.parse(storedCart) : [];
+    } catch (error) {
+      console.error("Error leyendo el carrito desde localStorage:", error);
+      return [];
+    }
   });
 
   useEffect(() => {
-    localStorage.setItem("cart", JSON.stringify(cart));
+    try {
+      localStorage.setItem("cart", JSON.stringify(cart));
+    } catch (error) {
+      console.error("Error guardando el carrito en localStorage:", error);
+    }
   }, [cart]);
 
   const addToCart = (product: Omit<CartItem, "quantity">) => {
+    if (product.stock < 1) return;
+
     setCart((currentCart) => {
       const existingProduct = currentCart.find(
         (item) => item.id === product.id
@@ -88,14 +99,16 @@ export const CartProvider = ({ children }: Props) => {
 
   const decreaseQuantity = (id: string) => {
     setCart((currentCart) =>
-      currentCart.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              quantity: item.quantity > 1 ? item.quantity - 1 : item.quantity,
-            }
-          : item
-      )
+      currentCart
+        .map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                quantity: item.quantity - 1,
+              }
+            : item
+        )
+        .filter((item) => item.quantity > 0)
     );
   };
 

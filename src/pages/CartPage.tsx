@@ -62,7 +62,7 @@ export const CartPage = () => {
             </div>
 
             <p className="mt-2 text-sm text-slate-600">
-              Total de productos agregados:{" "}
+              Unidades agregadas:{" "}
               <span className="font-semibold text-slate-800">{totalItems}</span>
             </p>
 
@@ -116,9 +116,9 @@ export const CartPage = () => {
                         </button>
                       </div>
 
-                      <div className="flex items-center gap-4">
+                      <div className="flex flex-col items-start gap-3 sm:items-end">
                         <p className="text-lg font-bold text-slate-900">
-                          {formatPrice(item.price * item.quantity)}
+                          Subtotal: {formatPrice(item.price * item.quantity)}
                         </p>
 
                         <button
@@ -138,14 +138,19 @@ export const CartPage = () => {
 
         {/* Columna derecha: resumen */}
         <aside className="lg:col-span-4">
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm lg:sticky lg:top-24">
             <h2 className="text-2xl font-bold text-slate-800">
               Resumen del pedido
             </h2>
 
             <div className="mt-6 space-y-4">
               <div className="flex items-center justify-between text-sm text-slate-600">
-                <span>Productos</span>
+                <span>Productos diferentes</span>
+                <span className="font-medium text-slate-800">{cart.length}</span>
+              </div>
+
+              <div className="flex items-center justify-between text-sm text-slate-600">
+                <span>Unidades</span>
                 <span className="font-medium text-slate-800">{totalItems}</span>
               </div>
 
@@ -169,9 +174,12 @@ export const CartPage = () => {
             </div>
 
             <div className="mt-8 flex flex-col gap-3">
-              <button className="rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-700">
-                Continuar compra
-              </button>
+              <Link
+                to="/checkout"
+                className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-700"
+              >
+                Continuar pedido
+              </Link>
 
               <Link
                 to="/"
@@ -188,7 +196,7 @@ export const CartPage = () => {
 
               <ul className="mt-3 space-y-2 text-sm text-slate-600">
                 <li>Los precios pueden variar según disponibilidad.</li>
-                <li>La reserva definitiva se confirma al cerrar la compra.</li>
+                <li>La reserva definitiva se confirma al validar el pedido.</li>
                 <li>Recibirás asesoría técnica si lo necesitas.</li>
               </ul>
             </div>
