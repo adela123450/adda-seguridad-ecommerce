@@ -1,4 +1,6 @@
 import { Link } from "react-router-dom";
+import { FaHeart, FaRegHeart } from "react-icons/fa";
+import { useFavorites } from "../../hooks/useFavorites";
 
 interface Props {
   img: string;
@@ -17,8 +19,36 @@ export const CardProduct = ({
   slug,
   stockLabel,
 }: Props) => {
+  const { toggleFavorite, isFavorite } = useFavorites();
+
+  const favoriteActive = isFavorite(slug);
+
+  const handleToggleFavorite = () => {
+    toggleFavorite({
+      slug,
+      name,
+      brand,
+      img,
+      formattedPrice,
+    });
+  };
+
   return (
-    <article className="group flex w-full max-w-[270px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md">
+    <article className="group relative flex w-full max-w-[270px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md">
+      <button
+        onClick={handleToggleFavorite}
+        aria-label={
+          favoriteActive ? "Quitar de favoritos" : "Agregar a favoritos"
+        }
+        className="absolute right-4 top-4 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white/90 shadow-sm transition hover:scale-105"
+      >
+        {favoriteActive ? (
+          <FaHeart className="text-red-500" size={18} />
+        ) : (
+          <FaRegHeart className="text-slate-600" size={18} />
+        )}
+      </button>
+
       <Link to={`/product/${slug}`} className="block">
         <div className="flex h-[220px] w-full items-center justify-center overflow-hidden rounded-xl bg-slate-100">
           <img

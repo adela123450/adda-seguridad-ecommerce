@@ -12,6 +12,7 @@ import {
 import { CheckoutPage } from "../pages/CheckoutPage";
 import { OrderConfirmationPage } from "../pages/OrderConfirmationPage";
 import { PedidoFinalizadoPage } from "../pages/PedidoFinalizadoPage";
+import { FavoritesPage } from "../pages/FavoritesPage";
 
 export const router = createBrowserRouter([
   {
@@ -49,7 +50,11 @@ export const router = createBrowserRouter([
       {
         path: "pedido-finalizado",
         element: <PedidoFinalizadoPage />,
-      }
+      },
+      {
+        path: "favoritos",
+        element: <FavoritesPage />,
+      },
     ],
   },
 ]);

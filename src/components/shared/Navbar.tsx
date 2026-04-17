@@ -1,12 +1,18 @@
 import { Link, NavLink } from "react-router-dom";
 import { navbarLinks } from "../../constants/links";
-import { HiOutlineSearch, HiOutlineShoppingBag } from "react-icons/hi";
+import {
+  HiOutlineSearch,
+  HiOutlineShoppingBag,
+  HiOutlineHeart,
+} from "react-icons/hi";
 import { FaBarsStaggered } from "react-icons/fa6";
 import { Logo } from "./Logo";
 import { useCart } from "../../hooks/useCart";
+import { useFavorites } from "../../hooks/useFavorites";
 
 export const Navbar = () => {
   const { totalItems } = useCart();
+  const { totalFavorites } = useFavorites();
 
   return (
     <header className="flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4 text-black lg:px-12">
@@ -33,6 +39,17 @@ export const Navbar = () => {
           <HiOutlineSearch size={25} />
         </button>
 
+        <Link
+          to="/favoritos"
+          className="relative"
+          aria-label="Ir a favoritos"
+        >
+          <span className="absolute -bottom-2 -right-2 grid h-5 w-5 place-items-center rounded-full bg-black text-xs text-white">
+            {totalFavorites}
+          </span>
+          <HiOutlineHeart size={25} />
+        </Link>
+
         <div className="relative">
           <Link
             to="/account"
@@ -56,4 +73,3 @@ export const Navbar = () => {
     </header>
   );
 };
-

@@ -3,15 +3,19 @@ import { useParams } from "react-router-dom";
 import { initialData } from "../data/initialData";
 import { getPreparedProductBySlug } from "../helpers";
 import { useCart } from "../hooks/useCart";
+import { useFavorites } from "../hooks/useFavorites";
 
 export const ProductPage = () => {
   const { slug } = useParams();
   const { addToCart } = useCart();
+  const { toggleFavorite, isFavorite } = useFavorites();
   const [showToast, setShowToast] = useState(false);
 
   const product = slug
     ? getPreparedProductBySlug(initialData.products, slug)
     : undefined;
+
+  const favoriteActive = product ? isFavorite(product.slug) : false;
 
   const handleAddToCart = () => {
     if (!product) return;
@@ -26,6 +30,18 @@ export const ProductPage = () => {
     });
 
     setShowToast(true);
+  };
+
+  const handleToggleFavorite = () => {
+    if (!product) return;
+
+    toggleFavorite({
+      slug: product.slug,
+      name: product.name,
+      brand: product.brand,
+      img: product.img,
+      formattedPrice: product.formattedPrice,
+    });
   };
 
   useEffect(() => {
@@ -190,8 +206,17 @@ export const ProductPage = () => {
                   Agregar al carrito
                 </button>
 
-                <button className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50">
-                  Agregar a favoritos
+                <button
+                  onClick={handleToggleFavorite}
+                  className={`rounded-xl border px-4 py-3 text-sm font-medium transition ${
+                    favoriteActive
+                      ? "border-red-200 bg-red-50 text-red-600 hover:bg-red-100"
+                      : "border-slate-300 text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  {favoriteActive
+                    ? "Quitar de favoritos"
+                    : "Agregar a favoritos"}
                 </button>
               </div>
 
