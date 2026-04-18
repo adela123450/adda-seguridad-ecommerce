@@ -10,12 +10,12 @@ export const navbarLinks = [
     {
         id:2,
         title: "Equipos de seguridad",
-        href: "/equipos"
+        href: "/Equipos de seguridad"
     },
     {
         id:3,
         title: "Nosotros",
-        href: "/nosotros"
+        href: "/Nosotros"
     }
 ];
 

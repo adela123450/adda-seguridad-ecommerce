@@ -7,7 +7,7 @@ import {
   HiOutlineHeart,
   HiOutlineUser,
 } from "react-icons/hi";
-import { FaBarsStaggered } from "react-icons/fa6";
+import { HiOutlineMenuAlt3 } from "react-icons/hi";
 import { Logo } from "./Logo";
 import { useCart } from "../../hooks/useCart";
 import { useFavorites } from "../../hooks/useFavorites";
@@ -36,11 +36,13 @@ export const Navbar = () => {
     handleSearch();
   };
 
+  const closeMenu = () => setIsMenuOpen(false);
+
   return (
     <>
       <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/95 text-[#111827] shadow-sm backdrop-blur-md">
         {/* DESKTOP */}
-        <div className="hidden md:flex items-center justify-between px-5 py-4 lg:px-12">
+        <div className="hidden items-center justify-between px-5 py-4 md:flex lg:px-12">
           <Logo />
 
           <nav className="flex items-center space-x-7">
@@ -123,55 +125,56 @@ export const Navbar = () => {
           </div>
         </div>
 
-        {/* MOBILE */}
-        <div className="md:hidden px-4 py-3">
-          <div className="flex items-center justify-between">
-            <div className="w-[92px] shrink-0">
-              <Logo />
-            </div>
+        {/* MOBILE - 3 BLOQUES */}
+        <div className="grid grid-cols-[88px_1fr_48px] items-center gap-2 px-4 py-3 md:hidden">
+          {/* IZQUIERDA: LOGO */}
+          <div className="flex items-center justify-start overflow-hidden">
+            <Logo compact />
+          </div>
 
-            <div className="flex flex-1 items-center justify-center gap-4 px-3">
-              <Link
-                to="/favoritos"
-                className="relative text-slate-700 transition hover:text-[#2D5398]"
-                aria-label="Ir a favoritos"
-              >
-                <span className="absolute -bottom-2 -right-2 grid h-5 w-5 place-items-center rounded-full bg-[#2D5398] text-xs text-white">
-                  {totalFavorites}
-                </span>
-                <HiOutlineHeart size={24} />
-              </Link>
+          {/* CENTRO: ICONOS */}
+          <div className="flex items-center justify-center gap-5">
+            <Link
+              to="/favoritos"
+              className="relative text-slate-700 transition hover:text-[#2D5398]"
+              aria-label="Ir a favoritos"
+            >
+              <span className="absolute -bottom-2 -right-2 grid h-5 w-5 place-items-center rounded-full bg-[#2D5398] text-xs text-white">
+                {totalFavorites}
+              </span>
+              <HiOutlineHeart size={24} />
+            </Link>
 
-              <Link
-                to="/account"
-                className="grid h-9 w-9 place-items-center rounded-full border-2 border-slate-700 text-slate-700 transition-all duration-300 hover:border-[#2D5398] hover:text-[#2D5398]"
-                aria-label="Mi cuenta"
-              >
-                <HiOutlineUser size={21} />
-              </Link>
+            <Link
+              to="/account"
+              className="grid h-9 w-9 place-items-center rounded-full border-2 border-slate-700 text-slate-700 transition-all duration-300 hover:border-[#2D5398] hover:text-[#2D5398]"
+              aria-label="Mi cuenta"
+            >
+              <HiOutlineUser size={21} />
+            </Link>
 
-              <Link
-                to="/carrito"
-                className="relative text-slate-700 transition hover:text-[#2D5398]"
-                aria-label="Ir al carrito"
-              >
-                <span className="absolute -bottom-2 -right-2 grid h-5 w-5 place-items-center rounded-full bg-[#2D5398] text-xs text-white">
-                  {totalItems}
-                </span>
-                <HiOutlineShoppingBag size={24} />
-              </Link>
-            </div>
+            <Link
+              to="/carrito"
+              className="relative text-slate-700 transition hover:text-[#2D5398]"
+              aria-label="Ir al carrito"
+            >
+              <span className="absolute -bottom-2 -right-2 grid h-5 w-5 place-items-center rounded-full bg-[#2D5398] text-xs text-white">
+                {totalItems}
+              </span>
+              <HiOutlineShoppingBag size={24} />
+            </Link>
+          </div>
 
-            <div className="w-[44px] shrink-0 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setIsMenuOpen(true)}
-                className="grid h-10 w-10 place-items-center text-slate-700 transition hover:text-[#2D5398]"
-                aria-label="Abrir menú"
-              >
-                <FaBarsStaggered size={22} />
-              </button>
-            </div>
+          {/* DERECHA: HAMBURGUESA */}
+          <div className="flex items-center justify-end">
+            <button
+              type="button"
+              onClick={() => setIsMenuOpen(true)}
+              className="grid h-9 w-9 place-items-center text-slate-700 transition hover:text-[#2D5398]"
+              aria-label="Abrir menú"
+            >
+              <HiOutlineMenuAlt3 size={26} />
+            </button>
           </div>
         </div>
       </header>
@@ -180,7 +183,7 @@ export const Navbar = () => {
         <>
           <div
             className="fixed inset-0 z-40 bg-black/40 md:hidden"
-            onClick={() => setIsMenuOpen(false)}
+            onClick={closeMenu}
           />
 
           <div className="fixed top-0 right-0 z-50 flex h-full w-[85%] max-w-[360px] flex-col bg-white shadow-2xl md:hidden">
@@ -189,8 +192,8 @@ export const Navbar = () => {
 
               <button
                 type="button"
-                onClick={() => setIsMenuOpen(false)}
-                className="grid h-9 w-9 place-items-center text-2xl text-slate-700 hover:text-[#2D5398]"
+                onClick={closeMenu}
+                className="grid h-9 w-9 place-items-center text-2xl text-slate-700 transition hover:text-[#2D5398]"
                 aria-label="Cerrar menú"
               >
                 ×
@@ -201,7 +204,7 @@ export const Navbar = () => {
               <nav className="flex flex-col gap-4">
                 <NavLink
                   to="/"
-                  onClick={() => setIsMenuOpen(false)}
+                  onClick={closeMenu}
                   className="border-b border-slate-100 pb-3 text-base font-medium text-slate-700 hover:text-[#2D5398]"
                 >
                   Inicio
@@ -209,7 +212,7 @@ export const Navbar = () => {
 
                 <NavLink
                   to="/Equipos de seguridad"
-                  onClick={() => setIsMenuOpen(false)}
+                  onClick={closeMenu}
                   className="border-b border-slate-100 pb-3 text-base font-medium text-slate-700 hover:text-[#2D5398]"
                 >
                   Equipos
@@ -217,7 +220,7 @@ export const Navbar = () => {
 
                 <NavLink
                   to="/favoritos"
-                  onClick={() => setIsMenuOpen(false)}
+                  onClick={closeMenu}
                   className="flex items-center justify-between border-b border-slate-100 pb-3 text-base font-medium text-slate-700 hover:text-[#2D5398]"
                 >
                   <span>Favoritos</span>
@@ -228,7 +231,7 @@ export const Navbar = () => {
 
                 <NavLink
                   to="/carrito"
-                  onClick={() => setIsMenuOpen(false)}
+                  onClick={closeMenu}
                   className="flex items-center justify-between border-b border-slate-100 pb-3 text-base font-medium text-slate-700 hover:text-[#2D5398]"
                 >
                   <span>Carrito</span>
@@ -243,7 +246,7 @@ export const Navbar = () => {
               <nav className="flex flex-col gap-4">
                 <NavLink
                   to="/instalacion-cctv"
-                  onClick={() => setIsMenuOpen(false)}
+                  onClick={closeMenu}
                   className="border-b border-slate-100 pb-3 text-base font-medium text-slate-700 hover:text-[#2D5398]"
                 >
                   Instalación CCTV
@@ -251,7 +254,7 @@ export const Navbar = () => {
 
                 <NavLink
                   to="/soporte-tecnico"
-                  onClick={() => setIsMenuOpen(false)}
+                  onClick={closeMenu}
                   className="border-b border-slate-100 pb-3 text-base font-medium text-slate-700 hover:text-[#2D5398]"
                 >
                   Soporte técnico
@@ -259,7 +262,7 @@ export const Navbar = () => {
 
                 <NavLink
                   to="/nosotros"
-                  onClick={() => setIsMenuOpen(false)}
+                  onClick={closeMenu}
                   className="border-b border-slate-100 pb-3 text-base font-medium text-slate-700 hover:text-[#2D5398]"
                 >
                   Nosotros
@@ -267,7 +270,7 @@ export const Navbar = () => {
 
                 <NavLink
                   to="/account"
-                  onClick={() => setIsMenuOpen(false)}
+                  onClick={closeMenu}
                   className="border-b border-slate-100 pb-3 text-base font-medium text-slate-700 hover:text-[#2D5398]"
                 >
                   Mi cuenta

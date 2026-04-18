@@ -28,7 +28,7 @@ export const Banner = () => {
         </p>
 
         <Link
-          to="/products"
+          to="/Equipos de seguridad"
           className="bg-blue-900 hover:bg-gray-950 text-white font-semibold py-3 px-6 rounded-lg shadow-lg"
         >
           Ver productos

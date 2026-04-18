@@ -149,6 +149,30 @@ export const EquiposPage = () => {
   const handleCategoryChange = (value: string) => {
     setSelectedCategory(value);
     setSelectedSubcategory("todas");
+
+    const normalizedSearch = searchTerm.toLowerCase().trim();
+
+    if (!normalizedSearch || value === "todas") return;
+
+    const hasMatchesInNewCategory = products.some((product) => {
+      if (product.category !== value) return false;
+
+      const searchableText = [
+        product.name,
+        product.brand,
+        product.category,
+        product.subcategory,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return searchableText.includes(normalizedSearch);
+    });
+
+    if (!hasMatchesInNewCategory) {
+      setSearchTerm("");
+    }
   };
 
   const clearFilters = () => {
@@ -160,42 +184,47 @@ export const EquiposPage = () => {
   };
 
   return (
-    <section className="max-w-7xl mx-auto px-4 py-12">
-      <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen bg-[#2D5398] shadow-lg">
-  <div className="mx-auto max-w-7xl px-6 py-14 md:px-8">
-    <p className="text-sm font-semibold uppercase tracking-[0.15em] text-blue-100">
-      CATÁLOGO ADDA SEGURIDAD
-    </p>
+    <section className="mx-auto max-w-7xl px-4 py-12">
+      {/* HERO PREMIUM */}
+      <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen overflow-hidden bg-gradient-to-r from-[#2D5398] via-[#234684] to-[#111827] shadow-lg">
+        <div className="absolute -right-20 top-10 h-72 w-72 rounded-full bg-white/10 blur-3xl" />
+        <div className="absolute left-10 bottom-0 h-56 w-56 rounded-full bg-blue-300/10 blur-3xl" />
 
-    <h1 className="mt-3 text-3xl font-bold text-white md:text-5xl">
-      Equipos de seguridad
-    </h1>
+        <div className="relative mx-auto max-w-7xl px-6 py-14 md:px-8">
+          <p className="text-sm font-semibold uppercase tracking-[0.15em] text-blue-100">
+            CATÁLOGO ADDA SEGURIDAD
+          </p>
 
-    <p className="mt-4 max-w-3xl text-lg leading-8 text-blue-100">
-      Explora nuestro catálogo profesional de CCTV, almacenamiento,
-      accesorios y soluciones inteligentes para proyectos residenciales,
-      comerciales e institucionales.
-    </p>
+          <h1 className="mt-3 text-3xl font-bold text-white md:text-5xl">
+            Equipos de seguridad
+          </h1>
 
-    <div className="mt-6 flex flex-wrap gap-3 text-sm">
-      <span className="rounded-full border border-white/20 bg-white/10 px-4 py-2 text-white">
-        {filteredProducts.length} resultados
-      </span>
+          <p className="mt-4 max-w-3xl text-lg leading-8 text-blue-100">
+            Explora nuestro catálogo profesional de CCTV, almacenamiento,
+            accesorios y soluciones inteligentes para proyectos residenciales,
+            comerciales e institucionales.
+          </p>
 
-      <span className="rounded-full border border-white/20 bg-white/10 px-4 py-2 text-white">
-        {categories.length - 1} categorías
-      </span>
+          <div className="mt-6 flex flex-wrap gap-3 text-sm">
+            <span className="rounded-full border border-white/20 bg-white/10 px-4 py-2 text-white">
+              {filteredProducts.length} resultados
+            </span>
 
-      <span className="rounded-full border border-white/20 bg-white/10 px-4 py-2 text-white">
-        {brands.length - 1} marcas
-      </span>
-    </div>
-  </div>
-</div>
+            <span className="rounded-full border border-white/20 bg-white/10 px-4 py-2 text-white">
+              {categories.length - 1} categorías
+            </span>
 
+            <span className="rounded-full border border-white/20 bg-white/10 px-4 py-2 text-white">
+              {brands.length - 1} marcas
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* CONTENIDO ORIGINAL */}
       <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-12">
-        <aside className="lg:col-span-3">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:sticky lg:top-24">
+        <aside className="lg:col-span-3 lg:self-start">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:sticky md:top-24 md:max-h-[calc(100vh-7rem)] md:overflow-y-auto">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-xl font-bold text-slate-800">Filtros</h2>
 
@@ -212,6 +241,7 @@ export const EquiposPage = () => {
                 <label className="mb-2 block text-sm font-medium text-slate-700">
                   Buscar producto
                 </label>
+
                 <input
                   type="text"
                   value={searchTerm}
@@ -225,6 +255,7 @@ export const EquiposPage = () => {
                 <label className="mb-2 block text-sm font-medium text-slate-700">
                   Categoría
                 </label>
+
                 <select
                   value={selectedCategory}
                   onChange={(e) => handleCategoryChange(e.target.value)}
@@ -242,6 +273,7 @@ export const EquiposPage = () => {
                 <label className="mb-2 block text-sm font-medium text-slate-700">
                   Subcategoría
                 </label>
+
                 <select
                   value={selectedSubcategory}
                   onChange={(e) => setSelectedSubcategory(e.target.value)}
@@ -259,6 +291,7 @@ export const EquiposPage = () => {
                 <label className="mb-2 block text-sm font-medium text-slate-700">
                   Marca
                 </label>
+
                 <select
                   value={selectedBrand}
                   onChange={(e) => setSelectedBrand(e.target.value)}
@@ -276,6 +309,7 @@ export const EquiposPage = () => {
                 <label className="mb-2 block text-sm font-medium text-slate-700">
                   Ordenar por
                 </label>
+
                 <select
                   value={sortOrder}
                   onChange={(e) => setSortOrder(e.target.value)}
@@ -300,8 +334,7 @@ export const EquiposPage = () => {
               </h2>
 
               <p className="mt-3 text-slate-600">
-                Intenta cambiar la categoría, la subcategoría, la marca o el
-                término de búsqueda.
+                Intenta cambiar la categoría, la subcategoría, la marca o el término de búsqueda.
               </p>
 
               <button
