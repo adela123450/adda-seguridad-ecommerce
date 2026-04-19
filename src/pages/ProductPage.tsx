@@ -254,7 +254,7 @@ export const ProductPage = () => {
                   )}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex w-full items-center justify-center rounded-2xl border border-[#2D5398] bg-white px-4 py-3 text-sm font-semibold text-[#2D5398] transition duration-300 hover:bg-blue-50"
+                  className="inline-flex w-full items-center justify-center rounded-2xl border border-[#2D5398] bg-white px-4 py-3 text-sm font-semibold text-[#2D5398] transition duration-300 hover:bg-blue-50 text-center"
                 >
                   Cotizar por WhatsApp
                 </a>

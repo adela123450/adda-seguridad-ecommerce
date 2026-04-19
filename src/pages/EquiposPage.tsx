@@ -185,36 +185,37 @@ export const EquiposPage = () => {
 
   return (
     <section className="mx-auto max-w-7xl px-4 py-12">
-      {/* HERO PREMIUM */}
-      <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen overflow-hidden bg-gradient-to-r from-[#2D5398] via-[#234684] to-[#111827] shadow-lg">
-        <div className="absolute -right-20 top-10 h-72 w-72 rounded-full bg-white/10 blur-3xl" />
-        <div className="absolute left-10 bottom-0 h-56 w-56 rounded-full bg-blue-300/10 blur-3xl" />
+      {/* HERO PREMIUM NUEVO */}
+      <div className="relative overflow-hidden rounded-3xl border border-blue-200/20 bg-gradient-to-r from-[#101935] via-[#243C78] to-[#3F61B3] shadow-[0_18px_45px_rgba(37,99,235,0.18)]">
+        <div className="absolute -right-10 top-8 h-44 w-44 rounded-full bg-white/10 blur-3xl" />
+        <div className="absolute left-8 bottom-0 h-36 w-36 rounded-full bg-cyan-300/10 blur-3xl" />
+        <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.04),transparent_35%,rgba(255,255,255,0.03)_100%)]" />
 
-        <div className="relative mx-auto max-w-7xl px-6 py-14 md:px-8">
-          <p className="text-sm font-semibold uppercase tracking-[0.15em] text-blue-100">
-            CATÁLOGO ADDA SEGURIDAD
-          </p>
+        <div className="relative px-6 py-12 md:px-8 md:py-14">
+          <span className="inline-flex rounded-full border border-white/15 bg-white/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-blue-50">
+            Catálogo ADDA Seguridad
+          </span>
 
-          <h1 className="mt-3 text-3xl font-bold text-white md:text-5xl">
+          <h1 className="mt-4 text-3xl font-bold text-white md:text-5xl">
             Equipos de seguridad
           </h1>
 
-          <p className="mt-4 max-w-3xl text-lg leading-8 text-blue-100">
+          <p className="mt-4 max-w-3xl text-base leading-7 text-blue-100 md:text-lg md:leading-8">
             Explora nuestro catálogo profesional de CCTV, almacenamiento,
             accesorios y soluciones inteligentes para proyectos residenciales,
             comerciales e institucionales.
           </p>
 
-          <div className="mt-6 flex flex-wrap gap-3 text-sm">
-            <span className="rounded-full border border-white/20 bg-white/10 px-4 py-2 text-white">
+          <div className="mt-7 flex flex-wrap gap-3 text-sm">
+            <span className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-white backdrop-blur-sm">
               {filteredProducts.length} resultados
             </span>
 
-            <span className="rounded-full border border-white/20 bg-white/10 px-4 py-2 text-white">
+            <span className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-white backdrop-blur-sm">
               {categories.length - 1} categorías
             </span>
 
-            <span className="rounded-full border border-white/20 bg-white/10 px-4 py-2 text-white">
+            <span className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-white backdrop-blur-sm">
               {brands.length - 1} marcas
             </span>
           </div>
@@ -334,7 +335,8 @@ export const EquiposPage = () => {
               </h2>
 
               <p className="mt-3 text-slate-600">
-                Intenta cambiar la categoría, la subcategoría, la marca o el término de búsqueda.
+                Intenta cambiar la categoría, la subcategoría, la marca o el
+                término de búsqueda.
               </p>
 
               <button

@@ -13,6 +13,9 @@ import { CheckoutPage } from "../pages/CheckoutPage";
 import { OrderConfirmationPage } from "../pages/OrderConfirmationPage";
 import { PedidoFinalizadoPage } from "../pages/PedidoFinalizadoPage";
 import { FavoritesPage } from "../pages/FavoritesPage";
+import { PrivacyPage } from "../pages/PrivacyPage";
+import { TermsPage } from "../pages/TermsPage";
+import { ReturnsPage } from "../pages/ReturnsPage";
 
 export const router = createBrowserRouter([
   {
@@ -54,6 +57,18 @@ export const router = createBrowserRouter([
       {
         path: "favoritos",
         element: <FavoritesPage />,
+      },
+      {
+        path: "politica-privacidad",
+        element: <PrivacyPage />,
+      },
+      {
+        path: "terminos",
+        element: <TermsPage />,
+      },
+      {
+        path: "devoluciones",
+        element: <ReturnsPage />,
       },
     ],
   },

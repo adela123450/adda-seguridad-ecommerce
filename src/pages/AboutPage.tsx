@@ -1,28 +1,30 @@
 export const AboutPage = () => {
   return (
-    <section className="mx-auto max-w-7xl px-4 py-12">
+    <section className="mx-auto max-w-7xl px-4 py-10 md:py-12">
       {/* HERO PREMIUM */}
-      <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen overflow-hidden bg-gradient-to-r from-[#2D5398] via-[#234684] to-[#111827] shadow-lg">
-        <div className="absolute -right-20 top-10 h-72 w-72 rounded-full bg-white/10 blur-3xl" />
-        <div className="absolute left-10 bottom-0 h-56 w-56 rounded-full bg-blue-300/10 blur-3xl" />
+<div className="overflow-hidden rounded-3xl bg-gradient-to-r from-[#101935] via-[#243C78] to-[#3F61B3] shadow-xl">
+  <div className="relative px-6 py-12 md:px-8 md:py-14">
+    <div className="absolute -right-16 top-8 h-40 w-40 rounded-full bg-white/10 blur-3xl" />
+    <div className="absolute left-8 bottom-0 h-32 w-32 rounded-full bg-blue-200/10 blur-3xl" />
 
-        <div className="relative mx-auto max-w-7xl px-6 py-14 md:px-8">
-          <p className="text-sm font-semibold uppercase tracking-[0.15em] text-blue-100">
-            SOBRE ADDA SEGURIDAD
-          </p>
+    <div className="relative">
+      <span className="inline-flex rounded-full border border-white/15 bg-white/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-blue-50">
+        SOBRE ADDA SEGURIDAD
+      </span>
 
-          <h1 className="mt-3 max-w-4xl text-3xl font-bold text-white md:text-5xl">
-            Soluciones de seguridad con enfoque profesional
-          </h1>
+      <h1 className="mt-4 max-w-4xl text-2xl font-bold text-white md:text-4xl">
+        Soluciones de seguridad con enfoque profesional
+      </h1>
 
-          <p className="mt-4 max-w-3xl text-lg leading-8 text-blue-100">
-            En ADDA Seguridad trabajamos para ofrecer equipos confiables,
-            asesoría técnica y soluciones integrales en videovigilancia,
-            almacenamiento, redes y tecnología aplicada a la protección de
-            hogares, negocios e instituciones.
-          </p>
-        </div>
-      </div>
+      <p className="mt-4 max-w-3xl text-base leading-7 text-blue-100 md:text-lg md:leading-8">
+         En ADDA Seguridad S.A.S. trabajamos para ofrecer equipos
+              confiables, asesoría técnica y soluciones integrales en
+              videovigilancia, almacenamiento, redes y tecnología aplicada a la
+              protección de hogares, negocios e instituciones.
+      </p>
+    </div>
+  </div>
+</div>
 
       {/* BLOQUE 1 */}
       <div className="mt-10 grid grid-cols-1 gap-8 lg:grid-cols-2">
@@ -32,11 +34,11 @@ export const AboutPage = () => {
           </h2>
 
           <p className="mt-4 text-justify leading-8 tracking-normal text-slate-600">
-            ADDA Seguridad es una empresa orientada al suministro, instalación
-            y acompañamiento técnico en soluciones de seguridad electrónica.
-            Nuestro enfoque combina tecnología, atención personalizada y
-            criterio profesional para ayudar a cada cliente a elegir la opción
-            más adecuada según su necesidad.
+            ADDA Seguridad S.A.S. es una empresa orientada al suministro,
+            instalación y acompañamiento técnico en soluciones de seguridad
+            electrónica. Nuestro enfoque combina tecnología, atención
+            personalizada y criterio profesional para ayudar a cada cliente a
+            elegir la opción más adecuada según su necesidad.
           </p>
 
           <p className="mt-4 text-justify leading-8 tracking-normal text-slate-600">
@@ -158,7 +160,7 @@ export const AboutPage = () => {
         </p>
 
         <a
-          href="https://wa.me/573015068866?text=Hola,%20quiero%20más%20información%20sobre%20ADDA%20Seguridad"
+          href="https://wa.me/573015068866?text=Hola,%20quiero%20más%20información%20sobre%20ADDA%20Seguridad%20S.A.S."
           target="_blank"
           rel="noopener noreferrer"
           className="mt-6 inline-flex rounded-xl bg-[#2D5398] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#234684]"
