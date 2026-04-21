@@ -16,6 +16,7 @@ import { FavoritesPage } from "../pages/FavoritesPage";
 import { PrivacyPage } from "../pages/PrivacyPage";
 import { TermsPage } from "../pages/TermsPage";
 import { ReturnsPage } from "../pages/ReturnsPage";
+import { AccountPage } from "../pages/AccountPage";
 
 export const router = createBrowserRouter([
   {
@@ -69,6 +70,10 @@ export const router = createBrowserRouter([
       {
         path: "devoluciones",
         element: <ReturnsPage />,
+      },
+      {
+        path: "account",
+        element: <AccountPage />,
       },
     ],
   },

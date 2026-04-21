@@ -1,7 +1,23 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { initialData } from "../data/initialData";
 import { CardProduct } from "../components/Products/CardProduct";
+import { supabase } from "../lib/supabase";
+
+type ProductRow = {
+  id: string;
+  name: string;
+  slug: string;
+  brand: string | null;
+  category: string | null;
+  subcategory: string | null;
+  price: number | string;
+  description: string | null;
+  image_url: string | null;
+  stock: number | string | null;
+  is_new: boolean | null;
+  is_featured: boolean | null;
+  created_at: string | null;
+};
 
 const formatPrice = (value: number) => {
   return new Intl.NumberFormat("es-CO", {
@@ -17,14 +33,6 @@ const getStockLabel = (stock: number) => {
   return "Disponible";
 };
 
-const getProductStock = (product: {
-  variants?: { stock: number }[];
-}) => {
-  if (!product.variants || product.variants.length === 0) return 0;
-
-  return product.variants.reduce((total, variant) => total + variant.stock, 0);
-};
-
 export const EquiposPage = () => {
   const [searchParams] = useSearchParams();
   const queryFromUrl = searchParams.get("q") ?? "";
@@ -35,11 +43,41 @@ export const EquiposPage = () => {
   const [selectedBrand, setSelectedBrand] = useState("todas");
   const [sortOrder, setSortOrder] = useState("default");
 
+  const [products, setProducts] = useState<ProductRow[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   useEffect(() => {
     setSearchTerm(queryFromUrl);
   }, [queryFromUrl]);
 
-  const products = initialData.products ?? [];
+  useEffect(() => {
+    const fetchProducts = async () => {
+      setIsLoading(true);
+      setLoadError(null);
+
+      const { data, error } = await supabase
+        .from("products")
+        .select(
+          "id, name, slug, brand, category, subcategory, price, description, image_url, stock, is_new, is_featured, created_at"
+        )
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("Supabase products error:", error);
+        setLoadError(error.message || "Error desconocido al cargar productos.");
+        setProducts([]);
+        setIsLoading(false);
+        return;
+      }
+
+      console.log("Supabase products loaded:", data);
+      setProducts((data as ProductRow[]) ?? []);
+      setIsLoading(false);
+    };
+
+    fetchProducts();
+  }, []);
 
   const categories = useMemo(() => {
     return [
@@ -121,11 +159,11 @@ export const EquiposPage = () => {
     }
 
     if (sortOrder === "price-asc") {
-      result.sort((a, b) => a.price - b.price);
+      result.sort((a, b) => Number(a.price) - Number(b.price));
     }
 
     if (sortOrder === "price-desc") {
-      result.sort((a, b) => b.price - a.price);
+      result.sort((a, b) => Number(b.price) - Number(a.price));
     }
 
     if (sortOrder === "name-asc") {
@@ -185,7 +223,6 @@ export const EquiposPage = () => {
 
   return (
     <section className="mx-auto max-w-7xl px-4 py-12">
-      {/* HERO PREMIUM NUEVO */}
       <div className="relative overflow-hidden rounded-3xl border border-blue-200/20 bg-gradient-to-r from-[#101935] via-[#243C78] to-[#3F61B3] shadow-[0_18px_45px_rgba(37,99,235,0.18)]">
         <div className="absolute -right-10 top-8 h-44 w-44 rounded-full bg-white/10 blur-3xl" />
         <div className="absolute left-8 bottom-0 h-36 w-36 rounded-full bg-cyan-300/10 blur-3xl" />
@@ -222,7 +259,6 @@ export const EquiposPage = () => {
         </div>
       </div>
 
-      {/* CONTENIDO ORIGINAL */}
       <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-12">
         <aside className="lg:col-span-3 lg:self-start">
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:sticky md:top-24 md:max-h-[calc(100vh-7rem)] md:overflow-y-auto">
@@ -328,7 +364,25 @@ export const EquiposPage = () => {
         </aside>
 
         <main className="lg:col-span-9">
-          {filteredProducts.length === 0 ? (
+          {isLoading ? (
+            <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+              <h2 className="text-2xl font-bold text-slate-800">
+                Cargando catálogo...
+              </h2>
+
+              <p className="mt-3 text-slate-600">
+                Estamos consultando los productos disponibles.
+              </p>
+            </div>
+          ) : loadError ? (
+            <div className="rounded-2xl border border-red-200 bg-red-50 p-8 text-center shadow-sm">
+              <h2 className="text-2xl font-bold text-red-700">
+                Error al cargar productos
+              </h2>
+
+              <p className="mt-3 text-red-600">{loadError}</p>
+            </div>
+          ) : filteredProducts.length === 0 ? (
             <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
               <h2 className="text-2xl font-bold text-slate-800">
                 No encontramos productos con esos filtros
@@ -351,12 +405,12 @@ export const EquiposPage = () => {
               {filteredProducts.map((product) => (
                 <CardProduct
                   key={product.id}
-                  img={product.images?.[0] ?? ""}
+                  img={product.image_url ?? "/placeholder-product.png"}
                   name={product.name}
-                  brand={product.brand}
-                  formattedPrice={formatPrice(product.price)}
+                  brand={product.brand ?? "Sin marca"}
+                  formattedPrice={formatPrice(Number(product.price))}
                   slug={product.slug}
-                  stockLabel={getStockLabel(getProductStock(product))}
+                  stockLabel={getStockLabel(Number(product.stock ?? 0))}
                 />
               ))}
             </div>
