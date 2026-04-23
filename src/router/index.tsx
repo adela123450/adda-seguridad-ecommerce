@@ -7,6 +7,7 @@ import {
   HomePage,
   ProductPage,
   CartPage,
+  AdminProductsPage,
 } from "../pages";
 
 import { CheckoutPage } from "../pages/CheckoutPage";
@@ -74,6 +75,10 @@ export const router = createBrowserRouter([
       {
         path: "account",
         element: <AccountPage />,
+      },
+      {
+        path: "admin/products",
+        element: <AdminProductsPage />,
       },
     ],
   },
