@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { supabase } from "../lib/supabase";
 
@@ -36,6 +36,9 @@ type ProductForm = {
   offer_label: string;
 };
 
+type OfferFilter = "all" | "with-offer" | "without-offer";
+type StockFilter = "all" | "in-stock" | "low-stock" | "out-of-stock";
+
 const initialForm: ProductForm = {
   name: "",
   slug: "",
@@ -63,6 +66,8 @@ const slugify = (text: string) => {
     .replace(/-+/g, "-");
 };
 
+const LOW_STOCK_THRESHOLD = 5;
+
 export const AdminProductsPage = () => {
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -75,6 +80,12 @@ export const AdminProductsPage = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [hasManualSlugEdit, setHasManualSlugEdit] = useState(false);
   const [form, setForm] = useState<ProductForm>(initialForm);
+
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedBrand, setSelectedBrand] = useState("all");
+  const [selectedCategory, setSelectedCategory] = useState("all");
+  const [offerFilter, setOfferFilter] = useState<OfferFilter>("all");
+  const [stockFilter, setStockFilter] = useState<StockFilter>("all");
 
   const fetchProducts = async () => {
     setIsLoading(true);
@@ -297,12 +308,97 @@ export const AdminProductsPage = () => {
     }).format(Number(value));
   };
 
+  const getNormalizedText = (value: string | null | undefined) =>
+    (value ?? "").trim().toLowerCase();
+
+  const getStockValue = (value: number | string | null) => {
+    const numericValue = Number(value ?? 0);
+    return Number.isNaN(numericValue) ? 0 : numericValue;
+  };
+
+  const brandOptions = useMemo(() => {
+    return Array.from(
+      new Set(
+        products
+          .map((product) => product.brand?.trim())
+          .filter((brand): brand is string => Boolean(brand))
+      )
+    ).sort((a, b) => a.localeCompare(b, "es"));
+  }, [products]);
+
+  const categoryOptions = useMemo(() => {
+    return Array.from(
+      new Set(
+        products
+          .map((product) => product.category?.trim())
+          .filter((category): category is string => Boolean(category))
+      )
+    ).sort((a, b) => a.localeCompare(b, "es"));
+  }, [products]);
+
+  const filteredProducts = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+
+    return products.filter((product) => {
+      const matchesSearch =
+        normalizedSearch.length === 0 ||
+        [
+          product.name,
+          product.slug,
+          product.sku,
+          product.brand,
+          product.category,
+          product.subcategory,
+        ]
+          .map((value) => getNormalizedText(value))
+          .some((value) => value.includes(normalizedSearch));
+
+      const matchesBrand =
+        selectedBrand === "all" || (product.brand ?? "") === selectedBrand;
+
+      const matchesCategory =
+        selectedCategory === "all" ||
+        (product.category ?? "") === selectedCategory;
+
+      const matchesOffer =
+        offerFilter === "all" ||
+        (offerFilter === "with-offer" && Boolean(product.has_offer)) ||
+        (offerFilter === "without-offer" && !product.has_offer);
+
+      const stockValue = getStockValue(product.stock);
+
+      const matchesStock =
+        stockFilter === "all" ||
+        (stockFilter === "in-stock" && stockValue > LOW_STOCK_THRESHOLD) ||
+        (stockFilter === "low-stock" &&
+          stockValue > 0 &&
+          stockValue <= LOW_STOCK_THRESHOLD) ||
+        (stockFilter === "out-of-stock" && stockValue <= 0);
+
+      return (
+        matchesSearch &&
+        matchesBrand &&
+        matchesCategory &&
+        matchesOffer &&
+        matchesStock
+      );
+    });
+  }, [products, searchTerm, selectedBrand, selectedCategory, offerFilter, stockFilter]);
+
+  const resetFilters = () => {
+    setSearchTerm("");
+    setSelectedBrand("all");
+    setSelectedCategory("all");
+    setOfferFilter("all");
+    setStockFilter("all");
+  };
+
   return (
     <section className="mx-auto max-w-7xl px-4 py-10 md:py-12">
       <div className="overflow-hidden rounded-3xl bg-gradient-to-r from-[#101935] via-[#243C78] to-[#3F61B3] shadow-xl">
         <div className="relative px-6 py-12 md:px-8 md:py-14">
           <div className="absolute -right-16 top-8 h-40 w-40 rounded-full bg-white/10 blur-3xl" />
-          <div className="absolute left-8 bottom-0 h-32 w-32 rounded-full bg-blue-200/10 blur-3xl" />
+          <div className="absolute bottom-0 left-8 h-32 w-32 rounded-full bg-blue-200/10 blur-3xl" />
 
           <div className="relative">
             <span className="inline-flex rounded-full border border-white/15 bg-white/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-blue-50">
@@ -536,9 +632,114 @@ export const AdminProductsPage = () => {
       </div>
 
       <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-md md:p-8">
-        <h2 className="border-l-4 border-[#2D5398] pl-4 text-2xl font-bold text-slate-800">
-          Tabla de productos
-        </h2>
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <h2 className="border-l-4 border-[#2D5398] pl-4 text-2xl font-bold text-slate-800">
+            Tabla de productos
+          </h2>
+
+          <div className="text-sm font-medium text-slate-500">
+            {filteredProducts.length} resultado
+            {filteredProducts.length === 1 ? "" : "s"}
+          </div>
+        </div>
+
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:p-5">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+            <div className="xl:col-span-2">
+              <label className="mb-2 block text-sm font-medium text-slate-700">
+                Buscar producto
+              </label>
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Nombre, SKU, slug, marca o categoría"
+                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-700">
+                Marca
+              </label>
+              <select
+                value={selectedBrand}
+                onChange={(e) => setSelectedBrand(e.target.value)}
+                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
+              >
+                <option value="all">Todas las marcas</option>
+                {brandOptions.map((brand) => (
+                  <option key={brand} value={brand}>
+                    {brand}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-700">
+                Categoría
+              </label>
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
+              >
+                <option value="all">Todas las categorías</option>
+                {categoryOptions.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-700">
+                Oferta
+              </label>
+              <select
+                value={offerFilter}
+                onChange={(e) => setOfferFilter(e.target.value as OfferFilter)}
+                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
+              >
+                <option value="all">Todas</option>
+                <option value="with-offer">Con oferta</option>
+                <option value="without-offer">Sin oferta</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-700">
+                Stock
+              </label>
+              <select
+                value={stockFilter}
+                onChange={(e) => setStockFilter(e.target.value as StockFilter)}
+                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
+              >
+                <option value="all">Todos</option>
+                <option value="in-stock">Disponible</option>
+                <option value="low-stock">Stock bajo</option>
+                <option value="out-of-stock">Sin stock</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="inline-flex rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+            >
+              Limpiar filtros
+            </button>
+
+            <div className="inline-flex items-center rounded-xl bg-[#2D5398]/10 px-4 py-2.5 text-sm font-medium text-[#2D5398]">
+              Stock bajo definido en {LOW_STOCK_THRESHOLD} unidades o menos
+            </div>
+          </div>
+        </div>
 
         {isLoading ? (
           <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 px-4 py-6 text-center text-slate-600">
@@ -551,6 +752,10 @@ export const AdminProductsPage = () => {
         ) : products.length === 0 ? (
           <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 px-4 py-6 text-center text-slate-600">
             No hay productos registrados todavía.
+          </div>
+        ) : filteredProducts.length === 0 ? (
+          <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 px-4 py-6 text-center text-slate-600">
+            No hay productos que coincidan con los filtros aplicados.
           </div>
         ) : (
           <div className="mt-6 overflow-x-auto">
@@ -569,64 +774,89 @@ export const AdminProductsPage = () => {
               </thead>
 
               <tbody>
-                {products.map((product) => (
-                  <tr
-                    key={product.id}
-                    className="rounded-2xl bg-slate-50 text-sm text-slate-700 shadow-sm"
-                  >
-                    <td className="rounded-l-2xl px-3 py-4">
-                      <div className="font-semibold text-slate-800">
-                        {product.name}
-                      </div>
-                      <div className="mt-1 text-xs text-slate-500">
-                        {product.slug}
-                      </div>
-                    </td>
+                {filteredProducts.map((product) => {
+                  const stockValue = getStockValue(product.stock);
+                  const isLowStock =
+                    stockValue > 0 && stockValue <= LOW_STOCK_THRESHOLD;
+                  const isOutOfStock = stockValue <= 0;
 
-                    <td className="px-3 py-4">{product.sku ?? "—"}</td>
-                    <td className="px-3 py-4">{product.brand ?? "—"}</td>
-                    <td className="px-3 py-4">
-                      {product.category ?? "—"}
-                      {product.subcategory ? ` / ${product.subcategory}` : ""}
-                    </td>
-                    <td className="px-3 py-4">{formatPrice(product.price)}</td>
-                    <td className="px-3 py-4">{product.stock ?? 0}</td>
-                    <td className="px-3 py-4">
-                      {product.has_offer ? (
-                        <div>
-                          <div className="font-semibold text-emerald-700">
-                            {formatPrice(product.offer_price)}
-                          </div>
-                          <div className="text-xs text-slate-500">
-                            {product.offer_label ?? "Oferta"}
-                          </div>
+                  return (
+                    <tr
+                      key={product.id}
+                      className="rounded-2xl bg-slate-50 text-sm text-slate-700 shadow-sm"
+                    >
+                      <td className="rounded-l-2xl px-3 py-4">
+                        <div className="font-semibold text-slate-800">
+                          {product.name}
                         </div>
-                      ) : (
-                        "No"
-                      )}
-                    </td>
+                        <div className="mt-1 text-xs text-slate-500">
+                          {product.slug}
+                        </div>
+                      </td>
 
-                    <td className="rounded-r-2xl px-3 py-4">
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleEdit(product)}
-                          className="rounded-lg bg-amber-100 px-3 py-2 text-xs font-semibold text-amber-700 transition hover:bg-amber-200"
-                        >
-                          Editar
-                        </button>
+                      <td className="px-3 py-4">{product.sku ?? "—"}</td>
+                      <td className="px-3 py-4">{product.brand ?? "—"}</td>
+                      <td className="px-3 py-4">
+                        {product.category ?? "—"}
+                        {product.subcategory ? ` / ${product.subcategory}` : ""}
+                      </td>
+                      <td className="px-3 py-4">{formatPrice(product.price)}</td>
+                      <td className="px-3 py-4">
+                        <div className="flex flex-col gap-1">
+                          <span>{stockValue}</span>
 
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(product.id)}
-                          className="rounded-lg bg-red-100 px-3 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-200"
-                        >
-                          Eliminar
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                          {isOutOfStock ? (
+                            <span className="inline-flex w-fit rounded-full bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-700">
+                              Sin stock
+                            </span>
+                          ) : isLowStock ? (
+                            <span className="inline-flex w-fit rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                              Stock bajo
+                            </span>
+                          ) : (
+                            <span className="inline-flex w-fit rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                              Disponible
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-3 py-4">
+                        {product.has_offer ? (
+                          <div>
+                            <div className="font-semibold text-emerald-700">
+                              {formatPrice(product.offer_price)}
+                            </div>
+                            <div className="text-xs text-slate-500">
+                              {product.offer_label ?? "Oferta"}
+                            </div>
+                          </div>
+                        ) : (
+                          "No"
+                        )}
+                      </td>
+
+                      <td className="rounded-r-2xl px-3 py-4">
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleEdit(product)}
+                            className="rounded-lg bg-amber-100 px-3 py-2 text-xs font-semibold text-amber-700 transition hover:bg-amber-200"
+                          >
+                            Editar
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(product.id)}
+                            className="rounded-lg bg-red-100 px-3 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-200"
+                          >
+                            Eliminar
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
