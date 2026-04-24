@@ -18,67 +18,51 @@ import { PrivacyPage } from "../pages/PrivacyPage";
 import { TermsPage } from "../pages/TermsPage";
 import { ReturnsPage } from "../pages/ReturnsPage";
 import { AccountPage } from "../pages/AccountPage";
+import { AdminLoginPage } from "../pages/AdminLoginPage";
+import { AdminResetPasswordPage } from "../pages/AdminResetPasswordPage";
+import { AdminLayout } from "../layouts/AdminLayout";
+import { ProtectedRoute } from "../components/admin/ProtectedRoute";
 
 export const router = createBrowserRouter([
   {
     path: "/",
     element: <RootLayout />,
     children: [
+      { index: true, element: <HomePage /> },
+      { path: "Equipos de seguridad", element: <EquiposPage /> },
+      { path: "Nosotros", element: <AboutPage /> },
+      { path: "product/:slug", element: <ProductPage /> },
+      { path: "carrito", element: <CartPage /> },
+      { path: "checkout", element: <CheckoutPage /> },
+      { path: "confirmacion-pedido", element: <OrderConfirmationPage /> },
+      { path: "pedido-finalizado", element: <PedidoFinalizadoPage /> },
+      { path: "favoritos", element: <FavoritesPage /> },
+      { path: "politica-privacidad", element: <PrivacyPage /> },
+      { path: "terminos", element: <TermsPage /> },
+      { path: "devoluciones", element: <ReturnsPage /> },
+      { path: "account", element: <AccountPage /> },
+
       {
-        index: true,
-        element: <HomePage />,
+        path: "admin/login",
+        element: <AdminLoginPage />,
       },
       {
-        path: "Equipos de seguridad",
-        element: <EquiposPage />,
+        path: "admin/reset-password",
+        element: <AdminResetPasswordPage />,
       },
       {
-        path: "Nosotros",
-        element: <AboutPage />,
-      },
-      {
-        path: "product/:slug",
-        element: <ProductPage />,
-      },
-      {
-        path: "carrito",
-        element: <CartPage />,
-      },
-      {
-        path: "checkout",
-        element: <CheckoutPage />,
-      },
-      {
-        path: "confirmacion-pedido",
-        element: <OrderConfirmationPage />,
-      },
-      {
-        path: "pedido-finalizado",
-        element: <PedidoFinalizadoPage />,
-      },
-      {
-        path: "favoritos",
-        element: <FavoritesPage />,
-      },
-      {
-        path: "politica-privacidad",
-        element: <PrivacyPage />,
-      },
-      {
-        path: "terminos",
-        element: <TermsPage />,
-      },
-      {
-        path: "devoluciones",
-        element: <ReturnsPage />,
-      },
-      {
-        path: "account",
-        element: <AccountPage />,
-      },
-      {
-        path: "admin/products",
-        element: <AdminProductsPage />,
+        path: "admin",
+        element: (
+          <ProtectedRoute allowedRoles={["super_admin", "admin", "editor"]}>
+            <AdminLayout />
+          </ProtectedRoute>
+        ),
+        children: [
+          {
+            path: "products",
+            element: <AdminProductsPage />,
+          },
+        ],
       },
     ],
   },
