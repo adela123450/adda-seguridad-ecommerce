@@ -38,7 +38,14 @@ type ProductForm = {
 
 type OfferFilter = "all" | "with-offer" | "without-offer";
 type StockFilter = "all" | "in-stock" | "low-stock" | "out-of-stock";
-type SortKey = "name" | "sku" | "brand" | "category" | "price" | "stock" | "offer";
+type SortKey =
+  | "name"
+  | "sku"
+  | "brand"
+  | "category"
+  | "price"
+  | "stock"
+  | "offer";
 type SortDirection = "asc" | "desc";
 type ToastType = "success" | "error";
 
@@ -99,7 +106,11 @@ export const AdminProductsPage = () => {
 
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
-  const [productToDelete, setProductToDelete] = useState<ProductRow | null>(null);
+  const [productToDelete, setProductToDelete] =
+    useState<ProductRow | null>(null);
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   const showToast = (type: ToastType, message: string) => {
     setToast({ type, message });
@@ -467,6 +478,26 @@ export const AdminProductsPage = () => {
     });
   }, [filteredProducts, sortKey, sortDirection]);
 
+  const totalPages = Math.max(1, Math.ceil(sortedProducts.length / itemsPerPage));
+
+  const paginatedProducts = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return sortedProducts.slice(startIndex, startIndex + itemsPerPage);
+  }, [sortedProducts, currentPage, itemsPerPage]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [
+    searchTerm,
+    selectedBrand,
+    selectedCategory,
+    offerFilter,
+    stockFilter,
+    itemsPerPage,
+    sortKey,
+    sortDirection,
+  ]);
+
   const resetFilters = () => {
     setSearchTerm("");
     setSelectedBrand("all");
@@ -475,13 +506,7 @@ export const AdminProductsPage = () => {
     setStockFilter("all");
   };
 
-  const SortButton = ({
-    label,
-    sort,
-  }: {
-    label: string;
-    sort: SortKey;
-  }) => (
+  const SortButton = ({ label, sort }: { label: string; sort: SortKey }) => (
     <button
       type="button"
       onClick={() => handleSort(sort)}
@@ -490,6 +515,64 @@ export const AdminProductsPage = () => {
       {label}
       <span className="text-xs">{getSortIcon(sort)}</span>
     </button>
+  );
+
+  const PaginationControls = () => (
+    <div className="mt-6 flex flex-col gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:flex-row md:items-center md:justify-between">
+      <div className="text-sm font-medium text-slate-600">
+        Mostrando{" "}
+        <span className="font-bold text-slate-900">
+          {paginatedProducts.length}
+        </span>{" "}
+        de{" "}
+        <span className="font-bold text-slate-900">
+          {sortedProducts.length}
+        </span>{" "}
+        productos
+      </div>
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <select
+          value={itemsPerPage}
+          onChange={(e) => {
+            setItemsPerPage(Number(e.target.value));
+            setCurrentPage(1);
+          }}
+          className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 outline-none focus:border-[#2D5398]"
+        >
+          <option value={5}>5 por página</option>
+          <option value={10}>10 por página</option>
+          <option value={20}>20 por página</option>
+          <option value={50}>50 por página</option>
+        </select>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+            disabled={currentPage === 1}
+            className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Anterior
+          </button>
+
+          <span className="rounded-xl bg-[#2D5398]/10 px-4 py-2 text-sm font-bold text-[#2D5398]">
+            {currentPage} / {totalPages}
+          </span>
+
+          <button
+            type="button"
+            onClick={() =>
+              setCurrentPage((prev) => Math.min(totalPages, prev + 1))
+            }
+            disabled={currentPage === totalPages}
+            className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Siguiente
+          </button>
+        </div>
+      </div>
+    </div>
   );
 
   return (
@@ -863,122 +946,245 @@ export const AdminProductsPage = () => {
             No hay productos que coincidan con los filtros aplicados.
           </div>
         ) : (
-          <div className="mt-6 overflow-x-auto">
-            <table className="min-w-full border-separate border-spacing-y-3">
-              <thead>
-                <tr className="text-left text-sm text-slate-500">
-                  <th className="px-3 py-2">
-                    <SortButton label="Producto" sort="name" />
-                  </th>
-                  <th className="px-3 py-2">
-                    <SortButton label="SKU" sort="sku" />
-                  </th>
-                  <th className="px-3 py-2">
-                    <SortButton label="Marca" sort="brand" />
-                  </th>
-                  <th className="px-3 py-2">
-                    <SortButton label="Categoría" sort="category" />
-                  </th>
-                  <th className="px-3 py-2">
-                    <SortButton label="Precio" sort="price" />
-                  </th>
-                  <th className="px-3 py-2">
-                    <SortButton label="Stock" sort="stock" />
-                  </th>
-                  <th className="px-3 py-2">
-                    <SortButton label="Oferta" sort="offer" />
-                  </th>
-                  <th className="px-3 py-2">Acciones</th>
-                </tr>
-              </thead>
+          <>
+            <div className="mt-6 hidden overflow-x-auto lg:block">
+              <table className="min-w-full border-separate border-spacing-y-3">
+                <thead>
+                  <tr className="text-left text-sm text-slate-500">
+                    <th className="px-3 py-2">
+                      <SortButton label="Producto" sort="name" />
+                    </th>
+                    <th className="px-3 py-2">
+                      <SortButton label="SKU" sort="sku" />
+                    </th>
+                    <th className="px-3 py-2">
+                      <SortButton label="Marca" sort="brand" />
+                    </th>
+                    <th className="px-3 py-2">
+                      <SortButton label="Categoría" sort="category" />
+                    </th>
+                    <th className="px-3 py-2">
+                      <SortButton label="Precio" sort="price" />
+                    </th>
+                    <th className="px-3 py-2">
+                      <SortButton label="Stock" sort="stock" />
+                    </th>
+                    <th className="px-3 py-2">
+                      <SortButton label="Oferta" sort="offer" />
+                    </th>
+                    <th className="px-3 py-2">Acciones</th>
+                  </tr>
+                </thead>
 
-              <tbody>
-                {sortedProducts.map((product) => {
-                  const stockValue = getStockValue(product.stock);
-                  const isLowStock =
-                    stockValue > 0 && stockValue <= LOW_STOCK_THRESHOLD;
-                  const isOutOfStock = stockValue <= 0;
+                <tbody>
+                  {paginatedProducts.map((product) => {
+                    const stockValue = getStockValue(product.stock);
+                    const isLowStock =
+                      stockValue > 0 && stockValue <= LOW_STOCK_THRESHOLD;
+                    const isOutOfStock = stockValue <= 0;
 
-                  return (
-                    <tr
-                      key={product.id}
-                      className="rounded-2xl bg-slate-50 text-sm text-slate-700 shadow-sm transition hover:bg-slate-100"
-                    >
-                      <td className="rounded-l-2xl px-3 py-4">
-                        <div className="font-semibold text-slate-800">
-                          {product.name}
-                        </div>
-                        <div className="mt-1 text-xs text-slate-500">
-                          {product.slug}
-                        </div>
-                      </td>
+                    return (
+                      <tr
+                        key={product.id}
+                        className="rounded-2xl bg-slate-50 text-sm text-slate-700 shadow-sm transition hover:bg-slate-100"
+                      >
+                        <td className="rounded-l-2xl px-3 py-4">
+                          <div className="font-semibold text-slate-800">
+                            {product.name}
+                          </div>
+                          <div className="mt-1 text-xs text-slate-500">
+                            {product.slug}
+                          </div>
+                        </td>
 
-                      <td className="px-3 py-4">{product.sku ?? "—"}</td>
-                      <td className="px-3 py-4">{product.brand ?? "—"}</td>
-                      <td className="px-3 py-4">
-                        {product.category ?? "—"}
-                        {product.subcategory ? ` / ${product.subcategory}` : ""}
-                      </td>
-                      <td className="px-3 py-4">{formatPrice(product.price)}</td>
-                      <td className="px-3 py-4">
-                        <div className="flex flex-col gap-1">
-                          <span>{stockValue}</span>
+                        <td className="px-3 py-4">{product.sku ?? "—"}</td>
+                        <td className="px-3 py-4">{product.brand ?? "—"}</td>
+                        <td className="px-3 py-4">
+                          {product.category ?? "—"}
+                          {product.subcategory
+                            ? ` / ${product.subcategory}`
+                            : ""}
+                        </td>
+                        <td className="px-3 py-4">
+                          {formatPrice(product.price)}
+                        </td>
+                        <td className="px-3 py-4">
+                          <div className="flex flex-col gap-1">
+                            <span>{stockValue}</span>
 
-                          {isOutOfStock ? (
-                            <span className="inline-flex w-fit rounded-full bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-700">
-                              Sin stock
-                            </span>
-                          ) : isLowStock ? (
-                            <span className="inline-flex w-fit rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700">
-                              Stock bajo
-                            </span>
+                            {isOutOfStock ? (
+                              <span className="inline-flex w-fit rounded-full bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-700">
+                                Sin stock
+                              </span>
+                            ) : isLowStock ? (
+                              <span className="inline-flex w-fit rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                                Stock bajo
+                              </span>
+                            ) : (
+                              <span className="inline-flex w-fit rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                                Disponible
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-3 py-4">
+                          {product.has_offer ? (
+                            <div>
+                              <div className="font-semibold text-emerald-700">
+                                {formatPrice(product.offer_price)}
+                              </div>
+                              <div className="text-xs text-slate-500">
+                                {product.offer_label ?? "Oferta"}
+                              </div>
+                            </div>
                           ) : (
-                            <span className="inline-flex w-fit rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">
-                              Disponible
-                            </span>
+                            "No"
+                          )}
+                        </td>
+
+                        <td className="rounded-r-2xl px-3 py-4">
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleEdit(product)}
+                              className="rounded-lg bg-amber-100 px-3 py-2 text-xs font-semibold text-amber-700 transition hover:bg-amber-200"
+                            >
+                              Editar
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => openDeleteModal(product)}
+                              className="rounded-lg bg-red-100 px-3 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-200"
+                            >
+                              Eliminar
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-6 grid gap-4 lg:hidden">
+              {paginatedProducts.map((product) => {
+                const stockValue = getStockValue(product.stock);
+                const isLowStock =
+                  stockValue > 0 && stockValue <= LOW_STOCK_THRESHOLD;
+                const isOutOfStock = stockValue <= 0;
+
+                return (
+                  <article
+                    key={product.id}
+                    className="rounded-3xl border border-slate-200 bg-slate-50 p-5 shadow-sm"
+                  >
+                    <div className="flex flex-col gap-3">
+                      <div>
+                        <h3 className="text-base font-bold text-slate-900">
+                          {product.name}
+                        </h3>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {product.slug}
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div className="rounded-2xl bg-white p-3">
+                          <p className="text-xs font-semibold uppercase text-slate-400">
+                            SKU
+                          </p>
+                          <p className="mt-1 font-semibold text-slate-700">
+                            {product.sku ?? "—"}
+                          </p>
+                        </div>
+
+                        <div className="rounded-2xl bg-white p-3">
+                          <p className="text-xs font-semibold uppercase text-slate-400">
+                            Marca
+                          </p>
+                          <p className="mt-1 font-semibold text-slate-700">
+                            {product.brand ?? "—"}
+                          </p>
+                        </div>
+
+                        <div className="rounded-2xl bg-white p-3">
+                          <p className="text-xs font-semibold uppercase text-slate-400">
+                            Categoría
+                          </p>
+                          <p className="mt-1 font-semibold text-slate-700">
+                            {product.category ?? "—"}
+                          </p>
+                          {product.subcategory && (
+                            <p className="mt-1 text-xs text-slate-500">
+                              {product.subcategory}
+                            </p>
                           )}
                         </div>
-                      </td>
-                      <td className="px-3 py-4">
-                        {product.has_offer ? (
-                          <div>
-                            <div className="font-semibold text-emerald-700">
-                              {formatPrice(product.offer_price)}
-                            </div>
-                            <div className="text-xs text-slate-500">
-                              {product.offer_label ?? "Oferta"}
-                            </div>
-                          </div>
-                        ) : (
-                          "No"
-                        )}
-                      </td>
 
-                      <td className="rounded-r-2xl px-3 py-4">
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleEdit(product)}
-                            className="rounded-lg bg-amber-100 px-3 py-2 text-xs font-semibold text-amber-700 transition hover:bg-amber-200"
-                          >
-                            Editar
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => openDeleteModal(product)}
-                            className="rounded-lg bg-red-100 px-3 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-200"
-                          >
-                            Eliminar
-                          </button>
+                        <div className="rounded-2xl bg-white p-3">
+                          <p className="text-xs font-semibold uppercase text-slate-400">
+                            Precio
+                          </p>
+                          <p className="mt-1 font-semibold text-slate-700">
+                            {formatPrice(product.price)}
+                          </p>
                         </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        {isOutOfStock ? (
+                          <span className="inline-flex rounded-full bg-red-100 px-3 py-1.5 text-xs font-semibold text-red-700">
+                            Sin stock: {stockValue}
+                          </span>
+                        ) : isLowStock ? (
+                          <span className="inline-flex rounded-full bg-amber-100 px-3 py-1.5 text-xs font-semibold text-amber-700">
+                            Stock bajo: {stockValue}
+                          </span>
+                        ) : (
+                          <span className="inline-flex rounded-full bg-emerald-100 px-3 py-1.5 text-xs font-semibold text-emerald-700">
+                            Disponible: {stockValue}
+                          </span>
+                        )}
+
+                        {product.has_offer ? (
+                          <span className="inline-flex rounded-full bg-[#2D5398]/10 px-3 py-1.5 text-xs font-semibold text-[#2D5398]">
+                            {product.offer_label ?? "Oferta"} ·{" "}
+                            {formatPrice(product.offer_price)}
+                          </span>
+                        ) : (
+                          <span className="inline-flex rounded-full bg-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600">
+                            Sin oferta
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex flex-col gap-2 pt-2 sm:flex-row">
+                        <button
+                          type="button"
+                          onClick={() => handleEdit(product)}
+                          className="w-full rounded-xl bg-amber-100 px-4 py-3 text-sm font-semibold text-amber-700 transition hover:bg-amber-200"
+                        >
+                          Editar
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => openDeleteModal(product)}
+                          className="w-full rounded-xl bg-red-100 px-4 py-3 text-sm font-semibold text-red-700 transition hover:bg-red-200"
+                        >
+                          Eliminar
+                        </button>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+
+            <PaginationControls />
+          </>
         )}
       </div>
 
