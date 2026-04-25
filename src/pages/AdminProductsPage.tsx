@@ -72,15 +72,213 @@ const initialForm: ProductForm = {
 
 const LOW_STOCK_THRESHOLD = 5;
 
-const slugify = (text: string) => {
-  return text
+const BRAND_OPTIONS = [
+  "Hikvision",
+  "Dahua",
+  "Ezviz",
+  "Imou",
+  "HiLook",
+  "Tenda",
+  "TP-Link",
+  "Western Digital",
+  "Seagate",
+  "Genérica",
+];
+
+const CATEGORY_OPTIONS = [
+  "Cámaras",
+  "Grabadores",
+  "Almacenamiento",
+  "Redes",
+  "Energía",
+  "Accesorios",
+];
+
+const SUBCATEGORY_OPTIONS: Record<string, string[]> = {
+  Cámaras: ["Domo", "Bullet", "PTZ", "Solar", "Pinhole"],
+  Grabadores: ["DVR", "XVR", "NVR"],
+  Almacenamiento: ["Disco duro", "MicroSD", "SSD"],
+  Redes: ["Router", "Switch", "Access Point"],
+  Energía: ["Fuente", "UPS", "Regulador"],
+  Accesorios: ["Balun", "Jack DC", "Caja de paso", "Bornera", "Cable"],
+};
+
+const normalizeText = (text: string | null | undefined) => {
+  return (text ?? "")
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+};
+
+const slugify = (text: string) => {
+  return normalizeText(text)
     .replace(/[^a-z0-9\s-]/g, "")
-    .trim()
     .replace(/\s+/g, "-")
     .replace(/-+/g, "-");
+};
+
+const detectCategoryFromText = (text: string) => {
+  const value = normalizeText(text);
+
+  if (
+    value.includes("camara") ||
+    value.includes("domo") ||
+    value.includes("bullet") ||
+    value.includes("ptz") ||
+    value.includes("solar") ||
+    value.includes("pinhole")
+  ) {
+    return "Cámaras";
+  }
+
+  if (
+    value.includes("dvr") ||
+    value.includes("xvr") ||
+    value.includes("nvr") ||
+    value.includes("grabador")
+  ) {
+    return "Grabadores";
+  }
+
+  if (
+    value.includes("disco") ||
+    value.includes("micro") ||
+    value.includes("sd") ||
+    value.includes("ssd") ||
+    value.includes("almacenamiento")
+  ) {
+    return "Almacenamiento";
+  }
+
+  if (
+    value.includes("router") ||
+    value.includes("switch") ||
+    value.includes("access") ||
+    value.includes("red")
+  ) {
+    return "Redes";
+  }
+
+  if (
+    value.includes("fuente") ||
+    value.includes("ups") ||
+    value.includes("regulador") ||
+    value.includes("energia")
+  ) {
+    return "Energía";
+  }
+
+  if (
+    value.includes("balun") ||
+    value.includes("jack") ||
+    value.includes("caja") ||
+    value.includes("bornera") ||
+    value.includes("cable") ||
+    value.includes("accesorio")
+  ) {
+    return "Accesorios";
+  }
+
+  return "all";
+};
+
+const detectCategoryAndSubcategoryFromText = (text: string) => {
+  const value = normalizeText(text);
+
+  if (value.includes("domo")) {
+    return { category: "Cámaras", subcategory: "Domo" };
+  }
+
+  if (value.includes("bullet")) {
+    return { category: "Cámaras", subcategory: "Bullet" };
+  }
+
+  if (value.includes("ptz")) {
+    return { category: "Cámaras", subcategory: "PTZ" };
+  }
+
+  if (value.includes("solar")) {
+    return { category: "Cámaras", subcategory: "Solar" };
+  }
+
+  if (value.includes("pinhole")) {
+    return { category: "Cámaras", subcategory: "Pinhole" };
+  }
+
+  if (value.includes("camara")) {
+    return { category: "Cámaras", subcategory: "Domo" };
+  }
+
+  if (value.includes("dvr")) {
+    return { category: "Grabadores", subcategory: "DVR" };
+  }
+
+  if (value.includes("xvr")) {
+    return { category: "Grabadores", subcategory: "XVR" };
+  }
+
+  if (value.includes("nvr")) {
+    return { category: "Grabadores", subcategory: "NVR" };
+  }
+
+  if (value.includes("disco")) {
+    return { category: "Almacenamiento", subcategory: "Disco duro" };
+  }
+
+  if (value.includes("micro") || value.includes("sd")) {
+    return { category: "Almacenamiento", subcategory: "MicroSD" };
+  }
+
+  if (value.includes("ssd")) {
+    return { category: "Almacenamiento", subcategory: "SSD" };
+  }
+
+  if (value.includes("router")) {
+    return { category: "Redes", subcategory: "Router" };
+  }
+
+  if (value.includes("switch")) {
+    return { category: "Redes", subcategory: "Switch" };
+  }
+
+  if (value.includes("access")) {
+    return { category: "Redes", subcategory: "Access Point" };
+  }
+
+  if (value.includes("fuente")) {
+    return { category: "Energía", subcategory: "Fuente" };
+  }
+
+  if (value.includes("ups")) {
+    return { category: "Energía", subcategory: "UPS" };
+  }
+
+  if (value.includes("regulador")) {
+    return { category: "Energía", subcategory: "Regulador" };
+  }
+
+  if (value.includes("balun")) {
+    return { category: "Accesorios", subcategory: "Balun" };
+  }
+
+  if (value.includes("jack")) {
+    return { category: "Accesorios", subcategory: "Jack DC" };
+  }
+
+  if (value.includes("caja")) {
+    return { category: "Accesorios", subcategory: "Caja de paso" };
+  }
+
+  if (value.includes("bornera")) {
+    return { category: "Accesorios", subcategory: "Bornera" };
+  }
+
+  if (value.includes("cable")) {
+    return { category: "Accesorios", subcategory: "Cable" };
+  }
+
+  return { category: "", subcategory: "" };
 };
 
 export const AdminProductsPage = () => {
@@ -115,6 +313,15 @@ export const AdminProductsPage = () => {
   const showToast = (type: ToastType, message: string) => {
     setToast({ type, message });
   };
+
+  useEffect(() => {
+    document.documentElement.setAttribute("translate", "no");
+    document.body.classList.add("notranslate");
+
+    return () => {
+      document.body.classList.remove("notranslate");
+    };
+  }, []);
 
   useEffect(() => {
     if (!toast) return;
@@ -169,12 +376,64 @@ export const AdminProductsPage = () => {
         [field]: value,
       };
 
-      if (field === "name" && !isEditing && !hasManualSlugEdit) {
-        updated.slug = slugify(String(value));
+      if (field === "name") {
+        const detected = detectCategoryAndSubcategoryFromText(String(value));
+
+        if (!isEditing && !hasManualSlugEdit) {
+          updated.slug = slugify(String(value));
+        }
+
+        if (detected.category && detected.subcategory) {
+          updated.category = detected.category;
+          updated.subcategory = detected.subcategory;
+        }
       }
 
       return updated;
     });
+  };
+
+  const handleCategoryChange = (value: string) => {
+    const firstSubcategory = SUBCATEGORY_OPTIONS[value]?.[0] ?? "";
+
+    setForm((prev) => ({
+      ...prev,
+      category: value,
+      subcategory: firstSubcategory,
+    }));
+  };
+
+  const handleSearchChange = (value: string) => {
+    setSearchTerm(value);
+
+    const detectedCategory = detectCategoryFromText(value);
+
+    if (detectedCategory !== "all") {
+      setSelectedCategory(detectedCategory);
+    }
+
+    if (!value.trim()) {
+      setSelectedCategory("all");
+    }
+  };
+
+  const handleCategoryFilterChange = (value: string) => {
+    const detectedCategory = detectCategoryFromText(searchTerm);
+
+    if (
+      searchTerm.trim() &&
+      detectedCategory !== "all" &&
+      value !== detectedCategory
+    ) {
+      setSelectedCategory(detectedCategory);
+      showToast(
+        "error",
+        `La búsqueda actual corresponde a ${detectedCategory}. Ajusté el filtro automáticamente.`
+      );
+      return;
+    }
+
+    setSelectedCategory(value);
   };
 
   const handleSlugChange = (value: string) => {
@@ -190,10 +449,22 @@ export const AdminProductsPage = () => {
     if (!form.name.trim()) return "El nombre es obligatorio.";
     if (!form.slug.trim()) return "La URL amigable es obligatoria.";
     if (!form.sku.trim()) return "El SKU es obligatorio.";
+    if (!form.brand.trim()) return "La marca es obligatoria.";
+    if (!form.category.trim()) return "La categoría es obligatoria.";
+    if (!form.subcategory.trim()) return "La subcategoría es obligatoria.";
     if (!form.price.trim()) return "El precio es obligatorio.";
 
     if (Number.isNaN(Number(form.price))) return "El precio debe ser numérico.";
     if (Number.isNaN(Number(form.stock))) return "El stock debe ser numérico.";
+
+    const allowedSubcategories = SUBCATEGORY_OPTIONS[form.category] ?? [];
+
+    if (
+      allowedSubcategories.length > 0 &&
+      !allowedSubcategories.includes(form.subcategory)
+    ) {
+      return "La subcategoría no corresponde a la categoría seleccionada.";
+    }
 
     if (form.has_offer) {
       if (!form.offer_price.trim()) return "Debes ingresar el precio de oferta.";
@@ -350,7 +621,7 @@ export const AdminProductsPage = () => {
   };
 
   const getNormalizedText = (value: string | null | undefined) =>
-    (value ?? "").trim().toLowerCase();
+    normalizeText(value);
 
   const getStockValue = (value: number | string | null) => {
     const numericValue = Number(value ?? 0);
@@ -390,8 +661,7 @@ export const AdminProductsPage = () => {
   const brandOptions = useMemo(() => {
     return Array.from(
       new Set(
-        products
-          .map((product) => product.brand?.trim())
+        [...BRAND_OPTIONS, ...products.map((product) => product.brand?.trim())]
           .filter((brand): brand is string => Boolean(brand))
       )
     ).sort((a, b) => a.localeCompare(b, "es"));
@@ -400,17 +670,25 @@ export const AdminProductsPage = () => {
   const categoryOptions = useMemo(() => {
     return Array.from(
       new Set(
-        products
-          .map((product) => product.category?.trim())
-          .filter((category): category is string => Boolean(category))
+        [
+          ...CATEGORY_OPTIONS,
+          ...products.map((product) => product.category?.trim()),
+        ].filter((category): category is string => Boolean(category))
       )
     ).sort((a, b) => a.localeCompare(b, "es"));
   }, [products]);
 
+  const formSubcategoryOptions = useMemo(() => {
+    return SUBCATEGORY_OPTIONS[form.category] ?? [];
+  }, [form.category]);
+
   const filteredProducts = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
+    const forcedCategory = detectCategoryFromText(searchTerm);
 
     return products.filter((product) => {
+      const productCategory = product.category ?? "";
+
       const matchesSearch =
         normalizedSearch.length === 0 ||
         [
@@ -424,12 +702,14 @@ export const AdminProductsPage = () => {
           .map((value) => getNormalizedText(value))
           .some((value) => value.includes(normalizedSearch));
 
+      const matchesForcedCategory =
+        forcedCategory === "all" || productCategory === forcedCategory;
+
       const matchesBrand =
         selectedBrand === "all" || (product.brand ?? "") === selectedBrand;
 
       const matchesCategory =
-        selectedCategory === "all" ||
-        (product.category ?? "") === selectedCategory;
+        selectedCategory === "all" || productCategory === selectedCategory;
 
       const matchesOffer =
         offerFilter === "all" ||
@@ -448,6 +728,7 @@ export const AdminProductsPage = () => {
 
       return (
         matchesSearch &&
+        matchesForcedCategory &&
         matchesBrand &&
         matchesCategory &&
         matchesOffer &&
@@ -576,7 +857,10 @@ export const AdminProductsPage = () => {
   );
 
   return (
-    <section className="relative mx-auto max-w-7xl px-4 py-10 md:py-12">
+    <section
+      translate="no"
+      className="notranslate relative mx-auto max-w-7xl px-4 py-10 md:py-12"
+    >
       {toast && (
         <div
           className={`fixed right-4 top-4 z-50 max-w-sm rounded-2xl border px-5 py-4 text-sm font-semibold shadow-xl ${
@@ -646,6 +930,7 @@ export const AdminProductsPage = () => {
               type="text"
               value={form.name}
               onChange={(e) => handleChange("name", e.target.value)}
+              placeholder="Ej: Cámara domo Dahua 1080p"
               className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
             />
           </div>
@@ -658,7 +943,7 @@ export const AdminProductsPage = () => {
               type="text"
               value={form.slug}
               onChange={(e) => handleSlugChange(e.target.value)}
-              placeholder="Ej: camara-ptz-hikvision-25x"
+              placeholder="Ej: camara-domo-dahua-1080p"
               className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
             />
           </div>
@@ -671,7 +956,7 @@ export const AdminProductsPage = () => {
               type="text"
               value={form.sku}
               onChange={(e) => handleChange("sku", e.target.value)}
-              placeholder="Ej: CAM-HK-PTZ-002"
+              placeholder="Ej: CAM-DH-D-001"
               className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
             />
           </div>
@@ -680,36 +965,59 @@ export const AdminProductsPage = () => {
             <label className="mb-2 block text-sm font-medium text-slate-700">
               Marca
             </label>
-            <input
-              type="text"
+            <select
               value={form.brand}
               onChange={(e) => handleChange("brand", e.target.value)}
-              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
-            />
+              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
+            >
+              <option value="">Selecciona una marca</option>
+              {brandOptions.map((brand) => (
+                <option key={brand} value={brand}>
+                  {brand}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-700">
               Categoría
             </label>
-            <input
-              type="text"
+            <select
               value={form.category}
-              onChange={(e) => handleChange("category", e.target.value)}
-              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
-            />
+              onChange={(e) => handleCategoryChange(e.target.value)}
+              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
+            >
+              <option value="">Selecciona una categoría</option>
+              {categoryOptions.map((category) => (
+                <option key={category} value={category}>
+                  {category}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-700">
               Subcategoría
             </label>
-            <input
-              type="text"
+            <select
               value={form.subcategory}
               onChange={(e) => handleChange("subcategory", e.target.value)}
-              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
-            />
+              disabled={!form.category}
+              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#2D5398] disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+            >
+              <option value="">
+                {form.category
+                  ? "Selecciona una subcategoría"
+                  : "Primero selecciona una categoría"}
+              </option>
+              {formSubcategoryOptions.map((subcategory) => (
+                <option key={subcategory} value={subcategory}>
+                  {subcategory}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div>
@@ -840,7 +1148,7 @@ export const AdminProductsPage = () => {
               <input
                 type="text"
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => handleSearchChange(e.target.value)}
                 placeholder="Nombre, SKU, slug, marca o categoría"
                 className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
               />
@@ -870,7 +1178,7 @@ export const AdminProductsPage = () => {
               </label>
               <select
                 value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
+                onChange={(e) => handleCategoryFilterChange(e.target.value)}
                 className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
               >
                 <option value="all">Todas las categorías</option>
