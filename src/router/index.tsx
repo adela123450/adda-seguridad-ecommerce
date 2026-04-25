@@ -8,6 +8,7 @@ import {
   ProductPage,
   CartPage,
   AdminProductsPage,
+  AdminDashboardPage,
 } from "../pages";
 
 import { CheckoutPage } from "../pages/CheckoutPage";
@@ -58,6 +59,10 @@ export const router = createBrowserRouter([
           </ProtectedRoute>
         ),
         children: [
+          {
+            index: true,
+            element: <AdminDashboardPage />,
+          },
           {
             path: "products",
             element: <AdminProductsPage />,
