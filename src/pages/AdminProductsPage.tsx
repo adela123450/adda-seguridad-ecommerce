@@ -38,6 +38,14 @@ type ProductForm = {
 
 type OfferFilter = "all" | "with-offer" | "without-offer";
 type StockFilter = "all" | "in-stock" | "low-stock" | "out-of-stock";
+type SortKey = "name" | "sku" | "brand" | "category" | "price" | "stock" | "offer";
+type SortDirection = "asc" | "desc";
+type ToastType = "success" | "error";
+
+type Toast = {
+  type: ToastType;
+  message: string;
+};
 
 const initialForm: ProductForm = {
   name: "",
@@ -55,6 +63,8 @@ const initialForm: ProductForm = {
   offer_label: "",
 };
 
+const LOW_STOCK_THRESHOLD = 5;
+
 const slugify = (text: string) => {
   return text
     .toLowerCase()
@@ -66,15 +76,15 @@ const slugify = (text: string) => {
     .replace(/-+/g, "-");
 };
 
-const LOW_STOCK_THRESHOLD = 5;
-
 export const AdminProductsPage = () => {
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const [loadError, setLoadError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [toast, setToast] = useState<Toast | null>(null);
 
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -86,6 +96,24 @@ export const AdminProductsPage = () => {
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [offerFilter, setOfferFilter] = useState<OfferFilter>("all");
   const [stockFilter, setStockFilter] = useState<StockFilter>("all");
+
+  const [sortKey, setSortKey] = useState<SortKey>("name");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const [productToDelete, setProductToDelete] = useState<ProductRow | null>(null);
+
+  const showToast = (type: ToastType, message: string) => {
+    setToast({ type, message });
+  };
+
+  useEffect(() => {
+    if (!toast) return;
+
+    const timer = window.setTimeout(() => {
+      setToast(null);
+    }, 3500);
+
+    return () => window.clearTimeout(timer);
+  }, [toast]);
 
   const fetchProducts = async () => {
     setIsLoading(true);
@@ -103,6 +131,7 @@ export const AdminProductsPage = () => {
       setLoadError(error.message || "No fue posible cargar los productos.");
       setProducts([]);
       setIsLoading(false);
+      showToast("error", "No fue posible cargar los productos.");
       return;
     }
 
@@ -122,10 +151,7 @@ export const AdminProductsPage = () => {
     setFormError(null);
   };
 
-  const handleChange = (
-    field: keyof ProductForm,
-    value: string | boolean
-  ) => {
+  const handleChange = (field: keyof ProductForm, value: string | boolean) => {
     setForm((prev) => {
       const updated = {
         ...prev,
@@ -155,19 +181,11 @@ export const AdminProductsPage = () => {
     if (!form.sku.trim()) return "El SKU es obligatorio.";
     if (!form.price.trim()) return "El precio es obligatorio.";
 
-    if (Number.isNaN(Number(form.price))) {
-      return "El precio debe ser numérico.";
-    }
-
-    if (Number.isNaN(Number(form.stock))) {
-      return "El stock debe ser numérico.";
-    }
+    if (Number.isNaN(Number(form.price))) return "El precio debe ser numérico.";
+    if (Number.isNaN(Number(form.stock))) return "El stock debe ser numérico.";
 
     if (form.has_offer) {
-      if (!form.offer_price.trim()) {
-        return "Debes ingresar el precio de oferta.";
-      }
-
+      if (!form.offer_price.trim()) return "Debes ingresar el precio de oferta.";
       if (Number.isNaN(Number(form.offer_price))) {
         return "El precio de oferta debe ser numérico.";
       }
@@ -179,12 +197,12 @@ export const AdminProductsPage = () => {
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setFormError(null);
-    setSuccessMessage(null);
 
     const validationError = validateForm();
 
     if (validationError) {
       setFormError(validationError);
+      showToast("error", validationError);
       return;
     }
 
@@ -206,9 +224,7 @@ export const AdminProductsPage = () => {
         form.has_offer && form.offer_price.trim()
           ? Number(form.offer_price)
           : null,
-      offer_label: form.has_offer
-        ? form.offer_label.trim() || "Oferta"
-        : null,
+      offer_label: form.has_offer ? form.offer_label.trim() || "Oferta" : null,
     };
 
     if (isEditing && editingId) {
@@ -220,22 +236,24 @@ export const AdminProductsPage = () => {
       if (error) {
         console.error("Update product error:", error);
         setFormError(error.message || "No fue posible actualizar el producto.");
+        showToast("error", "No fue posible actualizar el producto.");
         setIsSaving(false);
         return;
       }
 
-      setSuccessMessage("Producto actualizado correctamente.");
+      showToast("success", "Producto actualizado correctamente.");
     } else {
       const { error } = await supabase.from("products").insert(payload);
 
       if (error) {
         console.error("Insert product error:", error);
         setFormError(error.message || "No fue posible crear el producto.");
+        showToast("error", "No fue posible crear el producto.");
         setIsSaving(false);
         return;
       }
 
-      setSuccessMessage("Producto creado correctamente.");
+      showToast("success", "Producto creado correctamente.");
     }
 
     resetForm();
@@ -248,7 +266,6 @@ export const AdminProductsPage = () => {
     setEditingId(product.id);
     setHasManualSlugEdit(true);
     setFormError(null);
-    setSuccessMessage(null);
 
     setForm({
       name: product.name ?? "",
@@ -272,30 +289,43 @@ export const AdminProductsPage = () => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const handleDelete = async (id: string) => {
-    const confirmed = window.confirm(
-      "¿Seguro que deseas eliminar este producto?"
-    );
+  const openDeleteModal = (product: ProductRow) => {
+    setProductToDelete(product);
+    setFormError(null);
+  };
 
-    if (!confirmed) return;
+  const closeDeleteModal = () => {
+    if (isDeleting) return;
+    setProductToDelete(null);
+  };
 
-    setSuccessMessage(null);
+  const confirmDelete = async () => {
+    if (!productToDelete) return;
+
+    setIsDeleting(true);
     setFormError(null);
 
-    const { error } = await supabase.from("products").delete().eq("id", id);
+    const { error } = await supabase
+      .from("products")
+      .delete()
+      .eq("id", productToDelete.id);
 
     if (error) {
       console.error("Delete product error:", error);
       setFormError(error.message || "No fue posible eliminar el producto.");
+      showToast("error", "No fue posible eliminar el producto.");
+      setIsDeleting(false);
       return;
     }
 
-    if (editingId === id) {
+    if (editingId === productToDelete.id) {
       resetForm();
     }
 
-    setSuccessMessage("Producto eliminado correctamente.");
+    showToast("success", "Producto eliminado correctamente.");
+    setProductToDelete(null);
     await fetchProducts();
+    setIsDeleting(false);
   };
 
   const formatPrice = (value: number | string | null) => {
@@ -314,6 +344,36 @@ export const AdminProductsPage = () => {
   const getStockValue = (value: number | string | null) => {
     const numericValue = Number(value ?? 0);
     return Number.isNaN(numericValue) ? 0 : numericValue;
+  };
+
+  const getSortValue = (product: ProductRow, key: SortKey) => {
+    if (key === "price") return Number(product.price ?? 0);
+    if (key === "stock") return getStockValue(product.stock);
+    if (key === "offer") return product.has_offer ? 1 : 0;
+
+    const valueMap = {
+      name: product.name,
+      sku: product.sku,
+      brand: product.brand,
+      category: product.category,
+    };
+
+    return getNormalizedText(valueMap[key]);
+  };
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+      return;
+    }
+
+    setSortKey(key);
+    setSortDirection("asc");
+  };
+
+  const getSortIcon = (key: SortKey) => {
+    if (sortKey !== key) return "↕";
+    return sortDirection === "asc" ? "↑" : "↓";
   };
 
   const brandOptions = useMemo(() => {
@@ -383,7 +443,29 @@ export const AdminProductsPage = () => {
         matchesStock
       );
     });
-  }, [products, searchTerm, selectedBrand, selectedCategory, offerFilter, stockFilter]);
+  }, [
+    products,
+    searchTerm,
+    selectedBrand,
+    selectedCategory,
+    offerFilter,
+    stockFilter,
+  ]);
+
+  const sortedProducts = useMemo(() => {
+    return [...filteredProducts].sort((a, b) => {
+      const aValue = getSortValue(a, sortKey);
+      const bValue = getSortValue(b, sortKey);
+
+      if (typeof aValue === "number" && typeof bValue === "number") {
+        return sortDirection === "asc" ? aValue - bValue : bValue - aValue;
+      }
+
+      return sortDirection === "asc"
+        ? String(aValue).localeCompare(String(bValue), "es")
+        : String(bValue).localeCompare(String(aValue), "es");
+    });
+  }, [filteredProducts, sortKey, sortDirection]);
 
   const resetFilters = () => {
     setSearchTerm("");
@@ -393,8 +475,37 @@ export const AdminProductsPage = () => {
     setStockFilter("all");
   };
 
+  const SortButton = ({
+    label,
+    sort,
+  }: {
+    label: string;
+    sort: SortKey;
+  }) => (
+    <button
+      type="button"
+      onClick={() => handleSort(sort)}
+      className="inline-flex items-center gap-1 font-semibold text-slate-600 transition hover:text-[#2D5398]"
+    >
+      {label}
+      <span className="text-xs">{getSortIcon(sort)}</span>
+    </button>
+  );
+
   return (
-    <section className="mx-auto max-w-7xl px-4 py-10 md:py-12">
+    <section className="relative mx-auto max-w-7xl px-4 py-10 md:py-12">
+      {toast && (
+        <div
+          className={`fixed right-4 top-4 z-50 max-w-sm rounded-2xl border px-5 py-4 text-sm font-semibold shadow-xl ${
+            toast.type === "success"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+              : "border-red-200 bg-red-50 text-red-700"
+          }`}
+        >
+          {toast.message}
+        </div>
+      )}
+
       <div className="overflow-hidden rounded-3xl bg-gradient-to-r from-[#101935] via-[#243C78] to-[#3F61B3] shadow-xl">
         <div className="relative px-6 py-12 md:px-8 md:py-14">
           <div className="absolute -right-16 top-8 h-40 w-40 rounded-full bg-white/10 blur-3xl" />
@@ -437,12 +548,6 @@ export const AdminProductsPage = () => {
         {formError && (
           <div className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
             {formError}
-          </div>
-        )}
-
-        {successMessage && (
-          <div className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
-            {successMessage}
           </div>
         )}
 
@@ -573,7 +678,7 @@ export const AdminProductsPage = () => {
             />
           </div>
 
-          <div className="md:col-span-2 rounded-2xl border border-slate-200 bg-slate-50 p-5">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 md:col-span-2">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:gap-6">
               <label className="flex items-center gap-3 text-sm font-medium text-slate-700">
                 <input
@@ -607,7 +712,7 @@ export const AdminProductsPage = () => {
             </div>
           </div>
 
-          <div className="md:col-span-2 flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-3 md:col-span-2">
             <button
               type="submit"
               disabled={isSaving}
@@ -638,8 +743,8 @@ export const AdminProductsPage = () => {
           </h2>
 
           <div className="text-sm font-medium text-slate-500">
-            {filteredProducts.length} resultado
-            {filteredProducts.length === 1 ? "" : "s"}
+            {sortedProducts.length} resultado
+            {sortedProducts.length === 1 ? "" : "s"}
           </div>
         </div>
 
@@ -753,7 +858,7 @@ export const AdminProductsPage = () => {
           <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 px-4 py-6 text-center text-slate-600">
             No hay productos registrados todavía.
           </div>
-        ) : filteredProducts.length === 0 ? (
+        ) : sortedProducts.length === 0 ? (
           <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 px-4 py-6 text-center text-slate-600">
             No hay productos que coincidan con los filtros aplicados.
           </div>
@@ -762,19 +867,33 @@ export const AdminProductsPage = () => {
             <table className="min-w-full border-separate border-spacing-y-3">
               <thead>
                 <tr className="text-left text-sm text-slate-500">
-                  <th className="px-3 py-2">Producto</th>
-                  <th className="px-3 py-2">SKU</th>
-                  <th className="px-3 py-2">Marca</th>
-                  <th className="px-3 py-2">Categoría</th>
-                  <th className="px-3 py-2">Precio</th>
-                  <th className="px-3 py-2">Stock</th>
-                  <th className="px-3 py-2">Oferta</th>
+                  <th className="px-3 py-2">
+                    <SortButton label="Producto" sort="name" />
+                  </th>
+                  <th className="px-3 py-2">
+                    <SortButton label="SKU" sort="sku" />
+                  </th>
+                  <th className="px-3 py-2">
+                    <SortButton label="Marca" sort="brand" />
+                  </th>
+                  <th className="px-3 py-2">
+                    <SortButton label="Categoría" sort="category" />
+                  </th>
+                  <th className="px-3 py-2">
+                    <SortButton label="Precio" sort="price" />
+                  </th>
+                  <th className="px-3 py-2">
+                    <SortButton label="Stock" sort="stock" />
+                  </th>
+                  <th className="px-3 py-2">
+                    <SortButton label="Oferta" sort="offer" />
+                  </th>
                   <th className="px-3 py-2">Acciones</th>
                 </tr>
               </thead>
 
               <tbody>
-                {filteredProducts.map((product) => {
+                {sortedProducts.map((product) => {
                   const stockValue = getStockValue(product.stock);
                   const isLowStock =
                     stockValue > 0 && stockValue <= LOW_STOCK_THRESHOLD;
@@ -783,7 +902,7 @@ export const AdminProductsPage = () => {
                   return (
                     <tr
                       key={product.id}
-                      className="rounded-2xl bg-slate-50 text-sm text-slate-700 shadow-sm"
+                      className="rounded-2xl bg-slate-50 text-sm text-slate-700 shadow-sm transition hover:bg-slate-100"
                     >
                       <td className="rounded-l-2xl px-3 py-4">
                         <div className="font-semibold text-slate-800">
@@ -847,7 +966,7 @@ export const AdminProductsPage = () => {
 
                           <button
                             type="button"
-                            onClick={() => handleDelete(product.id)}
+                            onClick={() => openDeleteModal(product)}
                             className="rounded-lg bg-red-100 px-3 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-200"
                           >
                             Eliminar
@@ -862,6 +981,48 @@ export const AdminProductsPage = () => {
           </div>
         )}
       </div>
+
+      {productToDelete && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/50 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-red-100 text-xl font-bold text-red-700">
+              !
+            </div>
+
+            <h3 className="mt-5 text-xl font-bold text-slate-900">
+              Confirmar eliminación
+            </h3>
+
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Vas a eliminar el producto{" "}
+              <span className="font-semibold text-slate-900">
+                {productToDelete.name}
+              </span>
+              . Esta acción no se puede deshacer.
+            </p>
+
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={closeDeleteModal}
+                disabled={isDeleting}
+                className="rounded-xl border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="button"
+                onClick={confirmDelete}
+                disabled={isDeleting}
+                className="rounded-xl bg-red-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {isDeleting ? "Eliminando..." : "Sí, eliminar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 };
