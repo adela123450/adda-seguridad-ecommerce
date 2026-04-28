@@ -9,6 +9,9 @@ interface Props {
   formattedPrice: string;
   slug: string;
   stockLabel: string;
+  hasOffer?: boolean;
+  formattedOfferPrice?: string;
+  offerLabel?: string;
 }
 
 export const CardProduct = ({
@@ -18,6 +21,9 @@ export const CardProduct = ({
   formattedPrice,
   slug,
   stockLabel,
+  hasOffer = false,
+  formattedOfferPrice,
+  offerLabel,
 }: Props) => {
   const { toggleFavorite, isFavorite } = useFavorites();
 
@@ -29,7 +35,7 @@ export const CardProduct = ({
       name,
       brand,
       img,
-      formattedPrice,
+      formattedPrice: hasOffer && formattedOfferPrice ? formattedOfferPrice : formattedPrice,
     });
   };
 
@@ -42,6 +48,12 @@ export const CardProduct = ({
 
   return (
     <article className="group relative flex w-full max-w-[285px] flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-md transition duration-300 hover:-translate-y-1 hover:shadow-xl">
+      {hasOffer && formattedOfferPrice && (
+        <div className="absolute left-4 top-4 z-10 rounded-full bg-[#2D5398] px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-white shadow-md">
+          {offerLabel?.trim() || "Oferta"}
+        </div>
+      )}
+
       <button
         onClick={handleToggleFavorite}
         aria-label={
@@ -85,9 +97,25 @@ export const CardProduct = ({
           {name}
         </h3>
 
-        <p className="mt-4 text-3xl font-bold tracking-tight text-slate-900">
-          {formattedPrice}
-        </p>
+        {hasOffer && formattedOfferPrice ? (
+          <div className="mt-4">
+            <p className="text-sm font-medium text-slate-400 line-through">
+              {formattedPrice}
+            </p>
+
+            <p className="mt-1 text-3xl font-bold tracking-tight text-slate-900">
+              {formattedOfferPrice}
+            </p>
+
+            <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-[#2D5398]">
+              Precio especial disponible
+            </p>
+          </div>
+        ) : (
+          <p className="mt-4 text-3xl font-bold tracking-tight text-slate-900">
+            {formattedPrice}
+          </p>
+        )}
 
         <p className="mt-2 text-sm text-slate-500">
           Precio referencial sujeto a disponibilidad

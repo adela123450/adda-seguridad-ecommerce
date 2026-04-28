@@ -16,6 +16,9 @@ type ProductRow = {
   stock: number | string | null;
   is_new: boolean | null;
   is_featured: boolean | null;
+  has_offer: boolean | null;
+  offer_price: number | string | null;
+  offer_label: string | null;
   created_at: string | null;
 };
 
@@ -31,6 +34,13 @@ const getStockLabel = (stock: number) => {
   if (stock === 0) return "Agotado";
   if (stock <= 5) return "Pocas unidades";
   return "Disponible";
+};
+
+const hasValidOffer = (product: ProductRow) => {
+  const basePrice = Number(product.price ?? 0);
+  const offerPrice = Number(product.offer_price ?? 0);
+
+  return Boolean(product.has_offer) && offerPrice > 0 && offerPrice < basePrice;
 };
 
 export const EquiposPage = () => {
@@ -59,7 +69,7 @@ export const EquiposPage = () => {
       const { data, error } = await supabase
         .from("products")
         .select(
-          "id, name, slug, brand, category, subcategory, price, description, image_url, stock, is_new, is_featured, created_at"
+          "id, name, slug, brand, category, subcategory, price, description, image_url, stock, is_new, is_featured, has_offer, offer_price, offer_label, created_at"
         )
         .order("created_at", { ascending: false });
 
@@ -71,7 +81,6 @@ export const EquiposPage = () => {
         return;
       }
 
-      console.log("Supabase products loaded:", data);
       setProducts((data as ProductRow[]) ?? []);
       setIsLoading(false);
     };
@@ -159,11 +168,19 @@ export const EquiposPage = () => {
     }
 
     if (sortOrder === "price-asc") {
-      result.sort((a, b) => Number(a.price) - Number(b.price));
+      result.sort((a, b) => {
+        const aPrice = hasValidOffer(a) ? Number(a.offer_price) : Number(a.price);
+        const bPrice = hasValidOffer(b) ? Number(b.offer_price) : Number(b.price);
+        return aPrice - bPrice;
+      });
     }
 
     if (sortOrder === "price-desc") {
-      result.sort((a, b) => Number(b.price) - Number(a.price));
+      result.sort((a, b) => {
+        const aPrice = hasValidOffer(a) ? Number(a.offer_price) : Number(a.price);
+        const bPrice = hasValidOffer(b) ? Number(b.offer_price) : Number(b.price);
+        return bPrice - aPrice;
+      });
     }
 
     if (sortOrder === "name-asc") {
@@ -402,17 +419,28 @@ export const EquiposPage = () => {
             </div>
           ) : (
             <div className="grid grid-cols-1 justify-items-center gap-6 sm:grid-cols-2 xl:grid-cols-3">
-              {filteredProducts.map((product) => (
-                <CardProduct
-                  key={product.id}
-                  img={product.image_url ?? "/placeholder-product.png"}
-                  name={product.name}
-                  brand={product.brand ?? "Sin marca"}
-                  formattedPrice={formatPrice(Number(product.price))}
-                  slug={product.slug}
-                  stockLabel={getStockLabel(Number(product.stock ?? 0))}
-                />
-              ))}
+              {filteredProducts.map((product) => {
+                const validOffer = hasValidOffer(product);
+                const basePrice = Number(product.price ?? 0);
+                const offerPrice = Number(product.offer_price ?? 0);
+
+                return (
+                  <CardProduct
+                    key={product.id}
+                    img={product.image_url ?? "/placeholder-product.png"}
+                    name={product.name}
+                    brand={product.brand ?? "Sin marca"}
+                    formattedPrice={formatPrice(basePrice)}
+                    slug={product.slug}
+                    stockLabel={getStockLabel(Number(product.stock ?? 0))}
+                    hasOffer={validOffer}
+                    formattedOfferPrice={
+                      validOffer ? formatPrice(offerPrice) : undefined
+                    }
+                    offerLabel={product.offer_label ?? "Oferta"}
+                  />
+                );
+              })}
             </div>
           )}
         </main>

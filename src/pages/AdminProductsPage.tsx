@@ -525,7 +525,13 @@ export const AdminProductsPage = () => {
 
       showToast("success", "Producto actualizado correctamente.");
     } else {
-      const { error } = await supabase.from("products").insert(payload);
+      const { data: insertedProduct, error } = await supabase
+        .from("products")
+        .insert(payload)
+        .select(
+          "id, name, slug, sku, brand, category, subcategory, price, description, image_url, stock, has_offer, offer_price, offer_label, created_at"
+        )
+        .single();
 
       if (error) {
         console.error("Insert product error:", error);
@@ -535,11 +541,25 @@ export const AdminProductsPage = () => {
         return;
       }
 
+      if (!insertedProduct) {
+        const message =
+          "Supabase no devolvió el producto creado. Revisa permisos RLS o configuración de la tabla.";
+        setFormError(message);
+        showToast("error", message);
+        setIsSaving(false);
+        return;
+      }
+
+      setProducts((currentProducts) => [
+        insertedProduct as ProductRow,
+        ...currentProducts,
+      ]);
+
       showToast("success", "Producto creado correctamente.");
     }
 
-    resetForm();
     await fetchProducts();
+    resetForm();
     setIsSaving(false);
   };
 
