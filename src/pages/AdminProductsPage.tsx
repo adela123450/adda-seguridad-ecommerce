@@ -11,6 +11,7 @@ type ProductRow = {
   category: string | null;
   subcategory: string | null;
   price: number | string;
+  cost_price: number | string | null;
   description: string | null;
   image_url: string | null;
   stock: number | string | null;
@@ -28,6 +29,7 @@ type ProductForm = {
   category: string;
   subcategory: string;
   price: string;
+  cost_price: string;
   description: string;
   image_url: string;
   stock: string;
@@ -44,6 +46,9 @@ type SortKey =
   | "brand"
   | "category"
   | "price"
+  | "cost_price"
+  | "profit"
+  | "margin"
   | "stock"
   | "offer";
 type SortDirection = "asc" | "desc";
@@ -62,6 +67,7 @@ const initialForm: ProductForm = {
   category: "",
   subcategory: "",
   price: "",
+  cost_price: "0",
   description: "",
   image_url: "",
   stock: "0",
@@ -340,7 +346,7 @@ export const AdminProductsPage = () => {
     const { data, error } = await supabase
       .from("products")
       .select(
-        "id, name, slug, sku, brand, category, subcategory, price, description, image_url, stock, has_offer, offer_price, offer_label, created_at"
+        "id, name, slug, sku, brand, category, subcategory, price, cost_price, description, image_url, stock, has_offer, offer_price, offer_label, created_at"
       )
       .order("created_at", { ascending: false });
 
@@ -453,9 +459,14 @@ export const AdminProductsPage = () => {
     if (!form.category.trim()) return "La categoría es obligatoria.";
     if (!form.subcategory.trim()) return "La subcategoría es obligatoria.";
     if (!form.price.trim()) return "El precio es obligatorio.";
+    if (!form.cost_price.trim()) return "El costo del producto es obligatorio.";
 
     if (Number.isNaN(Number(form.price))) return "El precio debe ser numérico.";
+    if (Number.isNaN(Number(form.cost_price))) return "El costo del producto debe ser numérico.";
     if (Number.isNaN(Number(form.stock))) return "El stock debe ser numérico.";
+
+    if (Number(form.cost_price) < 0) return "El costo del producto no puede ser negativo.";
+    if (Number(form.price) < 0) return "El precio no puede ser negativo.";
 
     const allowedSubcategories = SUBCATEGORY_OPTIONS[form.category] ?? [];
 
@@ -498,6 +509,7 @@ export const AdminProductsPage = () => {
       category: form.category.trim() || null,
       subcategory: form.subcategory.trim() || null,
       price: Number(form.price),
+      cost_price: Number(form.cost_price),
       description: form.description.trim() || null,
       image_url: form.image_url.trim() || null,
       stock: Number(form.stock),
@@ -529,7 +541,7 @@ export const AdminProductsPage = () => {
         .from("products")
         .insert(payload)
         .select(
-          "id, name, slug, sku, brand, category, subcategory, price, description, image_url, stock, has_offer, offer_price, offer_label, created_at"
+          "id, name, slug, sku, brand, category, subcategory, price, cost_price, description, image_url, stock, has_offer, offer_price, offer_label, created_at"
         )
         .single();
 
@@ -577,6 +589,7 @@ export const AdminProductsPage = () => {
       category: product.category ?? "",
       subcategory: product.subcategory ?? "",
       price: String(product.price ?? ""),
+      cost_price: String(product.cost_price ?? 0),
       description: product.description ?? "",
       image_url: product.image_url ?? "",
       stock: String(product.stock ?? 0),
@@ -640,6 +653,44 @@ export const AdminProductsPage = () => {
     }).format(Number(value));
   };
 
+  const getSalePrice = (product: ProductRow) => {
+    const regularPrice = Number(product.price ?? 0);
+    const offerPrice = Number(product.offer_price ?? 0);
+
+    if (product.has_offer && offerPrice > 0) {
+      return offerPrice;
+    }
+
+    return regularPrice;
+  };
+
+  const getCostPrice = (product: ProductRow) => {
+    const cost = Number(product.cost_price ?? 0);
+    return Number.isNaN(cost) ? 0 : cost;
+  };
+
+  const getGrossProfit = (product: ProductRow) => {
+    return getSalePrice(product) - getCostPrice(product);
+  };
+
+  const getCommercialMargin = (product: ProductRow) => {
+    const salePrice = getSalePrice(product);
+
+    if (salePrice <= 0) return 0;
+
+    return (getGrossProfit(product) / salePrice) * 100;
+  };
+
+  const getMarginClass = (margin: number) => {
+    if (margin < 15) return "bg-red-100 text-red-700";
+    if (margin < 30) return "bg-amber-100 text-amber-700";
+    return "bg-emerald-100 text-emerald-700";
+  };
+
+  const formatPercent = (value: number) => {
+    return `${value.toFixed(1)}%`;
+  };
+
   const getNormalizedText = (value: string | null | undefined) =>
     normalizeText(value);
 
@@ -649,18 +700,30 @@ export const AdminProductsPage = () => {
   };
 
   const getSortValue = (product: ProductRow, key: SortKey) => {
-    if (key === "price") return Number(product.price ?? 0);
-    if (key === "stock") return getStockValue(product.stock);
-    if (key === "offer") return product.has_offer ? 1 : 0;
-
-    const valueMap = {
-      name: product.name,
-      sku: product.sku,
-      brand: product.brand,
-      category: product.category,
-    };
-
-    return getNormalizedText(valueMap[key]);
+    switch (key) {
+      case "price":
+        return Number(product.price ?? 0);
+      case "cost_price":
+        return getCostPrice(product);
+      case "profit":
+        return getGrossProfit(product);
+      case "margin":
+        return getCommercialMargin(product);
+      case "stock":
+        return getStockValue(product.stock);
+      case "offer":
+        return product.has_offer ? 1 : 0;
+      case "name":
+        return getNormalizedText(product.name);
+      case "sku":
+        return getNormalizedText(product.sku);
+      case "brand":
+        return getNormalizedText(product.brand);
+      case "category":
+        return getNormalizedText(product.category);
+      default:
+        return "";
+    }
   };
 
   const handleSort = (key: SortKey) => {
@@ -940,7 +1003,7 @@ export const AdminProductsPage = () => {
 
         <form
           onSubmit={handleSubmit}
-          className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-2"
+          className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3"
         >
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-700">
@@ -1042,7 +1105,7 @@ export const AdminProductsPage = () => {
 
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-700">
-              Precio
+              Precio de venta
             </label>
             <input
               type="number"
@@ -1050,6 +1113,22 @@ export const AdminProductsPage = () => {
               onChange={(e) => handleChange("price", e.target.value)}
               className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
             />
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-700">
+              Costo del producto
+            </label>
+            <input
+              type="number"
+              value={form.cost_price}
+              onChange={(e) => handleChange("cost_price", e.target.value)}
+              placeholder="Costo real de compra"
+              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              Base para utilidad bruta y margen comercial.
+            </p>
           </div>
 
           <div>
@@ -1064,7 +1143,7 @@ export const AdminProductsPage = () => {
             />
           </div>
 
-          <div className="md:col-span-2">
+          <div className="md:col-span-2 xl:col-span-3">
             <label className="mb-2 block text-sm font-medium text-slate-700">
               URL imagen
             </label>
@@ -1077,7 +1156,7 @@ export const AdminProductsPage = () => {
             />
           </div>
 
-          <div className="md:col-span-2">
+          <div className="md:col-span-2 xl:col-span-3">
             <label className="mb-2 block text-sm font-medium text-slate-700">
               Descripción
             </label>
@@ -1089,7 +1168,7 @@ export const AdminProductsPage = () => {
             />
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 md:col-span-2">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 md:col-span-2 xl:col-span-3">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:gap-6">
               <label className="flex items-center gap-3 text-sm font-medium text-slate-700">
                 <input
@@ -1123,7 +1202,7 @@ export const AdminProductsPage = () => {
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-3 md:col-span-2">
+          <div className="flex flex-wrap gap-3 md:col-span-2 xl:col-span-3">
             <button
               type="submit"
               disabled={isSaving}
@@ -1295,6 +1374,15 @@ export const AdminProductsPage = () => {
                       <SortButton label="Precio" sort="price" />
                     </th>
                     <th className="px-3 py-2">
+                      <SortButton label="Costo" sort="cost_price" />
+                    </th>
+                    <th className="px-3 py-2">
+                      <SortButton label="Utilidad" sort="profit" />
+                    </th>
+                    <th className="px-3 py-2">
+                      <SortButton label="Margen" sort="margin" />
+                    </th>
+                    <th className="px-3 py-2">
                       <SortButton label="Stock" sort="stock" />
                     </th>
                     <th className="px-3 py-2">
@@ -1310,6 +1398,8 @@ export const AdminProductsPage = () => {
                     const isLowStock =
                       stockValue > 0 && stockValue <= LOW_STOCK_THRESHOLD;
                     const isOutOfStock = stockValue <= 0;
+                    const grossProfit = getGrossProfit(product);
+                    const commercialMargin = getCommercialMargin(product);
 
                     return (
                       <tr
@@ -1335,6 +1425,27 @@ export const AdminProductsPage = () => {
                         </td>
                         <td className="px-3 py-4">
                           {formatPrice(product.price)}
+                        </td>
+                        <td className="px-3 py-4">
+                          {formatPrice(product.cost_price)}
+                        </td>
+                        <td className="px-3 py-4">
+                          <span
+                            className={`font-semibold ${
+                              grossProfit < 0 ? "text-red-700" : "text-emerald-700"
+                            }`}
+                          >
+                            {formatPrice(grossProfit)}
+                          </span>
+                        </td>
+                        <td className="px-3 py-4">
+                          <span
+                            className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getMarginClass(
+                              commercialMargin
+                            )}`}
+                          >
+                            {formatPercent(commercialMargin)}
+                          </span>
                         </td>
                         <td className="px-3 py-4">
                           <div className="flex flex-col gap-1">
@@ -1402,6 +1513,8 @@ export const AdminProductsPage = () => {
                 const isLowStock =
                   stockValue > 0 && stockValue <= LOW_STOCK_THRESHOLD;
                 const isOutOfStock = stockValue <= 0;
+                const grossProfit = getGrossProfit(product);
+                const commercialMargin = getCommercialMargin(product);
 
                 return (
                   <article
@@ -1459,6 +1572,28 @@ export const AdminProductsPage = () => {
                             {formatPrice(product.price)}
                           </p>
                         </div>
+
+                        <div className="rounded-2xl bg-white p-3">
+                          <p className="text-xs font-semibold uppercase text-slate-400">
+                            Costo
+                          </p>
+                          <p className="mt-1 font-semibold text-slate-700">
+                            {formatPrice(product.cost_price)}
+                          </p>
+                        </div>
+
+                        <div className="rounded-2xl bg-white p-3">
+                          <p className="text-xs font-semibold uppercase text-slate-400">
+                            Utilidad
+                          </p>
+                          <p
+                            className={`mt-1 font-semibold ${
+                              grossProfit < 0 ? "text-red-700" : "text-emerald-700"
+                            }`}
+                          >
+                            {formatPrice(grossProfit)}
+                          </p>
+                        </div>
                       </div>
 
                       <div className="flex flex-wrap items-center gap-2">
@@ -1475,6 +1610,14 @@ export const AdminProductsPage = () => {
                             Disponible: {stockValue}
                           </span>
                         )}
+
+                        <span
+                          className={`inline-flex rounded-full px-3 py-1.5 text-xs font-semibold ${getMarginClass(
+                            commercialMargin
+                          )}`}
+                        >
+                          Margen: {formatPercent(commercialMargin)}
+                        </span>
 
                         {product.has_offer ? (
                           <span className="inline-flex rounded-full bg-[#2D5398]/10 px-3 py-1.5 text-xs font-semibold text-[#2D5398]">

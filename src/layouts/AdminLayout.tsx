@@ -44,6 +44,7 @@ export const AdminLayout = () => {
               </span>
 
               <button
+                type="button"
                 onClick={handleLogout}
                 className="rounded-xl bg-[#2D5398] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#234684]"
               >
@@ -59,6 +60,14 @@ export const AdminLayout = () => {
 
             <NavLink to="/admin/products" className={navLinkClass}>
               Productos
+            </NavLink>
+
+            <NavLink to="/admin/orders" className={navLinkClass}>
+              Pedidos
+            </NavLink>
+
+            <NavLink to="/admin/finance" className={navLinkClass}>
+              Finanzas
             </NavLink>
           </nav>
         </div>

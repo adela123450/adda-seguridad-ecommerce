@@ -70,6 +70,23 @@ const getStartDate = (period: PeriodFilter) => {
   return null;
 };
 
+const getPeriodLabel = (period: PeriodFilter) => {
+  const labels: Record<PeriodFilter, string> = {
+    today: "hoy",
+    week: "ultimos_7_dias",
+    month: "mes_actual",
+    year: "anio_actual",
+    all: "todo_el_historial",
+  };
+
+  return labels[period];
+};
+
+const escapeCsvValue = (value: string | number) => {
+  const cleanValue = String(value).replace(/"/g, '""');
+  return `"${cleanValue}"`;
+};
+
 export const AdminFinancePage = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -81,7 +98,9 @@ export const AdminFinancePage = () => {
 
       const { data, error } = await supabase
         .from("orders")
-        .select("id, order_number, customer_name, city, total_price, status, created_at")
+        .select(
+          "id, order_number, customer_name, city, total_price, status, created_at"
+        )
         .order("created_at", { ascending: false });
 
       if (error) {
@@ -128,11 +147,67 @@ export const AdminFinancePage = () => {
   );
 
   const estimatedIva = realIncome - realIncome / (1 + IVA_RATE);
-
   const subtotalWithoutIva = realIncome - estimatedIva;
 
   const averageTicket =
     realSalesOrders.length > 0 ? realIncome / realSalesOrders.length : 0;
+
+  const exportFinancialCsv = () => {
+    const headers = [
+      "Pedido",
+      "Cliente",
+      "Ciudad",
+      "Fecha",
+      "Estado",
+      "Total",
+      "Base estimada sin IVA",
+      "IVA estimado 19%",
+      "Tipo de movimiento",
+    ];
+
+    const rows = filteredOrders.map((order) => {
+      const total = Number(order.total_price ?? 0);
+      const iva = total - total / (1 + IVA_RATE);
+      const base = total - iva;
+
+      const movementType = REAL_SALE_STATUSES.includes(order.status)
+        ? "Venta real"
+        : RECEIVABLE_STATUSES.includes(order.status)
+        ? "Cartera pendiente"
+        : order.status === "cancelado"
+        ? "Cancelado"
+        : "Otro";
+
+      return [
+        order.order_number,
+        order.customer_name,
+        order.city,
+        formatDate(order.created_at),
+        order.status,
+        total,
+        Math.round(base),
+        Math.round(iva),
+        movementType,
+      ];
+    });
+
+    const csvContent = [headers, ...rows]
+      .map((row) => row.map(escapeCsvValue).join(";"))
+      .join("\n");
+
+    const blob = new Blob(["\uFEFF" + csvContent], {
+      type: "text/csv;charset=utf-8;",
+    });
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = `reporte_financiero_adda_${getPeriodLabel(period)}.csv`;
+    link.click();
+
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <section className="mx-auto max-w-7xl px-4 py-8">
@@ -141,9 +216,7 @@ export const AdminFinancePage = () => {
           Finanzas
         </p>
 
-        <h1 className="mt-2 text-3xl font-bold">
-          Módulo financiero ADDA
-        </h1>
+        <h1 className="mt-2 text-3xl font-bold">Módulo financiero ADDA</h1>
 
         <p className="mt-2 max-w-3xl text-blue-100">
           Resumen financiero preparado para ventas reales, cartera, IVA estimado
@@ -151,22 +224,33 @@ export const AdminFinancePage = () => {
         </p>
       </div>
 
-      <div className="mb-6 rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
-        <label className="mb-2 block text-sm font-semibold text-slate-700">
-          Periodo de análisis
-        </label>
+      <div className="mb-6 flex flex-col gap-4 rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200 md:flex-row md:items-end md:justify-between">
+        <div>
+          <label className="mb-2 block text-sm font-semibold text-slate-700">
+            Periodo de análisis
+          </label>
 
-        <select
-          value={period}
-          onChange={(event) => setPeriod(event.target.value as PeriodFilter)}
-          className="w-full max-w-xs rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
+          <select
+            value={period}
+            onChange={(event) => setPeriod(event.target.value as PeriodFilter)}
+            className="w-full max-w-xs rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
+          >
+            <option value="today">Hoy</option>
+            <option value="week">Últimos 7 días</option>
+            <option value="month">Mes actual</option>
+            <option value="year">Año actual</option>
+            <option value="all">Todo el historial</option>
+          </select>
+        </div>
+
+        <button
+          type="button"
+          onClick={exportFinancialCsv}
+          disabled={loading || filteredOrders.length === 0}
+          className="inline-flex rounded-xl bg-[#2D5398] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#234684] disabled:cursor-not-allowed disabled:opacity-60"
         >
-          <option value="today">Hoy</option>
-          <option value="week">Últimos 7 días</option>
-          <option value="month">Mes actual</option>
-          <option value="year">Año actual</option>
-          <option value="all">Todo el historial</option>
-        </select>
+          Exportar CSV / Excel
+        </button>
       </div>
 
       {loading ? (
@@ -285,9 +369,7 @@ export const AdminFinancePage = () => {
                       </div>
 
                       <div>
-                        <p className="text-sm text-slate-600">
-                          {order.city}
-                        </p>
+                        <p className="text-sm text-slate-600">{order.city}</p>
                         <p className="text-sm text-slate-500">
                           {formatDate(order.created_at)}
                         </p>
@@ -324,7 +406,7 @@ export const AdminFinancePage = () => {
                 </div>
 
                 <div className="rounded-2xl bg-slate-50 p-4 text-slate-700">
-                  Futuro: exportar CSV/Excel para contador.
+                  Exportación CSV lista para Excel o Google Sheets.
                 </div>
 
                 <div className="rounded-2xl bg-slate-50 p-4 text-slate-700">
