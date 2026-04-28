@@ -6,3 +6,4 @@ export * from "./CartPage";
 export * from "./AdminProductsPage";
 export * from "./AdminDashboardPage";
 export * from "./AdminOrdersPage";
+export * from "./AdminFinancePage";

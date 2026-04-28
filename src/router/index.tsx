@@ -10,6 +10,7 @@ import {
   AdminProductsPage,
   AdminDashboardPage,
   AdminOrdersPage,
+  AdminFinancePage,
 } from "../pages";
 
 import { CheckoutPage } from "../pages/CheckoutPage";
@@ -71,6 +72,10 @@ export const router = createBrowserRouter([
           {
             path: "orders",
             element: <AdminOrdersPage />,
+          },
+          {
+            path: "finance",
+            element: <AdminFinancePage />,
           },
         ],
       },
