@@ -28,7 +28,10 @@ type LastOrder = {
   customer: LastOrderCustomer;
   cart: LastOrderItem[];
   totalItems: number;
+  subtotal?: number;
+  ivaAmount?: number;
   totalPrice: number;
+  taxMode?: "sin_iva" | "con_iva";
   createdAt: string;
 };
 
@@ -45,12 +48,12 @@ export const PedidoFinalizadoPage = () => {
         </h1>
 
         <p className="mt-4 text-slate-600">
-          Parece que aún no se ha registrado un pedido reciente para mostrar.
+          Parece que aún no se ha registrado un pedido reciente.
         </p>
 
         <Link
           to="/"
-          className="mt-8 inline-flex rounded-xl bg-slate-900 px-5 py-3 text-sm font-medium text-white transition hover:bg-slate-700"
+          className="mt-8 inline-flex rounded-xl bg-slate-900 px-5 py-3 text-sm font-medium text-white hover:bg-slate-700"
         >
           Volver a la tienda
         </Link>
@@ -58,26 +61,24 @@ export const PedidoFinalizadoPage = () => {
     );
   }
 
+  const subtotal =
+    order.subtotal ??
+    order.cart.reduce(
+      (acc, item) => acc + item.price * item.quantity,
+      0
+    );
+
+  const ivaAmount = order.ivaAmount ?? 0;
+
   const whatsappMessage = encodeURIComponent(
-    `Hola, ADDA Seguridad. Quiero enviar mi pedido:\n\n` +
-      `Cliente: ${order.customer.fullName}\n` +
-      `Celular: ${order.customer.phone}\n` +
-      `Correo: ${order.customer.email}\n` +
-      `Ciudad: ${order.customer.city}\n` +
-      `Dirección: ${order.customer.address}\n` +
-      `Observaciones: ${order.customer.notes || "Sin observaciones"}\n\n` +
-      `Productos solicitados:\n` +
-      `${order.cart
-        .map(
-          (item) =>
-            `• ${item.name} | Cantidad: ${item.quantity} | Subtotal: ${formatPrice(
-              item.price * item.quantity
-            )}`
-        )
-        .join("\n")}\n\n` +
-      `Productos diferentes: ${order.cart.length}\n` +
-      `Unidades totales: ${order.totalItems}\n` +
-      `Total del pedido: ${formatPrice(order.totalPrice)}`
+    `Hola ADDA Seguridad, envío mi pedido:%0A%0A` +
+      `Cliente: ${order.customer.fullName}%0A` +
+      `Celular: ${order.customer.phone}%0A` +
+      `Correo: ${order.customer.email}%0A` +
+      `Ciudad: ${order.customer.city}%0A%0A` +
+      `Subtotal: ${formatPrice(subtotal)}%0A` +
+      `IVA: ${formatPrice(ivaAmount)}%0A` +
+      `Total: ${formatPrice(order.totalPrice)}`
   );
 
   const whatsappLink = `https://wa.me/573015068866?text=${whatsappMessage}`;
@@ -95,8 +96,7 @@ export const PedidoFinalizadoPage = () => {
           </h1>
 
           <p className="mt-3 text-slate-600">
-            Hemos guardado la información de tu solicitud. Ahora puedes enviar
-            el pedido directamente por WhatsApp para continuar la atención.
+            Tu solicitud fue guardada exitosamente.
           </p>
         </div>
 
@@ -107,33 +107,11 @@ export const PedidoFinalizadoPage = () => {
             </h2>
 
             <div className="mt-5 space-y-3 text-sm text-slate-700">
-              <p>
-                <span className="font-semibold">Nombre:</span>{" "}
-                {order.customer.fullName}
-              </p>
-              <p>
-                <span className="font-semibold">Celular:</span>{" "}
-                {order.customer.phone}
-              </p>
-              <p>
-                <span className="font-semibold">Correo:</span>{" "}
-                {order.customer.email}
-              </p>
-              <p>
-                <span className="font-semibold">Ciudad:</span>{" "}
-                {order.customer.city}
-              </p>
-              <p>
-                <span className="font-semibold">Dirección:</span>{" "}
-                {order.customer.address}
-              </p>
-
-              {order.customer.notes && (
-                <p>
-                  <span className="font-semibold">Observaciones:</span>{" "}
-                  {order.customer.notes}
-                </p>
-              )}
+              <p><strong>Nombre:</strong> {order.customer.fullName}</p>
+              <p><strong>Celular:</strong> {order.customer.phone}</p>
+              <p><strong>Correo:</strong> {order.customer.email}</p>
+              <p><strong>Ciudad:</strong> {order.customer.city}</p>
+              <p><strong>Dirección:</strong> {order.customer.address}</p>
             </div>
           </div>
 
@@ -142,47 +120,29 @@ export const PedidoFinalizadoPage = () => {
               Resumen del pedido
             </h2>
 
-            <div className="mt-5 space-y-4">
-              {order.cart.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex items-start justify-between gap-4 border-b border-slate-200 pb-3"
-                >
-                  <div>
-                    <p className="text-sm font-semibold text-slate-800">
-                      {item.name}
-                    </p>
-                    <p className="mt-1 text-sm text-slate-500">
-                      Cantidad: {item.quantity}
-                    </p>
-                  </div>
-
-                  <p className="text-sm font-semibold text-slate-800">
-                    {formatPrice(item.price * item.quantity)}
-                  </p>
-                </div>
-              ))}
-            </div>
-
             <div className="mt-6 space-y-3 border-t border-slate-200 pt-4">
-              <div className="flex items-center justify-between text-sm text-slate-600">
+              <div className="flex justify-between text-sm">
                 <span>Productos diferentes</span>
-                <span className="font-medium text-slate-800">
-                  {order.cart.length}
-                </span>
+                <span>{order.cart.length}</span>
               </div>
 
-              <div className="flex items-center justify-between text-sm text-slate-600">
+              <div className="flex justify-between text-sm">
                 <span>Unidades</span>
-                <span className="font-medium text-slate-800">
-                  {order.totalItems}
-                </span>
+                <span>{order.totalItems}</span>
               </div>
 
-              <div className="flex items-center justify-between pt-2">
-                <span className="text-lg font-semibold text-slate-800">
-                  Total
-                </span>
+              <div className="flex justify-between text-sm">
+                <span>Subtotal</span>
+                <span>{formatPrice(subtotal)}</span>
+              </div>
+
+              <div className="flex justify-between text-sm">
+                <span>IVA</span>
+                <span>{formatPrice(ivaAmount)}</span>
+              </div>
+
+              <div className="flex justify-between border-t border-slate-200 pt-3">
+                <span className="text-lg font-semibold">Total a pagar</span>
                 <span className="text-2xl font-bold text-slate-900">
                   {formatPrice(order.totalPrice)}
                 </span>
@@ -196,34 +156,17 @@ export const PedidoFinalizadoPage = () => {
             href={whatsappLink}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center justify-center rounded-xl bg-green-600 px-5 py-3 text-sm font-medium text-white transition hover:bg-green-700"
+            className="inline-flex items-center justify-center rounded-xl bg-green-600 px-5 py-3 text-sm font-medium text-white hover:bg-green-700"
           >
             Enviar pedido por WhatsApp
           </a>
 
           <Link
             to="/"
-            className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-5 py-3 text-sm font-medium text-white transition hover:bg-slate-700"
+            className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-5 py-3 text-sm font-medium text-white hover:bg-slate-700"
           >
             Volver a la tienda
           </Link>
-
-          <Link
-            to="/carrito"
-            className="inline-flex items-center justify-center rounded-xl border border-slate-300 px-5 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-          >
-            Ir al carrito
-          </Link>
-        </div>
-
-        <div className="mt-10 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5">
-          <h3 className="text-sm font-semibold text-slate-800">
-            Registro opcional futuro
-          </h3>
-          <p className="mt-2 text-sm text-slate-600">
-            Más adelante podrás ofrecer creación de cuenta opcional para guardar
-            datos, consultar pedidos y comprar más rápido.
-          </p>
         </div>
       </div>
     </section>

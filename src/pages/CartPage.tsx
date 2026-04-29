@@ -1,5 +1,16 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useCart } from "../hooks/useCart";
+import { supabase } from "../lib/supabase";
+
+const IVA_RATE = 0.19;
+
+type TaxMode = "sin_iva" | "con_iva";
+
+type BusinessSettings = {
+  tax_mode: TaxMode;
+  tax_rate: number | string | null;
+};
 
 const formatPrice = (value: number) => {
   return new Intl.NumberFormat("es-CO", {
@@ -19,6 +30,40 @@ export const CartPage = () => {
     totalItems,
     totalPrice,
   } = useCart();
+
+  const [taxMode, setTaxMode] = useState<TaxMode>("sin_iva");
+  const [taxRate, setTaxRate] = useState(IVA_RATE);
+
+  useEffect(() => {
+    const loadBusinessSettings = async () => {
+      const { data, error } = await supabase
+        .from("business_settings")
+        .select("tax_mode, tax_rate")
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        console.error("Error cargando configuración fiscal:", error.message);
+        setTaxMode("sin_iva");
+        setTaxRate(IVA_RATE);
+        return;
+      }
+
+      const settings = data as BusinessSettings | null;
+      const nextTaxMode: TaxMode =
+        settings?.tax_mode === "con_iva" ? "con_iva" : "sin_iva";
+      const nextTaxRate = Number(settings?.tax_rate ?? 19) / 100;
+
+      setTaxMode(nextTaxMode);
+      setTaxRate(Number.isNaN(nextTaxRate) ? IVA_RATE : nextTaxRate);
+    };
+
+    loadBusinessSettings();
+  }, []);
+
+  const subtotal = Math.round(totalPrice);
+  const ivaAmount = taxMode === "con_iva" ? Math.round(subtotal * taxRate) : 0;
+  const finalTotal = subtotal + ivaAmount;
 
   if (cart.length === 0) {
     return (
@@ -157,17 +202,24 @@ export const CartPage = () => {
               <div className="flex items-center justify-between text-sm text-slate-600">
                 <span>Subtotal</span>
                 <span className="font-medium text-slate-800">
-                  {formatPrice(totalPrice)}
+                  {formatPrice(subtotal)}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between text-sm text-slate-600">
+                <span>IVA {taxMode === "con_iva" ? "19%" : "0%"}</span>
+                <span className="font-medium text-slate-800">
+                  {formatPrice(ivaAmount)}
                 </span>
               </div>
 
               <div className="border-t border-slate-200 pt-4">
                 <div className="flex items-center justify-between">
                   <span className="text-lg font-semibold text-slate-800">
-                    Total
+                    Total a pagar
                   </span>
                   <span className="text-2xl font-bold text-slate-900">
-                    {formatPrice(totalPrice)}
+                    {formatPrice(finalTotal)}
                   </span>
                 </div>
               </div>

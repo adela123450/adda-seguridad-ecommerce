@@ -1,7 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useCart } from "../hooks/useCart";
 import { supabase } from "../lib/supabase";
+
+const IVA_RATE = 0.19;
+
+type TaxMode = "sin_iva" | "con_iva";
 
 const formatPrice = (value: number) => {
   return new Intl.NumberFormat("es-CO", {
@@ -9,6 +13,12 @@ const formatPrice = (value: number) => {
     currency: "COP",
     minimumFractionDigits: 0,
   }).format(value);
+};
+
+const isValidUuid = (value: string) => {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(
+    value
+  );
 };
 
 type CheckoutCustomer = {
@@ -20,17 +30,77 @@ type CheckoutCustomer = {
   notes: string;
 };
 
+type CartItem = {
+  id: string;
+  name: string;
+  slug: string;
+  img: string;
+  price: number;
+  stock: number;
+  quantity: number;
+};
+
+type ProductLookup = {
+  id: string;
+  name: string;
+  slug: string;
+  stock: number | null;
+};
+
+type BusinessSettings = {
+  tax_mode: TaxMode;
+  tax_rate: number | string | null;
+};
+
 export const OrderConfirmationPage = () => {
   const navigate = useNavigate();
   const { cart, totalItems, totalPrice, clearCart } = useCart();
 
   const [loading, setLoading] = useState(false);
+  const [loadingSettings, setLoadingSettings] = useState(true);
+  const [taxMode, setTaxMode] = useState<TaxMode>("sin_iva");
+  const [taxRate, setTaxRate] = useState(IVA_RATE);
+
+  const subtotal = Math.round(totalPrice);
+  const ivaAmount = taxMode === "con_iva" ? Math.round(subtotal * taxRate) : 0;
+  const finalTotal = subtotal + ivaAmount;
 
   const storedCustomer = localStorage.getItem("checkoutCustomer");
 
   const customer: CheckoutCustomer | null = storedCustomer
     ? JSON.parse(storedCustomer)
     : null;
+
+  useEffect(() => {
+    const loadBusinessSettings = async () => {
+      setLoadingSettings(true);
+
+      const { data, error } = await supabase
+        .from("business_settings")
+        .select("tax_mode, tax_rate")
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        console.error("Error cargando configuración fiscal:", error.message);
+        setTaxMode("sin_iva");
+        setTaxRate(IVA_RATE);
+        setLoadingSettings(false);
+        return;
+      }
+
+      const settings = data as BusinessSettings | null;
+      const nextTaxMode: TaxMode =
+        settings?.tax_mode === "con_iva" ? "con_iva" : "sin_iva";
+      const nextTaxRate = Number(settings?.tax_rate ?? 19) / 100;
+
+      setTaxMode(nextTaxMode);
+      setTaxRate(Number.isNaN(nextTaxRate) ? IVA_RATE : nextTaxRate);
+      setLoadingSettings(false);
+    };
+
+    loadBusinessSettings();
+  }, []);
 
   const generateOrderNumber = () => {
     const now = new Date();
@@ -40,11 +110,98 @@ export const OrderConfirmationPage = () => {
     return `ADDA-${year}-${time}`;
   };
 
+  const resolveProductFromSupabase = async (item: CartItem) => {
+    if (isValidUuid(item.id)) {
+      const { data, error } = await supabase
+        .from("products")
+        .select("id, name, slug, stock")
+        .eq("id", item.id)
+        .maybeSingle();
+
+      if (error) {
+        throw new Error(
+          `No fue posible validar el producto "${item.name}" en Supabase.`
+        );
+      }
+
+      if (data) {
+        return data as ProductLookup;
+      }
+    }
+
+    if (item.slug) {
+      const { data, error } = await supabase
+        .from("products")
+        .select("id, name, slug, stock")
+        .eq("slug", item.slug)
+        .maybeSingle();
+
+      if (error) {
+        throw new Error(
+          `No fue posible buscar el producto "${item.name}" por slug.`
+        );
+      }
+
+      if (data) {
+        return data as ProductLookup;
+      }
+    }
+
+    const { data, error } = await supabase
+      .from("products")
+      .select("id, name, slug, stock")
+      .eq("name", item.name)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(
+        `No fue posible buscar el producto "${item.name}" por nombre.`
+      );
+    }
+
+    if (!data) {
+      throw new Error(
+        `El producto "${item.name}" no existe en Supabase. Elimínalo del carrito y agrégalo nuevamente desde el catálogo real.`
+      );
+    }
+
+    return data as ProductLookup;
+  };
+
+  const getCartWithRealProductIds = async () => {
+    const migratedCart: CartItem[] = [];
+
+    for (const item of cart) {
+      const product = await resolveProductFromSupabase(item);
+      const currentStock = Number(product.stock ?? 0);
+
+      if (currentStock < item.quantity) {
+        throw new Error(
+          `Stock insuficiente para "${product.name}". Stock actual: ${currentStock}, solicitado: ${item.quantity}.`
+        );
+      }
+
+      migratedCart.push({
+        ...item,
+        id: product.id,
+        name: product.name,
+        slug: product.slug,
+        stock: currentStock,
+      });
+    }
+
+    localStorage.setItem("cart", JSON.stringify(migratedCart));
+
+    return migratedCart;
+  };
+
   const handleConfirmOrder = async () => {
     if (!customer || cart.length === 0) return;
 
     try {
       setLoading(true);
+
+      const cartWithRealProductIds = await getCartWithRealProductIds();
 
       const orderNumber = generateOrderNumber();
 
@@ -60,7 +217,10 @@ export const OrderConfirmationPage = () => {
             city: customer.city,
             notes: customer.notes,
             total_items: totalItems,
-            total_price: totalPrice,
+            subtotal,
+            iva_amount: ivaAmount,
+            total_price: finalTotal,
+            tax_mode: taxMode,
             status: "pendiente",
           },
         ])
@@ -69,7 +229,7 @@ export const OrderConfirmationPage = () => {
 
       if (orderError) throw orderError;
 
-      const itemsToInsert = cart.map((item) => ({
+      const itemsToInsert = cartWithRealProductIds.map((item) => ({
         order_id: orderData.id,
         product_id: item.id,
         product_name: item.name,
@@ -89,9 +249,12 @@ export const OrderConfirmationPage = () => {
         JSON.stringify({
           orderNumber,
           customer,
-          cart,
+          cart: cartWithRealProductIds,
           totalItems,
-          totalPrice,
+          subtotal,
+          ivaAmount,
+          totalPrice: finalTotal,
+          taxMode,
           createdAt: new Date().toISOString(),
         })
       );
@@ -102,7 +265,12 @@ export const OrderConfirmationPage = () => {
       navigate("/pedido-finalizado");
     } catch (error) {
       console.error("Error creando pedido:", error);
-      alert("No fue posible registrar el pedido. Intenta nuevamente.");
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : "No fue posible registrar el pedido. Intenta nuevamente."
+      );
     } finally {
       setLoading(false);
     }
@@ -260,14 +428,28 @@ export const OrderConfirmationPage = () => {
                 </span>
               </div>
 
-              <div className="border-t border-slate-200 pt-4">
-                <div className="flex items-center justify-between">
+              <div className="space-y-3 border-t border-slate-200 pt-4">
+                <div className="flex items-center justify-between text-sm text-slate-600">
+                  <span>Subtotal productos</span>
+                  <span className="font-semibold text-slate-800">
+                    {formatPrice(subtotal)}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between text-sm text-slate-600">
+                  <span>IVA {taxMode === "con_iva" ? "19%" : "0%"}</span>
+                  <span className="font-semibold text-slate-800">
+                    {formatPrice(ivaAmount)}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between border-t border-slate-200 pt-4">
                   <span className="text-lg font-semibold text-slate-800">
-                    Total
+                    Total a pagar
                   </span>
 
                   <span className="text-2xl font-bold text-slate-900">
-                    {formatPrice(totalPrice)}
+                    {formatPrice(finalTotal)}
                   </span>
                 </div>
               </div>
@@ -275,11 +457,16 @@ export const OrderConfirmationPage = () => {
 
             <div className="mt-8 flex flex-col gap-3">
               <button
+                type="button"
                 onClick={handleConfirmOrder}
-                disabled={loading}
+                disabled={loading || loadingSettings}
                 className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {loading ? "Registrando pedido..." : "Confirmar pedido"}
+                {loading
+                  ? "Registrando pedido..."
+                  : loadingSettings
+                  ? "Cargando configuración..."
+                  : "Confirmar pedido"}
               </button>
 
               <Link
@@ -296,7 +483,7 @@ export const OrderConfirmationPage = () => {
               </h3>
 
               <p className="mt-2 text-sm text-slate-600">
-                Al confirmar, el pedido quedará registrado en la base de datos.
+                Al confirmar, el pedido quedará registrado con la configuración fiscal definida por ADDA Seguridad.
               </p>
             </div>
           </div>

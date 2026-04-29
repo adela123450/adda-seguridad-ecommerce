@@ -25,6 +25,7 @@ import { AdminLoginPage } from "../pages/AdminLoginPage";
 import { AdminResetPasswordPage } from "../pages/AdminResetPasswordPage";
 import { AdminLayout } from "../layouts/AdminLayout";
 import { ProtectedRoute } from "../components/admin/ProtectedRoute";
+import { AdminSettingsPage } from "../pages/AdminSettingsPage";
 
 export const router = createBrowserRouter([
   {
@@ -76,6 +77,10 @@ export const router = createBrowserRouter([
           {
             path: "finance",
             element: <AdminFinancePage />,
+          },
+          {
+            path: "settings",
+            element: <AdminSettingsPage />,
           },
         ],
       },

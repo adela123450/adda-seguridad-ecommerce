@@ -28,7 +28,7 @@ type Order = {
 type OrderItem = {
   id: string;
   order_id: string;
-  product_id: string;
+  product_id: string | null;
   product_name: string;
   price: number;
   quantity: number;
@@ -37,6 +37,7 @@ type OrderItem = {
 
 type ProductStock = {
   id: string;
+  name: string;
   stock: number | null;
 };
 
@@ -51,6 +52,7 @@ const statusOptions: OrderStatus[] = [
 
 const managementStatuses: OrderStatus[] = ["pendiente", "confirmado"];
 const paidStatuses: OrderStatus[] = ["pagado", "entregado"];
+const stockDiscountStatuses: OrderStatus[] = ["pagado", "enviado", "entregado"];
 
 const formatPrice = (value: number) => {
   return new Intl.NumberFormat("es-CO", {
@@ -62,12 +64,6 @@ const formatPrice = (value: number) => {
 
 const formatDate = (value: string) => {
   return new Date(value).toLocaleString("es-CO");
-};
-
-const isValidUuid = (value: string) => {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(
-    value
-  );
 };
 
 const getStatusClass = (status: OrderStatus) => {
@@ -154,58 +150,122 @@ export const AdminOrdersPage = () => {
     (order) => order.status === "cancelado"
   ).length;
 
-  const discountStockForOrder = async (orderId: string) => {
-    const { data: itemsData, error: itemsError } = await supabase
+  const getOrderItems = async (orderId: string) => {
+    const { data, error } = await supabase
       .from("order_items")
       .select("id, order_id, product_id, product_name, price, quantity, subtotal")
       .eq("order_id", orderId);
 
-    if (itemsError) {
-      throw new Error(itemsError.message);
+    if (error) {
+      throw new Error(error.message);
     }
 
-    const items = (itemsData ?? []) as OrderItem[];
+    const items = (data ?? []) as OrderItem[];
 
     if (items.length === 0) {
       throw new Error("El pedido no tiene productos asociados.");
     }
 
-    for (const item of items) {
-      if (!isValidUuid(item.product_id)) {
+    return items;
+  };
+
+  const resolveProductForStock = async (item: OrderItem) => {
+    if (item.product_id) {
+      const { data, error } = await supabase
+        .from("products")
+        .select("id, name, stock")
+        .eq("id", item.product_id)
+        .maybeSingle();
+
+      if (error) {
         throw new Error(
-          `El producto "${item.product_name}" no tiene un ID válido para descontar stock.`
+          `No fue posible validar el producto "${item.product_name}".`
         );
       }
 
-      const { data: productData, error: productError } = await supabase
-        .from("products")
-        .select("id, stock")
-        .eq("id", item.product_id)
-        .single();
-
-      if (productError) {
-        throw new Error(`No se encontró el producto: ${item.product_name}`);
+      if (data) {
+        return data as ProductStock;
       }
+    }
 
-      const product = productData as ProductStock;
+    const { data: productByName, error: productByNameError } = await supabase
+      .from("products")
+      .select("id, name, stock")
+      .eq("name", item.product_name)
+      .maybeSingle();
+
+    if (productByNameError) {
+      throw new Error(
+        `No fue posible buscar el producto "${item.product_name}" por nombre.`
+      );
+    }
+
+    if (!productByName) {
+      throw new Error(
+        `No se encontró el producto "${item.product_name}" en el catálogo real de Supabase.`
+      );
+    }
+
+    const product = productByName as ProductStock;
+
+    if (item.product_id !== product.id) {
+      const { error: updateItemError } = await supabase
+        .from("order_items")
+        .update({ product_id: product.id })
+        .eq("id", item.id);
+
+      if (updateItemError) {
+        throw new Error(
+          `No fue posible corregir el ID del producto "${item.product_name}" en el pedido.`
+        );
+      }
+    }
+
+    return product;
+  };
+
+  const discountStockForOrder = async (orderId: string) => {
+    const items = await getOrderItems(orderId);
+
+    for (const item of items) {
+      const product = await resolveProductForStock(item);
       const currentStock = Number(product.stock ?? 0);
-      const newStock = currentStock - Number(item.quantity ?? 0);
+      const quantity = Number(item.quantity ?? 0);
+      const newStock = currentStock - quantity;
 
       if (newStock < 0) {
         throw new Error(
-          `Stock insuficiente para "${item.product_name}". Stock actual: ${currentStock}, solicitado: ${item.quantity}.`
+          `Stock insuficiente para "${product.name}". Stock actual: ${currentStock}, solicitado: ${quantity}.`
         );
       }
 
       const { error: updateProductError } = await supabase
         .from("products")
         .update({ stock: newStock })
-        .eq("id", item.product_id);
+        .eq("id", product.id);
 
       if (updateProductError) {
-        throw new Error(
-          `No fue posible descontar stock de "${item.product_name}".`
-        );
+        throw new Error(`No fue posible descontar stock de "${product.name}".`);
+      }
+    }
+  };
+
+  const restoreStockForOrder = async (orderId: string) => {
+    const items = await getOrderItems(orderId);
+
+    for (const item of items) {
+      const product = await resolveProductForStock(item);
+      const currentStock = Number(product.stock ?? 0);
+      const quantity = Number(item.quantity ?? 0);
+      const newStock = currentStock + quantity;
+
+      const { error: updateProductError } = await supabase
+        .from("products")
+        .update({ stock: newStock })
+        .eq("id", product.id);
+
+      if (updateProductError) {
+        throw new Error(`No fue posible devolver stock de "${product.name}".`);
       }
     }
   };
@@ -222,17 +282,28 @@ export const AdminOrdersPage = () => {
 
     try {
       const mustDiscountStock =
-        paidStatuses.includes(newStatus) && !currentOrder.stock_discounted;
+        stockDiscountStatuses.includes(newStatus) && !currentOrder.stock_discounted;
+
+      const mustRestoreStock =
+        newStatus === "cancelado" && currentOrder.stock_discounted;
 
       if (mustDiscountStock) {
         await discountStockForOrder(orderId);
       }
 
+      if (mustRestoreStock) {
+        await restoreStockForOrder(orderId);
+      }
+
+      const nextStockDiscounted = mustRestoreStock
+        ? false
+        : currentOrder.stock_discounted || mustDiscountStock;
+
       const { error } = await supabase
         .from("orders")
         .update({
           status: newStatus,
-          stock_discounted: currentOrder.stock_discounted || mustDiscountStock,
+          stock_discounted: nextStockDiscounted,
         })
         .eq("id", orderId);
 
@@ -246,8 +317,7 @@ export const AdminOrdersPage = () => {
             ? {
                 ...order,
                 status: newStatus,
-                stock_discounted:
-                  order.stock_discounted || mustDiscountStock,
+                stock_discounted: nextStockDiscounted,
               }
             : order
         )
@@ -258,8 +328,7 @@ export const AdminOrdersPage = () => {
           ? {
               ...currentSelectedOrder,
               status: newStatus,
-              stock_discounted:
-                currentSelectedOrder.stock_discounted || mustDiscountStock,
+              stock_discounted: nextStockDiscounted,
             }
           : currentSelectedOrder
       );

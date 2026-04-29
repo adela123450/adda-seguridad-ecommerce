@@ -104,7 +104,7 @@ const SUBCATEGORY_OPTIONS: Record<string, string[]> = {
   Cámaras: ["Domo", "Bullet", "PTZ", "Solar", "Pinhole"],
   Grabadores: ["DVR", "XVR", "NVR"],
   Almacenamiento: ["Disco duro", "MicroSD", "SSD"],
-  Redes: ["Router", "Switch", "Access Point"],
+  Redes: ["Router", "Switch", "Access Point", "Cable UTP", "Patch Cord", "Fibra óptica"],
   Energía: ["Fuente", "UPS", "Regulador"],
   Accesorios: ["Balun", "Jack DC", "Caja de paso", "Bornera", "Cable"],
 };
@@ -161,7 +161,12 @@ const detectCategoryFromText = (text: string) => {
     value.includes("router") ||
     value.includes("switch") ||
     value.includes("access") ||
-    value.includes("red")
+    value.includes("red") ||
+    value.includes("utp") ||
+    value.includes("patch cord") ||
+    value.includes("fibra") ||
+    value.includes("cable de red") ||
+    value.includes("cable utp")
   ) {
     return "Redes";
   }
@@ -180,7 +185,6 @@ const detectCategoryFromText = (text: string) => {
     value.includes("jack") ||
     value.includes("caja") ||
     value.includes("bornera") ||
-    value.includes("cable") ||
     value.includes("accesorio")
   ) {
     return "Accesorios";
@@ -252,6 +256,22 @@ const detectCategoryAndSubcategoryFromText = (text: string) => {
     return { category: "Redes", subcategory: "Access Point" };
   }
 
+  if (
+    value.includes("utp") ||
+    value.includes("cable utp") ||
+    value.includes("cable de red")
+  ) {
+    return { category: "Redes", subcategory: "Cable UTP" };
+  }
+
+  if (value.includes("patch cord")) {
+    return { category: "Redes", subcategory: "Patch Cord" };
+  }
+
+  if (value.includes("fibra")) {
+    return { category: "Redes", subcategory: "Fibra óptica" };
+  }
+
   if (value.includes("fuente")) {
     return { category: "Energía", subcategory: "Fuente" };
   }
@@ -280,7 +300,11 @@ const detectCategoryAndSubcategoryFromText = (text: string) => {
     return { category: "Accesorios", subcategory: "Bornera" };
   }
 
-  if (value.includes("cable")) {
+  if (
+    value.includes("cable poder") ||
+    value.includes("cable energia") ||
+    value.includes("cable camara")
+  ) {
     return { category: "Accesorios", subcategory: "Cable" };
   }
 
@@ -508,15 +532,15 @@ export const AdminProductsPage = () => {
       brand: form.brand.trim() || null,
       category: form.category.trim() || null,
       subcategory: form.subcategory.trim() || null,
-      price: Number(form.price),
-      cost_price: Number(form.cost_price),
+      price: Math.round(Number(form.price)),
+      cost_price: Math.round(Number(form.cost_price)),
       description: form.description.trim() || null,
       image_url: form.image_url.trim() || null,
-      stock: Number(form.stock),
+      stock: Math.round(Number(form.stock)),
       has_offer: form.has_offer,
       offer_price:
         form.has_offer && form.offer_price.trim()
-          ? Number(form.offer_price)
+          ? Math.round(Number(form.offer_price))
           : null,
       offer_label: form.has_offer ? form.offer_label.trim() || "Oferta" : null,
     };
@@ -881,6 +905,26 @@ export const AdminProductsPage = () => {
     </button>
   );
 
+  const formPrice = Number(form.price || 0);
+  const formCostPrice = Number(form.cost_price || 0);
+  const formOfferPrice = Number(form.offer_price || 0);
+  const formEffectiveSalePrice =
+    form.has_offer && formOfferPrice > 0 ? formOfferPrice : formPrice;
+  const formGrossProfit = formEffectiveSalePrice - formCostPrice;
+  const formCommercialMargin =
+    formEffectiveSalePrice > 0
+      ? (formGrossProfit / formEffectiveSalePrice) * 100
+      : 0;
+  const formDiscountValue =
+    form.has_offer && formOfferPrice > 0 ? formPrice - formOfferPrice : 0;
+  const formDiscountPercent =
+    form.has_offer && formPrice > 0 && formOfferPrice > 0
+      ? (formDiscountValue / formPrice) * 100
+      : 0;
+  const isFormLoss = formGrossProfit < 0;
+  const isFormLowMargin = !isFormLoss && formCommercialMargin < 15;
+  const isFormHealthyMargin = formCommercialMargin >= 30;
+
   const PaginationControls = () => (
     <div className="mt-6 flex flex-col gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:flex-row md:items-center md:justify-between">
       <div className="text-sm font-medium text-slate-600">
@@ -1109,6 +1153,8 @@ export const AdminProductsPage = () => {
             </label>
             <input
               type="number"
+              step="1"
+              min="0"
               value={form.price}
               onChange={(e) => handleChange("price", e.target.value)}
               className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
@@ -1121,6 +1167,8 @@ export const AdminProductsPage = () => {
             </label>
             <input
               type="number"
+              step="1"
+              min="0"
               value={form.cost_price}
               onChange={(e) => handleChange("cost_price", e.target.value)}
               placeholder="Costo real de compra"
@@ -1137,6 +1185,8 @@ export const AdminProductsPage = () => {
             </label>
             <input
               type="number"
+              step="1"
+              min="0"
               value={form.stock}
               onChange={(e) => handleChange("stock", e.target.value)}
               className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
@@ -1184,6 +1234,8 @@ export const AdminProductsPage = () => {
                 <>
                   <input
                     type="number"
+                    step="1"
+                    min="0"
                     value={form.offer_price}
                     onChange={(e) => handleChange("offer_price", e.target.value)}
                     placeholder="Precio en oferta"
@@ -1199,6 +1251,138 @@ export const AdminProductsPage = () => {
                   />
                 </>
               )}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:col-span-2 xl:col-span-3">
+            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">
+                  Análisis de rentabilidad del producto
+                </h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  Úsalo antes de activar una oferta para validar si el descuento
+                  conserva utilidad o genera pérdida.
+                </p>
+              </div>
+
+              <span
+                className={`inline-flex w-fit rounded-full px-3 py-1.5 text-xs font-bold ${
+                  isFormLoss
+                    ? "bg-red-100 text-red-700"
+                    : isFormLowMargin
+                    ? "bg-amber-100 text-amber-700"
+                    : isFormHealthyMargin
+                    ? "bg-emerald-100 text-emerald-700"
+                    : "bg-blue-100 text-[#2D5398]"
+                }`}
+              >
+                {isFormLoss
+                  ? "Pérdida"
+                  : isFormLowMargin
+                  ? "Margen bajo"
+                  : isFormHealthyMargin
+                  ? "Margen saludable"
+                  : "En evaluación"}
+              </span>
+            </div>
+
+            <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <article className="rounded-2xl bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Precio normal
+                </p>
+                <p className="mt-2 text-xl font-bold text-slate-900">
+                  {formatPrice(formPrice)}
+                </p>
+              </article>
+
+              <article className="rounded-2xl bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Costo
+                </p>
+                <p className="mt-2 text-xl font-bold text-slate-900">
+                  {formatPrice(formCostPrice)}
+                </p>
+              </article>
+
+              <article className="rounded-2xl bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Precio efectivo
+                </p>
+                <p className="mt-2 text-xl font-bold text-[#2D5398]">
+                  {formatPrice(formEffectiveSalePrice)}
+                </p>
+                {form.has_offer && formOfferPrice > 0 && (
+                  <p className="mt-1 text-xs font-semibold text-slate-500">
+                    Descuento: {formatPrice(formDiscountValue)} ·{" "}
+                    {formatPercent(formDiscountPercent)}
+                  </p>
+                )}
+              </article>
+
+              <article className="rounded-2xl bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Utilidad bruta
+                </p>
+                <p
+                  className={`mt-2 text-xl font-bold ${
+                    formGrossProfit < 0 ? "text-red-700" : "text-emerald-700"
+                  }`}
+                >
+                  {formatPrice(formGrossProfit)}
+                </p>
+              </article>
+            </div>
+
+            <div className="mt-4 grid gap-4 md:grid-cols-[0.75fr_1.25fr]">
+              <article className="rounded-2xl bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Margen comercial real
+                </p>
+                <p
+                  className={`mt-2 text-2xl font-bold ${
+                    isFormLoss
+                      ? "text-red-700"
+                      : isFormLowMargin
+                      ? "text-amber-700"
+                      : "text-emerald-700"
+                  }`}
+                >
+                  {formatPercent(formCommercialMargin)}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Fórmula: utilidad / precio efectivo de venta.
+                </p>
+              </article>
+
+              <article
+                className={`rounded-2xl p-4 text-sm leading-6 ${
+                  isFormLoss
+                    ? "bg-red-50 text-red-700"
+                    : isFormLowMargin
+                    ? "bg-amber-50 text-amber-700"
+                    : "bg-emerald-50 text-emerald-700"
+                }`}
+              >
+                {isFormLoss ? (
+                  <p>
+                    Atención: con este precio efectivo el producto se vendería
+                    por debajo del costo. No es recomendable aprobar esta oferta.
+                  </p>
+                ) : isFormLowMargin ? (
+                  <p>
+                    Margen bajo: la venta genera utilidad, pero deja poco margen
+                    para comisiones, logística, garantías o gastos operativos.
+                  </p>
+                ) : (
+                  <p>
+                    La rentabilidad comercial es aceptable para una venta bruta.
+                    Aún faltará descontar comisiones, envíos e impuestos en la
+                    utilidad neta contable.
+                  </p>
+                )}
+              </article>
             </div>
           </div>
 

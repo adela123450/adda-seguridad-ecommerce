@@ -33,6 +33,7 @@ export const AdminLayout = () => {
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#2D5398]">
                 ADDA Seguridad
               </p>
+
               <h1 className="text-xl font-bold text-slate-800">
                 Panel administrativo
               </h1>
@@ -68,6 +69,10 @@ export const AdminLayout = () => {
 
             <NavLink to="/admin/finance" className={navLinkClass}>
               Finanzas
+            </NavLink>
+
+            <NavLink to="/admin/settings" className={navLinkClass}>
+              Configuración
             </NavLink>
           </nav>
         </div>
