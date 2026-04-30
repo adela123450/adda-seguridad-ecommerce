@@ -27,6 +27,11 @@ type OrderItem = {
   price: number;
   quantity: number;
   subtotal: number;
+  unit_cost?: number | string | null;
+  base_price?: number | string | null;
+  tax_amount?: number | string | null;
+  gross_profit?: number | string | null;
+  profit_margin?: number | string | null;
 };
 
 type ProductCost = {
@@ -36,6 +41,15 @@ type ProductCost = {
   brand: string | null;
   category: string | null;
   cost_price: number | string | null;
+};
+
+type BusinessExpense = {
+  id: string;
+  expense_date: string;
+  category: string;
+  description: string | null;
+  amount: number | string;
+  created_at: string;
 };
 
 type BusinessSettings = {
@@ -57,6 +71,12 @@ type ProductProfitRow = {
   cost: number;
   profit: number;
   margin: number;
+};
+
+type ExpenseCategoryRow = {
+  category: string;
+  amount: number;
+  percent: number;
 };
 
 const LOW_MARGIN_LIMIT = 15;
@@ -169,6 +189,7 @@ export const AdminFinancePage = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [products, setProducts] = useState<ProductCost[]>([]);
+  const [expenses, setExpenses] = useState<BusinessExpense[]>([]);
   const [businessSettings, setBusinessSettings] =
     useState<BusinessSettings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -222,7 +243,9 @@ export const AdminFinancePage = () => {
 
       const { data: itemsData, error: itemsError } = await supabase
         .from("order_items")
-        .select("id, order_id, product_id, product_name, price, quantity, subtotal");
+        .select(
+          "id, order_id, product_id, product_name, price, quantity, subtotal, unit_cost, base_price, tax_amount, gross_profit, profit_margin"
+        );
 
       if (itemsError) {
         console.error("Error cargando detalle de rentabilidad:", itemsError.message);
@@ -248,6 +271,22 @@ export const AdminFinancePage = () => {
         setProducts((productsData ?? []) as ProductCost[]);
       }
 
+      const { data: expensesData, error: expensesError } = await supabase
+        .from("business_expenses")
+        .select("id, expense_date, category, description, amount, created_at")
+        .order("expense_date", { ascending: false })
+        .order("created_at", { ascending: false });
+
+      if (expensesError) {
+        console.error("Error cargando gastos operativos:", expensesError.message);
+        setExpenses([]);
+        setProfitabilityWarning(
+          "No fue posible cargar gastos operativos. La utilidad neta puede quedar incompleta."
+        );
+      } else {
+        setExpenses((expensesData ?? []) as BusinessExpense[]);
+      }
+
       setLoading(false);
     };
 
@@ -265,6 +304,17 @@ export const AdminFinancePage = () => {
 
     return orders.filter((order) => new Date(order.created_at) >= startDate);
   }, [orders, period]);
+
+  const filteredExpenses = useMemo(() => {
+    const startDate = getStartDate(period);
+
+    if (!startDate) return expenses;
+
+    return expenses.filter((expense) => {
+      const expenseDate = new Date(`${expense.expense_date}T00:00:00`);
+      return expenseDate >= startDate;
+    });
+  }, [expenses, period]);
 
   const realSalesOrders = filteredOrders.filter((order) =>
     REAL_SALE_STATUSES.includes(order.status)
@@ -312,12 +362,27 @@ export const AdminFinancePage = () => {
 
     realSalesItems.forEach((item) => {
       const product = productCostMap.get(item.product_id);
-      const costPrice = Number(product?.cost_price ?? 0);
       const quantity = Number(item.quantity ?? 0);
       const income = Number(item.subtotal ?? 0);
-      const baseIncome = getBaseWithoutTax(income, taxMode, taxRate);
-      const cost = costPrice * quantity;
-      const profit = baseIncome - cost;
+
+      const snapshotBase = Number(item.base_price ?? 0);
+      const snapshotCost = Number(item.unit_cost ?? 0) * quantity;
+      const snapshotProfit = Number(item.gross_profit ?? 0);
+
+      const hasSnapshot =
+        snapshotBase > 0 ||
+        snapshotCost > 0 ||
+        snapshotProfit !== 0 ||
+        Number(item.profit_margin ?? 0) !== 0;
+
+      const fallbackBaseIncome = getBaseWithoutTax(income, taxMode, taxRate);
+      const fallbackCost = Number(product?.cost_price ?? 0) * quantity;
+      const fallbackProfit = fallbackBaseIncome - fallbackCost;
+
+      const baseIncome = hasSnapshot ? snapshotBase : fallbackBaseIncome;
+      const cost = hasSnapshot ? snapshotCost : fallbackCost;
+      const profit = hasSnapshot ? snapshotProfit : fallbackProfit;
+
       const current = rows.get(item.product_id);
 
       if (current) {
@@ -359,11 +424,24 @@ export const AdminFinancePage = () => {
     0
   );
 
+  const totalExpenses = filteredExpenses.reduce(
+    (total, expense) => total + Number(expense.amount ?? 0),
+    0
+  );
+
+  const netProfit = grossProfit - totalExpenses;
+
   const businessMargin =
     subtotalWithoutIva > 0 ? (grossProfit / subtotalWithoutIva) * 100 : 0;
 
+  const netMargin =
+    subtotalWithoutIva > 0 ? (netProfit / subtotalWithoutIva) * 100 : 0;
+
   const averageGrossProfit =
     realSalesOrders.length > 0 ? grossProfit / realSalesOrders.length : 0;
+
+  const averageNetProfit =
+    realSalesOrders.length > 0 ? netProfit / realSalesOrders.length : 0;
 
   const profitableProducts = [...productProfitRows]
     .sort((a, b) => b.profit - a.profit)
@@ -374,10 +452,42 @@ export const AdminFinancePage = () => {
     .sort((a, b) => a.margin - b.margin)
     .slice(0, 5);
 
+  const lossProducts = [...productProfitRows]
+    .filter((product) => product.profit < 0 || product.margin < 0)
+    .sort((a, b) => a.margin - b.margin);
+
+  const expenseCategoryRows = useMemo(() => {
+    const rows = new Map<string, number>();
+
+    filteredExpenses.forEach((expense) => {
+      const category = expense.category || "Sin categoría";
+      const amount = Number(expense.amount ?? 0);
+      rows.set(category, (rows.get(category) ?? 0) + amount);
+    });
+
+    return Array.from(rows.entries())
+      .map(([category, amount]): ExpenseCategoryRow => ({
+        category,
+        amount,
+        percent: totalExpenses > 0 ? (amount / totalExpenses) * 100 : 0,
+      }))
+      .sort((a, b) => b.amount - a.amount);
+  }, [filteredExpenses, totalExpenses]);
+
   const monthlyProfitRows = useMemo(() => {
     const rows = new Map<
       string,
-      { month: string; income: number; baseIncome: number; cost: number; profit: number; margin: number }
+      {
+        month: string;
+        income: number;
+        baseIncome: number;
+        cost: number;
+        grossProfit: number;
+        expenses: number;
+        netProfit: number;
+        grossMargin: number;
+        netMargin: number;
+      }
     >();
 
     realSalesOrders.forEach((order) => {
@@ -390,8 +500,11 @@ export const AdminFinancePage = () => {
         income: 0,
         baseIncome: 0,
         cost: 0,
-        profit: 0,
-        margin: 0,
+        grossProfit: 0,
+        expenses: 0,
+        netProfit: 0,
+        grossMargin: 0,
+        netMargin: 0,
       };
 
       current.income += income;
@@ -407,25 +520,73 @@ export const AdminFinancePage = () => {
       if (!order) return;
 
       const monthKey = order.created_at.slice(0, 7);
-      const product = productCostMap.get(item.product_id);
-      const costPrice = Number(product?.cost_price ?? 0);
-      const quantity = Number(item.quantity ?? 0);
       const current = rows.get(monthKey);
 
       if (!current) return;
 
-      current.cost += costPrice * quantity;
-      current.profit = current.baseIncome - current.cost;
-      current.margin =
-        current.baseIncome > 0 ? (current.profit / current.baseIncome) * 100 : 0;
+      const quantity = Number(item.quantity ?? 0);
+      const income = Number(item.subtotal ?? 0);
+
+      const snapshotBase = Number(item.base_price ?? 0);
+      const snapshotCost = Number(item.unit_cost ?? 0) * quantity;
+      const snapshotProfit = Number(item.gross_profit ?? 0);
+
+      const hasSnapshot =
+        snapshotBase > 0 ||
+        snapshotCost > 0 ||
+        snapshotProfit !== 0 ||
+        Number(item.profit_margin ?? 0) !== 0;
+
+      const product = productCostMap.get(item.product_id);
+      const fallbackBaseIncome = getBaseWithoutTax(income, taxMode, taxRate);
+      const fallbackCost = Number(product?.cost_price ?? 0) * quantity;
+      const fallbackProfit = fallbackBaseIncome - fallbackCost;
+
+      current.cost += hasSnapshot ? snapshotCost : fallbackCost;
+      current.grossProfit += hasSnapshot ? snapshotProfit : fallbackProfit;
+    });
+
+    filteredExpenses.forEach((expense) => {
+      const monthKey = expense.expense_date.slice(0, 7);
+      const current = rows.get(monthKey) ?? {
+        month: monthKey,
+        income: 0,
+        baseIncome: 0,
+        cost: 0,
+        grossProfit: 0,
+        expenses: 0,
+        netProfit: 0,
+        grossMargin: 0,
+        netMargin: 0,
+      };
+
+      current.expenses += Number(expense.amount ?? 0);
+      rows.set(monthKey, current);
+    });
+
+    rows.forEach((row) => {
+      row.netProfit = row.grossProfit - row.expenses;
+      row.grossMargin =
+        row.baseIncome > 0 ? (row.grossProfit / row.baseIncome) * 100 : 0;
+      row.netMargin =
+        row.baseIncome > 0 ? (row.netProfit / row.baseIncome) * 100 : 0;
     });
 
     return Array.from(rows.values()).sort((a, b) =>
       b.month.localeCompare(a.month)
     );
-  }, [realSalesOrders, realSalesItems, productCostMap, taxMode, taxRate]);
+  }, [
+    realSalesOrders,
+    realSalesItems,
+    filteredExpenses,
+    productCostMap,
+    taxMode,
+    taxRate,
+  ]);
 
-  const bestMonth = [...monthlyProfitRows].sort((a, b) => b.profit - a.profit)[0];
+  const bestMonth = [...monthlyProfitRows].sort(
+    (a, b) => b.netProfit - a.netProfit
+  )[0];
 
   const exportFinancialCsv = () => {
     const headers = [
@@ -439,32 +600,59 @@ export const AdminFinancePage = () => {
       `IVA ${taxRateLabel}`,
       "Modo IVA",
       "Tipo de movimiento",
-      "Costo estimado",
+      "Costo",
       "Utilidad bruta",
       "Margen bruto",
     ];
 
     const costByOrder = new Map<string, number>();
+    const profitByOrder = new Map<string, number>();
+    const baseByOrder = new Map<string, number>();
 
     realSalesItems.forEach((item) => {
-      const product = productCostMap.get(item.product_id);
-      const costPrice = Number(product?.cost_price ?? 0);
-      const itemCost = costPrice * Number(item.quantity ?? 0);
+      const quantity = Number(item.quantity ?? 0);
+      const subtotal = Number(item.subtotal ?? 0);
 
+      const snapshotBase = Number(item.base_price ?? 0);
+      const snapshotCost = Number(item.unit_cost ?? 0) * quantity;
+      const snapshotProfit = Number(item.gross_profit ?? 0);
+
+      const hasSnapshot =
+        snapshotBase > 0 ||
+        snapshotCost > 0 ||
+        snapshotProfit !== 0 ||
+        Number(item.profit_margin ?? 0) !== 0;
+
+      const product = productCostMap.get(item.product_id);
+      const fallbackBase = getBaseWithoutTax(subtotal, taxMode, taxRate);
+      const fallbackCost = Number(product?.cost_price ?? 0) * quantity;
+      const fallbackProfit = fallbackBase - fallbackCost;
+
+      const itemBase = hasSnapshot ? snapshotBase : fallbackBase;
+      const itemCost = hasSnapshot ? snapshotCost : fallbackCost;
+      const itemProfit = hasSnapshot ? snapshotProfit : fallbackProfit;
+
+      baseByOrder.set(item.order_id, (baseByOrder.get(item.order_id) ?? 0) + itemBase);
       costByOrder.set(item.order_id, (costByOrder.get(item.order_id) ?? 0) + itemCost);
+      profitByOrder.set(
+        item.order_id,
+        (profitByOrder.get(item.order_id) ?? 0) + itemProfit
+      );
     });
 
     const rows = filteredOrders.map((order) => {
       const total = Number(order.total_price ?? 0);
       const iva = getTaxAmount(total, taxMode, taxRate);
-      const base = getBaseWithoutTax(total, taxMode, taxRate);
+      const base = REAL_SALE_STATUSES.includes(order.status)
+        ? baseByOrder.get(order.id) ?? getBaseWithoutTax(total, taxMode, taxRate)
+        : getBaseWithoutTax(total, taxMode, taxRate);
 
       const orderCost = REAL_SALE_STATUSES.includes(order.status)
         ? costByOrder.get(order.id) ?? 0
         : 0;
 
       const orderProfit = REAL_SALE_STATUSES.includes(order.status)
-        ? base - orderCost
+        ? profitByOrder.get(order.id) ?? 0
         : 0;
 
       const orderMargin =
@@ -497,7 +685,65 @@ export const AdminFinancePage = () => {
       ];
     });
 
-    const csvContent = [headers, ...rows]
+    const expenseHeaders = [
+      "Tipo",
+      "Fecha",
+      "Categoria",
+      "Descripcion",
+      "Valor",
+    ];
+
+    const expenseRows = filteredExpenses.map((expense) => [
+      "Gasto operativo",
+      expense.expense_date,
+      expense.category,
+      expense.description ?? "",
+      Number(expense.amount ?? 0),
+    ]);
+
+    const lossHeaders = [
+      "Producto con pérdida",
+      "SKU",
+      "Categoría",
+      "Cantidad",
+      "Base venta",
+      "Costo",
+      "Utilidad",
+      "Margen",
+    ];
+
+    const lossRows = lossProducts.map((product) => [
+      product.productName,
+      product.sku ?? "",
+      product.category ?? "",
+      product.quantity,
+      Math.round(product.baseIncome),
+      Math.round(product.cost),
+      Math.round(product.profit),
+      `${product.margin.toFixed(1)}%`,
+    ]);
+
+    const summaryRows = [
+      [],
+      ["Resumen"],
+      ["Ingresos reales", realIncome],
+      ["Base sin IVA", Math.round(subtotalWithoutIva)],
+      ["IVA calculado", Math.round(estimatedIva)],
+      ["Costo mercancía", Math.round(totalCost)],
+      ["Utilidad bruta", Math.round(grossProfit)],
+      ["Gastos operativos", Math.round(totalExpenses)],
+      ["Utilidad neta", Math.round(netProfit)],
+      ["Margen bruto", `${businessMargin.toFixed(1)}%`],
+      ["Margen neto", `${netMargin.toFixed(1)}%`],
+      [],
+      expenseHeaders,
+      ...expenseRows,
+      [],
+      lossHeaders,
+      ...lossRows,
+    ];
+
+    const csvContent = [headers, ...rows, ...summaryRows]
       .map((row) => row.map(escapeCsvValue).join(";"))
       .join("\n");
 
@@ -525,8 +771,8 @@ export const AdminFinancePage = () => {
         <h1 className="mt-2 text-3xl font-bold">Módulo financiero ADDA</h1>
 
         <p className="mt-2 max-w-3xl text-blue-100">
-          Resumen financiero preparado para ventas reales, cartera, IVA desde
-          configuración fiscal y utilidad bruta por producto.
+          Resumen financiero con ventas reales, IVA fiscal, utilidad bruta,
+          gastos operativos, utilidad neta, margen neto y alertas de pérdida.
         </p>
       </div>
 
@@ -578,6 +824,18 @@ export const AdminFinancePage = () => {
               : "Modo sin IVA. Los valores se calculan sin impuesto."}
           </div>
 
+          {lossProducts.length > 0 && (
+            <div className="mb-8 rounded-3xl border border-red-200 bg-red-50 p-5 text-red-800">
+              <h2 className="text-lg font-bold">
+                Alerta: productos vendidos con pérdida
+              </h2>
+              <p className="mt-1 text-sm">
+                Se detectaron productos con utilidad o margen negativo. Revisa precios,
+                costos y descuentos antes de seguir vendiéndolos.
+              </p>
+            </div>
+          )}
+
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <article className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-green-200">
               <p className="text-sm font-semibold text-slate-500">
@@ -615,6 +873,32 @@ export const AdminFinancePage = () => {
               </p>
             </article>
 
+            <article className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-red-200">
+              <p className="text-sm font-semibold text-slate-500">
+                Gastos operativos
+              </p>
+              <h2 className="mt-3 text-3xl font-bold text-red-700">
+                {formatPrice(totalExpenses)}
+              </h2>
+              <p className="mt-2 text-sm text-slate-500">
+                Publicidad, logística, operación y otros
+              </p>
+            </article>
+          </div>
+
+          <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <article className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-purple-200">
+              <p className="text-sm font-semibold text-slate-500">
+                Utilidad neta
+              </p>
+              <h2 className={`mt-3 text-3xl font-bold ${getMarginTextClass(netMargin)}`}>
+                {formatPrice(netProfit)}
+              </h2>
+              <p className="mt-2 text-sm text-slate-500">
+                Utilidad bruta menos gastos operativos
+              </p>
+            </article>
+
             <article className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-blue-200">
               <p className="text-sm font-semibold text-slate-500">
                 Margen bruto
@@ -624,6 +908,30 @@ export const AdminFinancePage = () => {
               </h2>
               <p className="mt-2 text-sm text-slate-500">
                 Utilidad bruta / base sin IVA
+              </p>
+            </article>
+
+            <article className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-purple-200">
+              <p className="text-sm font-semibold text-slate-500">
+                Margen neto
+              </p>
+              <h2 className={`mt-3 text-3xl font-bold ${getMarginTextClass(netMargin)}`}>
+                {formatPercent(netMargin)}
+              </h2>
+              <p className="mt-2 text-sm text-slate-500">
+                Utilidad neta / base sin IVA
+              </p>
+            </article>
+
+            <article className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-red-200">
+              <p className="text-sm font-semibold text-slate-500">
+                Productos con pérdida
+              </p>
+              <h2 className="mt-3 text-4xl font-bold text-red-700">
+                {lossProducts.length}
+              </h2>
+              <p className="mt-2 text-sm text-slate-500">
+                Margen o utilidad negativa
               </p>
             </article>
           </div>
@@ -655,16 +963,30 @@ export const AdminFinancePage = () => {
 
             <article className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-emerald-200">
               <p className="text-sm font-semibold text-slate-500">
-                Utilidad promedio
+                Utilidad bruta promedio
               </p>
               <h2 className="mt-3 text-3xl font-bold text-emerald-700">
                 {formatPrice(averageGrossProfit)}
               </h2>
               <p className="mt-2 text-sm text-slate-500">
-                Utilidad bruta promedio por pedido
+                Por pedido real
               </p>
             </article>
 
+            <article className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-purple-200">
+              <p className="text-sm font-semibold text-slate-500">
+                Utilidad neta promedio
+              </p>
+              <h2 className="mt-3 text-3xl font-bold text-purple-700">
+                {formatPrice(averageNetProfit)}
+              </h2>
+              <p className="mt-2 text-sm text-slate-500">
+                Después de gastos operativos
+              </p>
+            </article>
+          </div>
+
+          <div className="mt-4 grid gap-4 md:grid-cols-4">
             <article className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
               <p className="text-sm font-semibold text-slate-500">
                 Costo de mercancía
@@ -673,12 +995,10 @@ export const AdminFinancePage = () => {
                 {formatPrice(totalCost)}
               </h2>
               <p className="mt-2 text-sm text-slate-500">
-                Costo estimado de productos vendidos
+                Costo de productos vendidos
               </p>
             </article>
-          </div>
 
-          <div className="mt-4 grid gap-4 md:grid-cols-4">
             <article className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-amber-200">
               <p className="text-sm font-semibold text-slate-500">
                 Cartera pendiente
@@ -708,17 +1028,151 @@ export const AdminFinancePage = () => {
                 {canceledOrders.length}
               </h2>
             </article>
+          </div>
 
-            <article className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-amber-200">
-              <p className="text-sm font-semibold text-slate-500">
-                Margen bajo
-              </p>
-              <h2 className="mt-3 text-4xl font-bold text-amber-700">
-                {lowMarginProducts.length}
+          {lossProducts.length > 0 && (
+            <div className="mt-8 rounded-3xl bg-white p-6 shadow-sm ring-1 ring-red-200">
+              <h2 className="text-xl font-bold text-red-700">
+                Productos vendidos con pérdida
               </h2>
-              <p className="mt-2 text-sm text-slate-500">
-                Productos bajo {LOW_MARGIN_LIMIT}% de margen
+
+              <p className="mt-1 text-sm text-slate-500">
+                Revisión prioritaria para ajustar precio, costo o descuento.
               </p>
+
+              <div className="mt-5 space-y-3">
+                {lossProducts.slice(0, 8).map((product) => (
+                  <div
+                    key={product.productId}
+                    className="grid gap-3 rounded-2xl bg-red-50 p-4 md:grid-cols-[1fr_0.7fr_0.7fr_0.5fr]"
+                  >
+                    <div>
+                      <p className="font-semibold text-slate-900">
+                        {product.productName}
+                      </p>
+                      <p className="text-sm text-slate-500">
+                        {product.sku ?? "Sin SKU"} ·{" "}
+                        {product.category ?? "Sin categoría"}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-sm text-slate-500">Costo</p>
+                      <p className="font-bold text-slate-900">
+                        {formatPrice(product.cost)}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-sm text-slate-500">Utilidad</p>
+                      <p className="font-bold text-red-700">
+                        {formatPrice(product.profit)}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-sm text-slate-500">Margen</p>
+                      <span className="inline-flex rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700">
+                        {formatPercent(product.margin)}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_1fr]">
+            <article className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+              <h2 className="text-xl font-bold text-slate-900">
+                Gastos por categoría
+              </h2>
+
+              <p className="mt-1 text-sm text-slate-500">
+                Distribución de gastos operativos del periodo.
+              </p>
+
+              <div className="mt-5 space-y-3">
+                {expenseCategoryRows.length === 0 ? (
+                  <p className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">
+                    No hay gastos operativos registrados en este periodo.
+                  </p>
+                ) : (
+                  expenseCategoryRows.map((expense) => (
+                    <div
+                      key={expense.category}
+                      className="grid gap-3 rounded-2xl bg-slate-50 p-4 md:grid-cols-[1fr_0.7fr_0.5fr]"
+                    >
+                      <div>
+                        <p className="font-semibold capitalize text-slate-900">
+                          {expense.category}
+                        </p>
+                        <p className="text-sm text-slate-500">
+                          Participación sobre gastos del periodo
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="text-sm text-slate-500">Valor</p>
+                        <p className="font-bold text-red-700">
+                          {formatPrice(expense.amount)}
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="text-sm text-slate-500">Peso</p>
+                        <span className="inline-flex rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700">
+                          {formatPercent(expense.percent)}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </article>
+
+            <article className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+              <h2 className="text-xl font-bold text-slate-900">
+                Gastos recientes
+              </h2>
+
+              <p className="mt-1 text-sm text-slate-500">
+                Últimos gastos registrados para el periodo seleccionado.
+              </p>
+
+              <div className="mt-5 space-y-3">
+                {filteredExpenses.length === 0 ? (
+                  <p className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">
+                    Aún no hay gastos para mostrar.
+                  </p>
+                ) : (
+                  filteredExpenses.slice(0, 6).map((expense) => (
+                    <div
+                      key={expense.id}
+                      className="grid gap-3 rounded-2xl bg-slate-50 p-4 md:grid-cols-[1fr_0.7fr]"
+                    >
+                      <div>
+                        <p className="font-semibold capitalize text-slate-900">
+                          {expense.category}
+                        </p>
+                        <p className="text-sm text-slate-500">
+                          {expense.description || "Sin descripción"}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-400">
+                          {formatDate(expense.expense_date)}
+                        </p>
+                      </div>
+
+                      <div className="md:text-right">
+                        <p className="text-sm text-slate-500">Valor</p>
+                        <p className="font-bold text-red-700">
+                          {formatPrice(Number(expense.amount ?? 0))}
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </article>
           </div>
 
@@ -895,9 +1349,9 @@ export const AdminFinancePage = () => {
                   {bestMonth && (
                     <>
                       {" "}
-                      con utilidad bruta de{" "}
+                      con utilidad neta de{" "}
                       <span className="font-bold">
-                        {formatPrice(bestMonth.profit)}
+                        {formatPrice(bestMonth.netProfit)}
                       </span>
                       .
                     </>
@@ -905,15 +1359,14 @@ export const AdminFinancePage = () => {
                 </div>
 
                 <div className="rounded-2xl bg-slate-50 p-4 text-slate-700">
-                  Utilidad bruta actual: base sin IVA menos costo del producto.
-                  Todavía no descuenta pasarela, envíos, publicidad, devoluciones
-                  ni gastos operativos.
+                  Utilidad bruta: base sin IVA menos costo del producto.
+                  Utilidad neta: utilidad bruta menos gastos operativos.
                 </div>
 
-                <div className="rounded-2xl bg-slate-50 p-4 text-slate-700">
-                  Próximo salto contable: guardar el costo histórico del producto
-                  en cada item del pedido para evitar que cambios futuros de costo
-                  alteren reportes anteriores.
+                <div className="rounded-2xl bg-red-50 p-4 text-red-700">
+                  Productos con pérdida detectados:{" "}
+                  <span className="font-bold">{lossProducts.length}</span>.
+                  Revisa precios, descuentos y costos antes de continuar vendiéndolos.
                 </div>
               </div>
 
@@ -922,25 +1375,10 @@ export const AdminFinancePage = () => {
               </h2>
 
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                Esta versión calcula IVA según la configuración fiscal del admin.
-                Para utilidad neta contable se deben registrar comisiones de pasarela,
-                logística, publicidad, devoluciones, gastos operativos e impuestos.
+                Esta versión lee gastos operativos desde el módulo de gastos y permite
+                evaluar utilidad neta aproximada. El siguiente nivel es automatizar
+                comisiones Wompi / PayU, devoluciones e impuestos reales.
               </p>
-
-              <div className="mt-5 space-y-3 text-sm">
-                <div className="rounded-2xl bg-blue-50 p-4 text-[#2D5398]">
-                  Próximo paso: guardar costo histórico por item vendido.
-                </div>
-
-                <div className="rounded-2xl bg-slate-50 p-4 text-slate-700">
-                  Exportación CSV lista para Excel o Google Sheets.
-                </div>
-
-                <div className="rounded-2xl bg-slate-50 p-4 text-slate-700">
-                  Futuro: pasarela de pago, costos logísticos, devoluciones y
-                  utilidad neta.
-                </div>
-              </div>
             </aside>
           </div>
         </>

@@ -11,6 +11,7 @@ import {
   AdminDashboardPage,
   AdminOrdersPage,
   AdminFinancePage,
+  AdminExpensesPage,
 } from "../pages";
 
 import { CheckoutPage } from "../pages/CheckoutPage";
@@ -77,6 +78,10 @@ export const router = createBrowserRouter([
           {
             path: "finance",
             element: <AdminFinancePage />,
+          },
+          {
+            path: "expenses",
+            element: <AdminExpensesPage />,
           },
           {
             path: "settings",

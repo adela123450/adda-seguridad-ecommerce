@@ -71,6 +71,10 @@ export const AdminLayout = () => {
               Finanzas
             </NavLink>
 
+            <NavLink to="/admin/expenses" className={navLinkClass}>
+              Gastos operativos
+            </NavLink>
+
             <NavLink to="/admin/settings" className={navLinkClass}>
               Configuración
             </NavLink>

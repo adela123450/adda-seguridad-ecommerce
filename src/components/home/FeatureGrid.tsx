@@ -6,8 +6,8 @@ import { MdLocalShipping } from "react-icons/md";
 const features = [
   {
     icon: MdLocalShipping,
-    title: "Envío gratis",
-    text: "En compras superiores a $300.000",
+    title: "Envíos nacionales",
+    text: "Envíos a cualquier parte del pais.",
   },
   {
     icon: HiMiniReceiptRefund,
