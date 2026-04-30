@@ -38,6 +38,11 @@ type ProductCost = {
   cost_price: number | string | null;
 };
 
+type BusinessSettings = {
+  tax_mode: "sin_iva" | "con_iva";
+  tax_rate: number | string | null;
+};
+
 type PeriodFilter = "today" | "week" | "month" | "year" | "all";
 
 type ProductProfitRow = {
@@ -48,12 +53,12 @@ type ProductProfitRow = {
   category: string | null;
   quantity: number;
   income: number;
+  baseIncome: number;
   cost: number;
   profit: number;
   margin: number;
 };
 
-const IVA_RATE = 0.19;
 const LOW_MARGIN_LIMIT = 15;
 
 const REAL_SALE_STATUSES: OrderStatus[] = ["pagado", "enviado", "entregado"];
@@ -80,6 +85,26 @@ const formatMonth = (value: string) =>
   });
 
 const formatPercent = (value: number) => `${value.toFixed(1)}%`;
+
+const normalizeTaxRate = (value: number | string | null | undefined) => {
+  const numericValue = Number(value ?? 0);
+
+  if (!Number.isFinite(numericValue) || numericValue <= 0) return 0;
+
+  return numericValue > 1 ? numericValue / 100 : numericValue;
+};
+
+const getBaseWithoutTax = (total: number, taxMode: string, taxRate: number) => {
+  if (taxMode !== "con_iva" || taxRate <= 0) return total;
+
+  return total / (1 + taxRate);
+};
+
+const getTaxAmount = (total: number, taxMode: string, taxRate: number) => {
+  if (taxMode !== "con_iva" || taxRate <= 0) return 0;
+
+  return total - total / (1 + taxRate);
+};
 
 const getStartDate = (period: PeriodFilter) => {
   const now = new Date();
@@ -144,6 +169,8 @@ export const AdminFinancePage = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [products, setProducts] = useState<ProductCost[]>([]);
+  const [businessSettings, setBusinessSettings] =
+    useState<BusinessSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<PeriodFilter>("month");
   const [profitabilityWarning, setProfitabilityWarning] = useState<string | null>(
@@ -154,6 +181,30 @@ export const AdminFinancePage = () => {
     const loadFinance = async () => {
       setLoading(true);
       setProfitabilityWarning(null);
+
+      const { data: settingsData, error: settingsError } = await supabase
+        .from("business_settings")
+        .select("tax_mode, tax_rate")
+        .limit(1)
+        .maybeSingle();
+
+      if (settingsError) {
+        console.error("Error cargando configuración fiscal:", settingsError.message);
+        setBusinessSettings({
+          tax_mode: "sin_iva",
+          tax_rate: 0,
+        });
+        setProfitabilityWarning(
+          "No fue posible cargar la configuración fiscal. El módulo financiero usará valores sin IVA como respaldo."
+        );
+      } else {
+        setBusinessSettings(
+          (settingsData as BusinessSettings | null) ?? {
+            tax_mode: "sin_iva",
+            tax_rate: 0,
+          }
+        );
+      }
 
       const { data: ordersData, error: ordersError } = await supabase
         .from("orders")
@@ -203,6 +254,10 @@ export const AdminFinancePage = () => {
     loadFinance();
   }, []);
 
+  const taxMode = businessSettings?.tax_mode ?? "sin_iva";
+  const taxRate = normalizeTaxRate(businessSettings?.tax_rate);
+  const taxRateLabel = taxMode === "con_iva" ? formatPercent(taxRate * 100) : "0%";
+
   const filteredOrders = useMemo(() => {
     const startDate = getStartDate(period);
 
@@ -246,8 +301,8 @@ export const AdminFinancePage = () => {
     0
   );
 
-  const estimatedIva = realIncome - realIncome / (1 + IVA_RATE);
-  const subtotalWithoutIva = realIncome - estimatedIva;
+  const estimatedIva = getTaxAmount(realIncome, taxMode, taxRate);
+  const subtotalWithoutIva = getBaseWithoutTax(realIncome, taxMode, taxRate);
 
   const averageTicket =
     realSalesOrders.length > 0 ? realIncome / realSalesOrders.length : 0;
@@ -260,16 +315,19 @@ export const AdminFinancePage = () => {
       const costPrice = Number(product?.cost_price ?? 0);
       const quantity = Number(item.quantity ?? 0);
       const income = Number(item.subtotal ?? 0);
+      const baseIncome = getBaseWithoutTax(income, taxMode, taxRate);
       const cost = costPrice * quantity;
-      const profit = income - cost;
+      const profit = baseIncome - cost;
       const current = rows.get(item.product_id);
 
       if (current) {
         current.quantity += quantity;
         current.income += income;
+        current.baseIncome += baseIncome;
         current.cost += cost;
         current.profit += profit;
-        current.margin = current.income > 0 ? (current.profit / current.income) * 100 : 0;
+        current.margin =
+          current.baseIncome > 0 ? (current.profit / current.baseIncome) * 100 : 0;
         return;
       }
 
@@ -281,14 +339,15 @@ export const AdminFinancePage = () => {
         category: product?.category ?? null,
         quantity,
         income,
+        baseIncome,
         cost,
         profit,
-        margin: income > 0 ? (profit / income) * 100 : 0,
+        margin: baseIncome > 0 ? (profit / baseIncome) * 100 : 0,
       });
     });
 
     return Array.from(rows.values());
-  }, [realSalesItems, productCostMap]);
+  }, [realSalesItems, productCostMap, taxMode, taxRate]);
 
   const grossProfit = productProfitRows.reduce(
     (total, product) => total + product.profit,
@@ -300,7 +359,8 @@ export const AdminFinancePage = () => {
     0
   );
 
-  const businessMargin = realIncome > 0 ? (grossProfit / realIncome) * 100 : 0;
+  const businessMargin =
+    subtotalWithoutIva > 0 ? (grossProfit / subtotalWithoutIva) * 100 : 0;
 
   const averageGrossProfit =
     realSalesOrders.length > 0 ? grossProfit / realSalesOrders.length : 0;
@@ -317,25 +377,32 @@ export const AdminFinancePage = () => {
   const monthlyProfitRows = useMemo(() => {
     const rows = new Map<
       string,
-      { month: string; income: number; cost: number; profit: number; margin: number }
+      { month: string; income: number; baseIncome: number; cost: number; profit: number; margin: number }
     >();
 
     realSalesOrders.forEach((order) => {
       const monthKey = order.created_at.slice(0, 7);
+      const income = Number(order.total_price ?? 0);
+      const baseIncome = getBaseWithoutTax(income, taxMode, taxRate);
+
       const current = rows.get(monthKey) ?? {
         month: monthKey,
         income: 0,
+        baseIncome: 0,
         cost: 0,
         profit: 0,
         margin: 0,
       };
 
-      current.income += Number(order.total_price ?? 0);
+      current.income += income;
+      current.baseIncome += baseIncome;
       rows.set(monthKey, current);
     });
 
     realSalesItems.forEach((item) => {
-      const order = realSalesOrders.find((currentOrder) => currentOrder.id === item.order_id);
+      const order = realSalesOrders.find(
+        (currentOrder) => currentOrder.id === item.order_id
+      );
 
       if (!order) return;
 
@@ -348,12 +415,15 @@ export const AdminFinancePage = () => {
       if (!current) return;
 
       current.cost += costPrice * quantity;
-      current.profit = current.income - current.cost;
-      current.margin = current.income > 0 ? (current.profit / current.income) * 100 : 0;
+      current.profit = current.baseIncome - current.cost;
+      current.margin =
+        current.baseIncome > 0 ? (current.profit / current.baseIncome) * 100 : 0;
     });
 
-    return Array.from(rows.values()).sort((a, b) => b.month.localeCompare(a.month));
-  }, [realSalesOrders, realSalesItems, productCostMap]);
+    return Array.from(rows.values()).sort((a, b) =>
+      b.month.localeCompare(a.month)
+    );
+  }, [realSalesOrders, realSalesItems, productCostMap, taxMode, taxRate]);
 
   const bestMonth = [...monthlyProfitRows].sort((a, b) => b.profit - a.profit)[0];
 
@@ -364,13 +434,14 @@ export const AdminFinancePage = () => {
       "Ciudad",
       "Fecha",
       "Estado",
-      "Total",
-      "Base estimada sin IVA",
-      "IVA estimado 19%",
+      "Total cobrado",
+      "Base sin IVA",
+      `IVA ${taxRateLabel}`,
+      "Modo IVA",
       "Tipo de movimiento",
       "Costo estimado",
-      "Utilidad bruta estimada",
-      "Margen estimado",
+      "Utilidad bruta",
+      "Margen bruto",
     ];
 
     const costByOrder = new Map<string, number>();
@@ -385,17 +456,20 @@ export const AdminFinancePage = () => {
 
     const rows = filteredOrders.map((order) => {
       const total = Number(order.total_price ?? 0);
-      const iva = total - total / (1 + IVA_RATE);
-      const base = total - iva;
+      const iva = getTaxAmount(total, taxMode, taxRate);
+      const base = getBaseWithoutTax(total, taxMode, taxRate);
+
       const orderCost = REAL_SALE_STATUSES.includes(order.status)
         ? costByOrder.get(order.id) ?? 0
         : 0;
+
       const orderProfit = REAL_SALE_STATUSES.includes(order.status)
-        ? total - orderCost
+        ? base - orderCost
         : 0;
+
       const orderMargin =
-        total > 0 && REAL_SALE_STATUSES.includes(order.status)
-          ? (orderProfit / total) * 100
+        base > 0 && REAL_SALE_STATUSES.includes(order.status)
+          ? (orderProfit / base) * 100
           : 0;
 
       const movementType = REAL_SALE_STATUSES.includes(order.status)
@@ -415,6 +489,7 @@ export const AdminFinancePage = () => {
         total,
         Math.round(base),
         Math.round(iva),
+        taxMode,
         movementType,
         Math.round(orderCost),
         Math.round(orderProfit),
@@ -444,14 +519,14 @@ export const AdminFinancePage = () => {
     <section className="mx-auto max-w-7xl px-4 py-8">
       <div className="mb-8 overflow-hidden rounded-3xl bg-gradient-to-r from-[#101935] via-[#243C78] to-[#3F61B3] p-6 text-white shadow-xl">
         <p className="text-sm font-semibold uppercase tracking-[0.25em] text-blue-100">
-          Finanzas
+          Finanzas PRO
         </p>
 
         <h1 className="mt-2 text-3xl font-bold">Módulo financiero ADDA</h1>
 
         <p className="mt-2 max-w-3xl text-blue-100">
-          Resumen financiero preparado para ventas reales, cartera, IVA estimado
-          y futuros reportes contables compatibles con procesos DIAN.
+          Resumen financiero preparado para ventas reales, cartera, IVA desde
+          configuración fiscal y utilidad bruta por producto.
         </p>
       </div>
 
@@ -496,6 +571,13 @@ export const AdminFinancePage = () => {
             </div>
           )}
 
+          <div className="mb-6 rounded-3xl bg-blue-50 p-5 text-sm text-[#2D5398] ring-1 ring-blue-100">
+            <span className="font-bold">Configuración fiscal activa:</span>{" "}
+            {taxMode === "con_iva"
+              ? `Precios con IVA incluido. Tarifa aplicada: ${taxRateLabel}.`
+              : "Modo sin IVA. Los valores se calculan sin impuesto."}
+          </div>
+
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <article className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-green-200">
               <p className="text-sm font-semibold text-slate-500">
@@ -509,6 +591,18 @@ export const AdminFinancePage = () => {
               </p>
             </article>
 
+            <article className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-blue-200">
+              <p className="text-sm font-semibold text-slate-500">
+                Base sin IVA
+              </p>
+              <h2 className="mt-3 text-3xl font-bold text-[#2D5398]">
+                {formatPrice(subtotalWithoutIva)}
+              </h2>
+              <p className="mt-2 text-sm text-slate-500">
+                Valor real usado para margen
+              </p>
+            </article>
+
             <article className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-emerald-200">
               <p className="text-sm font-semibold text-slate-500">
                 Utilidad bruta
@@ -517,31 +611,19 @@ export const AdminFinancePage = () => {
                 {formatPrice(grossProfit)}
               </h2>
               <p className="mt-2 text-sm text-slate-500">
-                Ventas reales menos costo de producto
+                Base sin IVA menos costo de producto
               </p>
             </article>
 
             <article className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-blue-200">
               <p className="text-sm font-semibold text-slate-500">
-                Margen negocio
+                Margen bruto
               </p>
               <h2 className={`mt-3 text-3xl font-bold ${getMarginTextClass(businessMargin)}`}>
                 {formatPercent(businessMargin)}
               </h2>
               <p className="mt-2 text-sm text-slate-500">
-                Utilidad bruta / ingresos reales
-              </p>
-            </article>
-
-            <article className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-amber-200">
-              <p className="text-sm font-semibold text-slate-500">
-                Cartera pendiente
-              </p>
-              <h2 className="mt-3 text-3xl font-bold text-amber-700">
-                {formatPrice(receivableValue)}
-              </h2>
-              <p className="mt-2 text-sm text-slate-500">
-                Pendiente + confirmado
+                Utilidad bruta / base sin IVA
               </p>
             </article>
           </div>
@@ -549,13 +631,13 @@ export const AdminFinancePage = () => {
           <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <article className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-blue-200">
               <p className="text-sm font-semibold text-slate-500">
-                IVA estimado
+                IVA calculado
               </p>
               <h2 className="mt-3 text-3xl font-bold text-[#2D5398]">
                 {formatPrice(estimatedIva)}
               </h2>
               <p className="mt-2 text-sm text-slate-500">
-                Cálculo referencial al 19%
+                Según configuración fiscal del admin
               </p>
             </article>
 
@@ -597,13 +679,16 @@ export const AdminFinancePage = () => {
           </div>
 
           <div className="mt-4 grid gap-4 md:grid-cols-4">
-            <article className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+            <article className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-amber-200">
               <p className="text-sm font-semibold text-slate-500">
-                Base antes de IVA
+                Cartera pendiente
               </p>
-              <h2 className="mt-3 text-3xl font-bold text-slate-900">
-                {formatPrice(subtotalWithoutIva)}
+              <h2 className="mt-3 text-3xl font-bold text-amber-700">
+                {formatPrice(receivableValue)}
               </h2>
+              <p className="mt-2 text-sm text-slate-500">
+                Pendiente + confirmado
+              </p>
             </article>
 
             <article className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-green-200">
@@ -663,7 +748,8 @@ export const AdminFinancePage = () => {
                           {product.productName}
                         </p>
                         <p className="text-sm text-slate-500">
-                          {product.sku ?? "Sin SKU"} · {product.category ?? "Sin categoría"}
+                          {product.sku ?? "Sin SKU"} ·{" "}
+                          {product.category ?? "Sin categoría"}
                         </p>
                       </div>
 
@@ -715,7 +801,8 @@ export const AdminFinancePage = () => {
                           {product.productName}
                         </p>
                         <p className="text-sm text-slate-500">
-                          Vendidos: {product.quantity} · {product.brand ?? "Sin marca"}
+                          Vendidos: {product.quantity} ·{" "}
+                          {product.brand ?? "Sin marca"}
                         </p>
                       </div>
 
@@ -808,37 +895,41 @@ export const AdminFinancePage = () => {
                   {bestMonth && (
                     <>
                       {" "}
-                      con utilidad de{" "}
-                      <span className="font-bold">{formatPrice(bestMonth.profit)}</span>.
+                      con utilidad bruta de{" "}
+                      <span className="font-bold">
+                        {formatPrice(bestMonth.profit)}
+                      </span>
+                      .
                     </>
                   )}
                 </div>
 
                 <div className="rounded-2xl bg-slate-50 p-4 text-slate-700">
-                  Utilidad bruta actual: ventas reales menos costo del producto.
+                  Utilidad bruta actual: base sin IVA menos costo del producto.
                   Todavía no descuenta pasarela, envíos, publicidad, devoluciones
                   ni gastos operativos.
                 </div>
 
                 <div className="rounded-2xl bg-slate-50 p-4 text-slate-700">
-                  Próximo salto contable: guardar cost_price_snapshot en cada
-                  item del pedido para conservar el costo histórico exacto.
+                  Próximo salto contable: guardar el costo histórico del producto
+                  en cada item del pedido para evitar que cambios futuros de costo
+                  alteren reportes anteriores.
                 </div>
               </div>
 
               <h2 className="mt-6 text-xl font-bold text-slate-900">
-                Preparación DIAN
+                Preparación contable
               </h2>
 
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                Esta versión estima IVA sobre ventas reales. Para una declaración
-                formal se deben separar productos gravados, exentos y excluidos,
-                además de registrar datos del comprador y tipo de comprobante.
+                Esta versión calcula IVA según la configuración fiscal del admin.
+                Para utilidad neta contable se deben registrar comisiones de pasarela,
+                logística, publicidad, devoluciones, gastos operativos e impuestos.
               </p>
 
               <div className="mt-5 space-y-3 text-sm">
                 <div className="rounded-2xl bg-blue-50 p-4 text-[#2D5398]">
-                  Próximo paso: agregar medio de pago y tipo de documento.
+                  Próximo paso: guardar costo histórico por item vendido.
                 </div>
 
                 <div className="rounded-2xl bg-slate-50 p-4 text-slate-700">
@@ -846,7 +937,8 @@ export const AdminFinancePage = () => {
                 </div>
 
                 <div className="rounded-2xl bg-slate-50 p-4 text-slate-700">
-                  Futuro: estado DIAN, CUFE y notas crédito.
+                  Futuro: pasarela de pago, costos logísticos, devoluciones y
+                  utilidad neta.
                 </div>
               </div>
             </aside>

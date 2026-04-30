@@ -47,6 +47,11 @@ type ProductLookup = {
   stock: number | null;
 };
 
+type ProductCost = {
+  id: string;
+  cost_price: number | string | null;
+};
+
 type BusinessSettings = {
   tax_mode: TaxMode;
   tax_rate: number | string | null;
@@ -229,14 +234,55 @@ export const OrderConfirmationPage = () => {
 
       if (orderError) throw orderError;
 
-      const itemsToInsert = cartWithRealProductIds.map((item) => ({
-        order_id: orderData.id,
-        product_id: item.id,
-        product_name: item.name,
-        price: item.price,
-        quantity: item.quantity,
-        subtotal: item.price * item.quantity,
-      }));
+      const productIds = cartWithRealProductIds.map((item) => item.id);
+
+      const { data: productsCostData, error: costError } = await supabase
+        .from("products")
+        .select("id, cost_price")
+        .in("id", productIds);
+
+      if (costError) throw costError;
+
+      const costMap = new Map(
+        ((productsCostData ?? []) as ProductCost[]).map((product) => [
+          product.id,
+          Number(product.cost_price ?? 0),
+        ])
+      );
+
+      const itemsToInsert = cartWithRealProductIds.map((item) => {
+        const itemSubtotal = item.price * item.quantity;
+
+        const basePrice =
+          taxMode === "con_iva"
+            ? itemSubtotal / (1 + taxRate)
+            : itemSubtotal;
+
+        const taxAmount =
+          taxMode === "con_iva" ? itemSubtotal - basePrice : 0;
+
+        const unitCost = costMap.get(item.id) ?? 0;
+        const totalCost = unitCost * item.quantity;
+        const grossProfit = basePrice - totalCost;
+
+        const profitMargin =
+          basePrice > 0 ? (grossProfit / basePrice) * 100 : 0;
+
+        return {
+          order_id: orderData.id,
+          product_id: item.id,
+          product_name: item.name,
+          price: item.price,
+          quantity: item.quantity,
+          subtotal: itemSubtotal,
+
+          unit_cost: unitCost,
+          base_price: Math.round(basePrice),
+          tax_amount: Math.round(taxAmount),
+          gross_profit: Math.round(grossProfit),
+          profit_margin: Number(profitMargin.toFixed(2)),
+        };
+      });
 
       const { error: itemsError } = await supabase
         .from("order_items")
@@ -483,7 +529,9 @@ export const OrderConfirmationPage = () => {
               </h3>
 
               <p className="mt-2 text-sm text-slate-600">
-                Al confirmar, el pedido quedará registrado con la configuración fiscal definida por ADDA Seguridad.
+                Al confirmar, el pedido quedará registrado con snapshot
+                financiero: costo unitario, base sin IVA, IVA por producto,
+                utilidad bruta y margen.
               </p>
             </div>
           </div>
