@@ -30,12 +30,21 @@ type ProductForm = {
   subcategory: string;
   price: string;
   cost_price: string;
+  desired_margin: string;
+  include_wompi_fee_in_price: boolean;
   description: string;
   image_url: string;
   stock: string;
   has_offer: boolean;
   offer_price: string;
   offer_label: string;
+};
+
+type TaxMode = "sin_iva" | "con_iva";
+
+type BusinessSettings = {
+  tax_mode: TaxMode;
+  tax_rate: number | string | null;
 };
 
 type OfferFilter = "all" | "with-offer" | "without-offer";
@@ -68,6 +77,8 @@ const initialForm: ProductForm = {
   subcategory: "",
   price: "",
   cost_price: "0",
+  desired_margin: "30",
+  include_wompi_fee_in_price: false,
   description: "",
   image_url: "",
   stock: "0",
@@ -77,6 +88,10 @@ const initialForm: ProductForm = {
 };
 
 const LOW_STOCK_THRESHOLD = 5;
+const IVA_RATE = 0.19;
+const WOMPI_FEE_RATE = 0.032;
+const WOMPI_FIXED_FEE = 900;
+
 
 const BRAND_OPTIONS = [
   "Hikvision",
@@ -123,6 +138,35 @@ const slugify = (text: string) => {
     .replace(/\s+/g, "-")
     .replace(/-+/g, "-");
 };
+
+const calculateSuggestedSalePrice = (
+  cost: number,
+  desiredMargin: number,
+  includeWompiFee: boolean,
+  taxMultiplier = 1
+) => {
+  if (cost <= 0 || desiredMargin <= 0) return 0;
+
+  const marginRate = desiredMargin / 100;
+
+  if (marginRate >= 0.95) return 0;
+
+  if (!includeWompiFee) {
+    return Math.ceil(cost / (1 - marginRate));
+  }
+
+  const denominator = 1 - marginRate - WOMPI_FEE_RATE * taxMultiplier;
+
+  if (denominator <= 0) return 0;
+
+  return Math.ceil((cost + WOMPI_FIXED_FEE) / denominator);
+};
+
+const roundPriceToHundred = (value: number) => {
+  if (value <= 0) return 0;
+  return Math.ceil(value / 100) * 100;
+};
+
 
 const detectCategoryFromText = (text: string) => {
   const value = normalizeText(text);
@@ -339,6 +383,8 @@ export const AdminProductsPage = () => {
 
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [taxMode, setTaxMode] = useState<TaxMode>("sin_iva");
+  const [taxRate, setTaxRate] = useState(IVA_RATE);
 
   const showToast = (type: ToastType, message: string) => {
     setToast({ type, message });
@@ -351,6 +397,33 @@ export const AdminProductsPage = () => {
     return () => {
       document.body.classList.remove("notranslate");
     };
+  }, []);
+
+  useEffect(() => {
+    const loadBusinessSettings = async () => {
+      const { data, error } = await supabase
+        .from("business_settings")
+        .select("tax_mode, tax_rate")
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        console.error("Error cargando configuración fiscal:", error.message);
+        setTaxMode("sin_iva");
+        setTaxRate(IVA_RATE);
+        return;
+      }
+
+      const settings = data as BusinessSettings | null;
+      const nextTaxMode: TaxMode =
+        settings?.tax_mode === "con_iva" ? "con_iva" : "sin_iva";
+      const nextTaxRate = Number(settings?.tax_rate ?? 19) / 100;
+
+      setTaxMode(nextTaxMode);
+      setTaxRate(Number.isNaN(nextTaxRate) ? IVA_RATE : nextTaxRate);
+    };
+
+    loadBusinessSettings();
   }, []);
 
   useEffect(() => {
@@ -614,6 +687,8 @@ export const AdminProductsPage = () => {
       subcategory: product.subcategory ?? "",
       price: String(product.price ?? ""),
       cost_price: String(product.cost_price ?? 0),
+      desired_margin: "30",
+      include_wompi_fee_in_price: false,
       description: product.description ?? "",
       image_url: product.image_url ?? "",
       stock: String(product.stock ?? 0),
@@ -907,23 +982,59 @@ export const AdminProductsPage = () => {
 
   const formPrice = Number(form.price || 0);
   const formCostPrice = Number(form.cost_price || 0);
+  const desiredMarginValue = Number(form.desired_margin || 0);
+  const wompiTaxMultiplier = taxMode === "con_iva" ? 1 + taxRate : 1;
+  const suggestedSalePrice = roundPriceToHundred(
+    calculateSuggestedSalePrice(
+      formCostPrice,
+      desiredMarginValue,
+      form.include_wompi_fee_in_price,
+      wompiTaxMultiplier
+    )
+  );
   const formOfferPrice = Number(form.offer_price || 0);
   const formEffectiveSalePrice =
     form.has_offer && formOfferPrice > 0 ? formOfferPrice : formPrice;
-  const formGrossProfit = formEffectiveSalePrice - formCostPrice;
-  const formCommercialMargin =
-    formEffectiveSalePrice > 0
-      ? (formGrossProfit / formEffectiveSalePrice) * 100
+
+  // En este proyecto el precio del producto se guarda como base comercial.
+  // Si la configuración fiscal está con IVA, el checkout calcula el IVA aparte.
+  // Por eso la rentabilidad se calcula sobre el precio base, no sobre el total con IVA.
+  const formTaxAmount =
+    taxMode === "con_iva" ? Math.round(formEffectiveSalePrice * taxRate) : 0;
+  const formCustomerTotalWithTax = formEffectiveSalePrice + formTaxAmount;
+
+  const formPaymentGatewayCost =
+    form.include_wompi_fee_in_price && formEffectiveSalePrice > 0
+      ? Math.round(formCustomerTotalWithTax * WOMPI_FEE_RATE + WOMPI_FIXED_FEE)
       : 0;
+
+  const formAccountingRevenue = formEffectiveSalePrice;
+  const formNetRevenueAfterGateway =
+    formAccountingRevenue - formPaymentGatewayCost;
+  const formContributionProfit =
+    formNetRevenueAfterGateway - formCostPrice;
+  const formRealMargin =
+    formAccountingRevenue > 0
+      ? (formContributionProfit / formAccountingRevenue) * 100
+      : 0;
+  const breakEvenPrice = form.include_wompi_fee_in_price
+    ? roundPriceToHundred(
+        Math.ceil(
+          (formCostPrice + WOMPI_FIXED_FEE) /
+            (1 - WOMPI_FEE_RATE * (1 + (taxMode === "con_iva" ? taxRate : 0)))
+        )
+      )
+    : formCostPrice;
+  const priceSafetyMargin = formEffectiveSalePrice - breakEvenPrice;
   const formDiscountValue =
     form.has_offer && formOfferPrice > 0 ? formPrice - formOfferPrice : 0;
   const formDiscountPercent =
     form.has_offer && formPrice > 0 && formOfferPrice > 0
       ? (formDiscountValue / formPrice) * 100
       : 0;
-  const isFormLoss = formGrossProfit < 0;
-  const isFormLowMargin = !isFormLoss && formCommercialMargin < 15;
-  const isFormHealthyMargin = formCommercialMargin >= 30;
+  const isFormLoss = formContributionProfit < 0;
+  const isFormLowMargin = !isFormLoss && formRealMargin < 15;
+  const isFormHealthyMargin = formRealMargin >= 30;
 
   const PaginationControls = () => (
     <div className="mt-6 flex flex-col gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:flex-row md:items-center md:justify-between">
@@ -1000,25 +1111,19 @@ export const AdminProductsPage = () => {
         </div>
       )}
 
-      <div className="overflow-hidden rounded-3xl bg-gradient-to-r from-[#101935] via-[#243C78] to-[#3F61B3] shadow-xl">
-        <div className="relative px-6 py-12 md:px-8 md:py-14">
-          <div className="absolute -right-16 top-8 h-40 w-40 rounded-full bg-white/10 blur-3xl" />
-          <div className="absolute bottom-0 left-8 h-32 w-32 rounded-full bg-blue-200/10 blur-3xl" />
+      <div className="overflow-hidden rounded-2xl bg-[#2D5398] shadow-md">
+        <div className="px-6 py-6 md:px-8 md:py-7">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-100">
+            Panel administrador
+          </p>
 
-          <div className="relative">
-            <span className="inline-flex rounded-full border border-white/15 bg-white/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-blue-50">
-              Panel administrador
-            </span>
+          <h1 className="mt-2 text-2xl font-bold text-white md:text-3xl">
+            Gestión de productos ADDA Seguridad
+          </h1>
 
-            <h1 className="mt-4 max-w-4xl text-2xl font-bold text-white md:text-4xl">
-              Gestión de productos ADDA Seguridad
-            </h1>
-
-            <p className="mt-4 max-w-3xl text-base leading-7 text-blue-100 md:text-lg md:leading-8">
-              Desde aquí puedes crear, editar, eliminar productos, actualizar
-              stock y configurar ofertas del catálogo.
-            </p>
-          </div>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-blue-100 md:text-base">
+            Crea, edita, controla stock, valida rentabilidad y configura ofertas del catálogo.
+          </p>
         </div>
       </div>
 
@@ -1179,6 +1284,293 @@ export const AdminProductsPage = () => {
             </p>
           </div>
 
+          <div className="rounded-2xl border border-[#2D5398]/15 bg-[#2D5398]/5 p-5 md:col-span-2 xl:col-span-3">
+            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">
+                  Precio inteligente PRO
+                </h3>
+                <p className="mt-1 text-sm text-slate-600">
+                  Define el precio desde el costo, el margen objetivo y la
+                  decisión de absorber la pasarela dentro de un precio único.
+                </p>
+              </div>
+
+              <span className="inline-flex w-fit rounded-full bg-white px-3 py-1.5 text-xs font-bold text-[#2D5398] shadow-sm">
+                Precio único para cliente
+              </span>
+            </div>
+
+            <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_1fr_1fr_auto]">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Margen deseado %
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  max="90"
+                  value={form.desired_margin}
+                  onChange={(e) =>
+                    handleChange("desired_margin", e.target.value)
+                  }
+                  placeholder="Ej: 30"
+                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
+                />
+              </div>
+
+              <label className="flex min-h-[74px] items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={form.include_wompi_fee_in_price}
+                  onChange={(e) =>
+                    handleChange(
+                      "include_wompi_fee_in_price",
+                      e.target.checked
+                    )
+                  }
+                  className="h-4 w-4 rounded border-slate-300"
+                />
+                Absorber costo Wompi en el precio sugerido
+              </label>
+
+              <article className="rounded-xl border border-slate-200 bg-white p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Precio sugerido
+                </p>
+                <p className="mt-2 text-2xl font-bold text-[#2D5398]">
+                  {formatPrice(suggestedSalePrice)}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {form.include_wompi_fee_in_price
+                    ? "Incluye costo variable de pasarela."
+                    : "Calculado solo con margen comercial."}
+                </p>
+              </article>
+
+              <button
+                type="button"
+                disabled={suggestedSalePrice <= 0}
+                onClick={() =>
+                  handleChange("price", String(suggestedSalePrice))
+                }
+                className="inline-flex min-h-[74px] items-center justify-center rounded-xl bg-[#2D5398] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#234684] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Aplicar precio sugerido
+              </button>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:col-span-2 xl:col-span-3">
+            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">
+                  Análisis de rentabilidad del producto
+                </h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  Lectura contable del precio actual u oferta activa. El IVA no se trata como ingreso; si está activo, se calcula aparte para el cliente.
+                </p>
+              </div>
+
+              <span
+                className={`inline-flex w-fit rounded-full px-3 py-1.5 text-xs font-bold ${
+                  isFormLoss
+                    ? "bg-red-100 text-red-700"
+                    : isFormLowMargin
+                    ? "bg-amber-100 text-amber-700"
+                    : isFormHealthyMargin
+                    ? "bg-emerald-100 text-emerald-700"
+                    : "bg-blue-100 text-[#2D5398]"
+                }`}
+              >
+                {isFormLoss
+                  ? "Riesgo de pérdida"
+                  : isFormLowMargin
+                  ? "Margen bajo"
+                  : isFormHealthyMargin
+                  ? "Rentable"
+                  : "En evaluación"}
+              </span>
+            </div>
+
+            <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+              <article className="rounded-2xl bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Base de venta sin IVA
+                </p>
+                <p className="mt-2 text-xl font-bold text-slate-900">
+                  {formatPrice(formAccountingRevenue)}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Precio del producto usado para margen. El IVA se calcula aparte si está activo.
+                </p>
+              </article>
+
+              <article className="rounded-2xl bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  IVA al cliente
+                </p>
+                <p className="mt-2 text-xl font-bold text-slate-900">
+                  {formatPrice(formTaxAmount)}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {taxMode === "con_iva"
+                    ? "Se suma en checkout, no afecta utilidad."
+                    : "Configuración actual sin IVA."}
+                </p>
+              </article>
+
+              <article className="rounded-2xl bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Costo variable pasarela
+                </p>
+                <p className="mt-2 text-xl font-bold text-slate-900">
+                  {formatPrice(formPaymentGatewayCost)}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {form.include_wompi_fee_in_price
+                    ? "Estimado con 3.2% + $900 sobre el total pagado por el cliente."
+                    : "No se descuenta en este escenario."}
+                </p>
+              </article>
+
+              <article className="rounded-2xl bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Utilidad contributiva
+                </p>
+                <p
+                  className={`mt-2 text-xl font-bold ${
+                    formContributionProfit < 0
+                      ? "text-red-700"
+                      : "text-emerald-700"
+                  }`}
+                >
+                  {formatPrice(formContributionProfit)}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Después de costo de compra y pasarela.
+                </p>
+              </article>
+
+              <article className="rounded-2xl bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Margen real
+                </p>
+                <p
+                  className={`mt-2 text-xl font-bold ${
+                    isFormLoss
+                      ? "text-red-700"
+                      : isFormLowMargin
+                      ? "text-amber-700"
+                      : "text-emerald-700"
+                  }`}
+                >
+                  {formatPercent(formRealMargin)}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Utilidad contributiva / base de venta sin IVA.
+                </p>
+              </article>
+            </div>
+
+            <div className="mt-4 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+              <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Precio mínimo sin pérdida
+                </p>
+                <p className="mt-2 text-2xl font-bold text-slate-900">
+                  {formatPrice(breakEvenPrice)}
+                </p>
+                <p
+                  className={`mt-2 text-sm font-semibold ${
+                    priceSafetyMargin < 0 ? "text-red-700" : "text-emerald-700"
+                  }`}
+                >
+                  Colchón frente al mínimo: {formatPrice(priceSafetyMargin)}
+                </p>
+              </article>
+
+              <article
+                className={`rounded-2xl p-4 text-sm leading-6 ${
+                  isFormLoss
+                    ? "bg-red-50 text-red-700"
+                    : isFormLowMargin
+                    ? "bg-amber-50 text-amber-700"
+                    : "bg-emerald-50 text-emerald-700"
+                }`}
+              >
+                {isFormLoss ? (
+                  <p>
+                    Contablemente no conviene: el precio evaluado no cubre el
+                    costo de compra y los costos variables asociados a la venta.
+                  </p>
+                ) : isFormLowMargin ? (
+                  <p>
+                    Operación viable, pero con margen bajo. Antes de aprobar
+                    descuentos revisa garantía, logística, empaque y gastos
+                    operativos para no afectar la utilidad neta.
+                  </p>
+                ) : (
+                  <p>
+                    Escenario saludable: el producto conserva utilidad después
+                    del costo de compra y la pasarela absorbida. La utilidad neta
+                    final dependerá de gastos operativos, logística e impuestos.
+                  </p>
+                )}
+
+                {form.has_offer && formOfferPrice > 0 && (
+                  <p className="mt-3 font-semibold">
+                    Oferta activa: descuento de {formatPrice(formDiscountValue)}
+                    ({formatPercent(formDiscountPercent)}). El análisis ya está
+                    evaluando el precio de oferta.
+                  </p>
+                )}
+              </article>
+            </div>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 md:col-span-2 xl:col-span-3">
+            <div className="mb-4">
+              <h3 className="text-lg font-bold text-slate-900">Oferta del producto</h3>
+              <p className="mt-1 text-sm text-slate-500">Actívala solo si el análisis de rentabilidad mantiene utilidad positiva.</p>
+            </div>
+
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:gap-6">
+              <label className="flex items-center gap-3 text-sm font-medium text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={form.has_offer}
+                  onChange={(e) => handleChange("has_offer", e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300"
+                />
+                Activar oferta segura
+              </label>
+
+              {form.has_offer && (
+                <>
+                  <input
+                    type="number"
+                    step="1"
+                    min="0"
+                    value={form.offer_price}
+                    onChange={(e) => handleChange("offer_price", e.target.value)}
+                    placeholder="Precio en oferta"
+                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398] md:max-w-[220px]"
+                  />
+
+                  <input
+                    type="text"
+                    value={form.offer_label}
+                    onChange={(e) => handleChange("offer_label", e.target.value)}
+                    placeholder="Etiqueta de oferta"
+                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398] md:max-w-[240px]"
+                  />
+                </>
+              )}
+            </div>
+          </div>
+
+
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-700">
               Stock
@@ -1216,174 +1608,6 @@ export const AdminProductsPage = () => {
               rows={4}
               className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
             />
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 md:col-span-2 xl:col-span-3">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:gap-6">
-              <label className="flex items-center gap-3 text-sm font-medium text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={form.has_offer}
-                  onChange={(e) => handleChange("has_offer", e.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300"
-                />
-                Activar oferta
-              </label>
-
-              {form.has_offer && (
-                <>
-                  <input
-                    type="number"
-                    step="1"
-                    min="0"
-                    value={form.offer_price}
-                    onChange={(e) => handleChange("offer_price", e.target.value)}
-                    placeholder="Precio en oferta"
-                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398] md:max-w-[220px]"
-                  />
-
-                  <input
-                    type="text"
-                    value={form.offer_label}
-                    onChange={(e) => handleChange("offer_label", e.target.value)}
-                    placeholder="Etiqueta de oferta"
-                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398] md:max-w-[240px]"
-                  />
-                </>
-              )}
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:col-span-2 xl:col-span-3">
-            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-              <div>
-                <h3 className="text-lg font-bold text-slate-900">
-                  Análisis de rentabilidad del producto
-                </h3>
-                <p className="mt-1 text-sm text-slate-500">
-                  Úsalo antes de activar una oferta para validar si el descuento
-                  conserva utilidad o genera pérdida.
-                </p>
-              </div>
-
-              <span
-                className={`inline-flex w-fit rounded-full px-3 py-1.5 text-xs font-bold ${
-                  isFormLoss
-                    ? "bg-red-100 text-red-700"
-                    : isFormLowMargin
-                    ? "bg-amber-100 text-amber-700"
-                    : isFormHealthyMargin
-                    ? "bg-emerald-100 text-emerald-700"
-                    : "bg-blue-100 text-[#2D5398]"
-                }`}
-              >
-                {isFormLoss
-                  ? "Pérdida"
-                  : isFormLowMargin
-                  ? "Margen bajo"
-                  : isFormHealthyMargin
-                  ? "Margen saludable"
-                  : "En evaluación"}
-              </span>
-            </div>
-
-            <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <article className="rounded-2xl bg-slate-50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  Precio normal
-                </p>
-                <p className="mt-2 text-xl font-bold text-slate-900">
-                  {formatPrice(formPrice)}
-                </p>
-              </article>
-
-              <article className="rounded-2xl bg-slate-50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  Costo
-                </p>
-                <p className="mt-2 text-xl font-bold text-slate-900">
-                  {formatPrice(formCostPrice)}
-                </p>
-              </article>
-
-              <article className="rounded-2xl bg-slate-50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  Precio efectivo
-                </p>
-                <p className="mt-2 text-xl font-bold text-[#2D5398]">
-                  {formatPrice(formEffectiveSalePrice)}
-                </p>
-                {form.has_offer && formOfferPrice > 0 && (
-                  <p className="mt-1 text-xs font-semibold text-slate-500">
-                    Descuento: {formatPrice(formDiscountValue)} ·{" "}
-                    {formatPercent(formDiscountPercent)}
-                  </p>
-                )}
-              </article>
-
-              <article className="rounded-2xl bg-slate-50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  Utilidad bruta
-                </p>
-                <p
-                  className={`mt-2 text-xl font-bold ${
-                    formGrossProfit < 0 ? "text-red-700" : "text-emerald-700"
-                  }`}
-                >
-                  {formatPrice(formGrossProfit)}
-                </p>
-              </article>
-            </div>
-
-            <div className="mt-4 grid gap-4 md:grid-cols-[0.75fr_1.25fr]">
-              <article className="rounded-2xl bg-slate-50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  Margen comercial real
-                </p>
-                <p
-                  className={`mt-2 text-2xl font-bold ${
-                    isFormLoss
-                      ? "text-red-700"
-                      : isFormLowMargin
-                      ? "text-amber-700"
-                      : "text-emerald-700"
-                  }`}
-                >
-                  {formatPercent(formCommercialMargin)}
-                </p>
-                <p className="mt-1 text-xs text-slate-500">
-                  Fórmula: utilidad / precio efectivo de venta.
-                </p>
-              </article>
-
-              <article
-                className={`rounded-2xl p-4 text-sm leading-6 ${
-                  isFormLoss
-                    ? "bg-red-50 text-red-700"
-                    : isFormLowMargin
-                    ? "bg-amber-50 text-amber-700"
-                    : "bg-emerald-50 text-emerald-700"
-                }`}
-              >
-                {isFormLoss ? (
-                  <p>
-                    Atención: con este precio efectivo el producto se vendería
-                    por debajo del costo. No es recomendable aprobar esta oferta.
-                  </p>
-                ) : isFormLowMargin ? (
-                  <p>
-                    Margen bajo: la venta genera utilidad, pero deja poco margen
-                    para comisiones, logística, garantías o gastos operativos.
-                  </p>
-                ) : (
-                  <p>
-                    La rentabilidad comercial es aceptable para una venta bruta.
-                    Aún faltará descontar comisiones, envíos e impuestos en la
-                    utilidad neta contable.
-                  </p>
-                )}
-              </article>
-            </div>
           </div>
 
           <div className="flex flex-wrap gap-3 md:col-span-2 xl:col-span-3">

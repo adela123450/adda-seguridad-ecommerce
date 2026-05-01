@@ -4,6 +4,8 @@ import { useCart } from "../hooks/useCart";
 import { supabase } from "../lib/supabase";
 
 const IVA_RATE = 0.19;
+const WOMPI_FEE_RATE = 0.032;
+const WOMPI_FIXED_FEE = 900;
 
 type TaxMode = "sin_iva" | "con_iva";
 type PaymentMode = "solo_transferencia" | "solo_wompi" | "hibrido";
@@ -13,6 +15,17 @@ type BusinessSettings = {
   tax_mode: TaxMode;
   tax_rate: number | string | null;
   payment_mode?: PaymentMode | null;
+};
+
+type CheckoutSummary = {
+  subtotal: number;
+  iva_amount: number;
+  total_base: number;
+  payment_method: PaymentMethod;
+  payment_fee: number;
+  total_final: number;
+  tax_mode: TaxMode;
+  tax_rate: number;
 };
 
 const formatPrice = (value: number) => {
@@ -45,6 +58,13 @@ export const CheckoutPage = () => {
   const subtotal = Math.round(totalPrice);
   const ivaAmount = taxMode === "con_iva" ? Math.round(subtotal * taxRate) : 0;
   const finalTotal = subtotal + ivaAmount;
+
+  const paymentFee =
+    selectedPayment === "wompi"
+      ? Math.round(finalTotal * WOMPI_FEE_RATE + WOMPI_FIXED_FEE)
+      : 0;
+
+  const totalToPay = finalTotal + paymentFee;
 
   const [formData, setFormData] = useState<CheckoutFormData>({
     fullName: "",
@@ -159,8 +179,20 @@ export const CheckoutPage = () => {
 
     if (!validateForm()) return;
 
+    const checkoutSummary: CheckoutSummary = {
+      subtotal,
+      iva_amount: ivaAmount,
+      total_base: finalTotal,
+      payment_method: selectedPayment,
+      payment_fee: paymentFee,
+      total_final: totalToPay,
+      tax_mode: taxMode,
+      tax_rate: taxRate,
+    };
+
     localStorage.setItem("checkoutCustomer", JSON.stringify(formData));
     localStorage.setItem("paymentMethod", selectedPayment);
+    localStorage.setItem("checkoutSummary", JSON.stringify(checkoutSummary));
 
     navigate("/confirmacion-pedido");
   };
@@ -339,6 +371,9 @@ export const CheckoutPage = () => {
                       Recomendado para conservar el mejor precio. La confirmación
                       se realiza enviando el soporte por WhatsApp.
                     </p>
+                    <p className="mt-3 text-sm font-semibold">
+                      Total por transferencia: {formatPrice(finalTotal)}
+                    </p>
                   </button>
                 )}
 
@@ -356,8 +391,15 @@ export const CheckoutPage = () => {
                       Pago online seguro
                     </p>
                     <p className="mt-2 text-sm">
-                      Opción para pago digital mediante pasarela. La validación
-                      final se realizará en el siguiente paso de integración.
+                      Opción para pago digital mediante pasarela. Incluye el
+                      costo operativo de la transacción online.
+                    </p>
+                    <p className="mt-3 text-sm font-semibold">
+                      Total pago online:{" "}
+                      {formatPrice(
+                        finalTotal +
+                          Math.round(finalTotal * WOMPI_FEE_RATE + WOMPI_FIXED_FEE)
+                      )}
                     </p>
                   </button>
                 )}
@@ -439,12 +481,21 @@ export const CheckoutPage = () => {
                   </span>
                 </div>
 
+                {selectedPayment === "wompi" && (
+                  <div className="flex items-center justify-between text-sm text-slate-600">
+                    <span>Comisión pago online</span>
+                    <span className="font-semibold text-slate-800">
+                      {formatPrice(paymentFee)}
+                    </span>
+                  </div>
+                )}
+
                 <div className="flex items-center justify-between border-t border-slate-200 pt-4">
                   <span className="text-lg font-semibold text-slate-800">
                     Total a pagar
                   </span>
                   <span className="text-2xl font-bold text-slate-900">
-                    {formatPrice(finalTotal)}
+                    {formatPrice(totalToPay)}
                   </span>
                 </div>
               </div>
@@ -455,8 +506,8 @@ export const CheckoutPage = () => {
                 Nota del pedido
               </h3>
               <p className="mt-2 text-sm text-slate-600">
-                Este paso prepara la información del pedido y el método de pago
-                seleccionado para la confirmación.
+                Este paso prepara la información del pedido, el método de pago
+                seleccionado y el resumen financiero para la confirmación.
               </p>
             </div>
           </div>

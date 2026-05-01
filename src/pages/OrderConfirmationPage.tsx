@@ -25,6 +25,16 @@ const isValidUuid = (value: string) => {
   );
 };
 
+const safeJsonParse = <T,>(value: string | null): T | null => {
+  if (!value) return null;
+
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return null;
+  }
+};
+
 type CheckoutCustomer = {
   fullName: string;
   phone: string;
@@ -32,6 +42,17 @@ type CheckoutCustomer = {
   address: string;
   city: string;
   notes: string;
+};
+
+type CheckoutSummary = {
+  subtotal: number;
+  iva_amount: number;
+  total_base: number;
+  payment_method: PaymentMethod;
+  payment_fee: number;
+  total_final: number;
+  tax_mode: TaxMode;
+  tax_rate: number;
 };
 
 type CartItem = {
@@ -72,24 +93,37 @@ export const OrderConfirmationPage = () => {
   const [taxRate, setTaxRate] = useState(IVA_RATE);
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("hibrido");
 
-  const subtotal = Math.round(totalPrice);
-  const ivaAmount = taxMode === "con_iva" ? Math.round(subtotal * taxRate) : 0;
-  const finalTotal = subtotal + ivaAmount;
-
   const storedCustomer = localStorage.getItem("checkoutCustomer");
   const storedPaymentMethod = localStorage.getItem("paymentMethod");
+  const storedCheckoutSummary = localStorage.getItem("checkoutSummary");
 
-  const customer: CheckoutCustomer | null = storedCustomer
-    ? JSON.parse(storedCustomer)
-    : null;
+  const customer = safeJsonParse<CheckoutCustomer>(storedCustomer);
+  const checkoutSummary =
+    safeJsonParse<CheckoutSummary>(storedCheckoutSummary);
 
-  const paymentMethod: PaymentMethod =
+  const fallbackSubtotal = Math.round(totalPrice);
+  const fallbackIvaAmount =
+    taxMode === "con_iva" ? Math.round(fallbackSubtotal * taxRate) : 0;
+  const fallbackFinalTotal = fallbackSubtotal + fallbackIvaAmount;
+
+  const fallbackPaymentMethod: PaymentMethod =
     storedPaymentMethod === "wompi" ? "wompi" : "transferencia";
 
-  const paymentFee =
-    paymentMethod === "wompi"
-      ? Math.round(finalTotal * WOMPI_FEE_RATE + WOMPI_FIXED_FEE)
+  const fallbackPaymentFee =
+    fallbackPaymentMethod === "wompi"
+      ? Math.round(fallbackFinalTotal * WOMPI_FEE_RATE + WOMPI_FIXED_FEE)
       : 0;
+
+  const paymentMethod: PaymentMethod =
+    checkoutSummary?.payment_method ?? fallbackPaymentMethod;
+
+  const subtotal = checkoutSummary?.subtotal ?? fallbackSubtotal;
+  const ivaAmount = checkoutSummary?.iva_amount ?? fallbackIvaAmount;
+  const finalTotal = checkoutSummary?.total_base ?? fallbackFinalTotal;
+  const paymentFee = checkoutSummary?.payment_fee ?? fallbackPaymentFee;
+  const totalToPay = checkoutSummary?.total_final ?? finalTotal + paymentFee;
+  const snapshotTaxMode = checkoutSummary?.tax_mode ?? taxMode;
+  const snapshotTaxRate = checkoutSummary?.tax_rate ?? taxRate;
 
   useEffect(() => {
     const loadBusinessSettings = async () => {
@@ -271,8 +305,8 @@ export const OrderConfirmationPage = () => {
             total_items: totalItems,
             subtotal,
             iva_amount: ivaAmount,
-            total_price: finalTotal,
-            tax_mode: taxMode,
+            total_price: totalToPay,
+            tax_mode: snapshotTaxMode,
             payment_method: paymentMethod,
             payment_fee: paymentFee,
             status: "pendiente",
@@ -303,12 +337,12 @@ export const OrderConfirmationPage = () => {
         const itemSubtotal = item.price * item.quantity;
 
         const basePrice =
-          taxMode === "con_iva"
-            ? itemSubtotal / (1 + taxRate)
+          snapshotTaxMode === "con_iva"
+            ? itemSubtotal / (1 + snapshotTaxRate)
             : itemSubtotal;
 
         const taxAmount =
-          taxMode === "con_iva" ? itemSubtotal - basePrice : 0;
+          snapshotTaxMode === "con_iva" ? itemSubtotal - basePrice : 0;
 
         const unitCost = costMap.get(item.id) ?? 0;
         const totalCost = unitCost * item.quantity;
@@ -347,16 +381,20 @@ export const OrderConfirmationPage = () => {
           totalItems,
           subtotal,
           ivaAmount,
-          totalPrice: finalTotal,
-          taxMode,
+          totalPrice: totalToPay,
+          totalBase: finalTotal,
           paymentMethod,
           paymentFee,
+          taxMode: snapshotTaxMode,
+          taxRate: snapshotTaxRate,
           createdAt: new Date().toISOString(),
         })
       );
 
       clearCart();
       localStorage.removeItem("checkoutCustomer");
+      localStorage.removeItem("paymentMethod");
+      localStorage.removeItem("checkoutSummary");
 
       navigate("/pedido-finalizado");
     } catch (error) {
@@ -553,11 +591,20 @@ export const OrderConfirmationPage = () => {
                 </div>
 
                 <div className="flex items-center justify-between text-sm text-slate-600">
-                  <span>IVA {taxMode === "con_iva" ? "19%" : "0%"}</span>
+                  <span>IVA {snapshotTaxMode === "con_iva" ? "19%" : "0%"}</span>
                   <span className="font-semibold text-slate-800">
                     {formatPrice(ivaAmount)}
                   </span>
                 </div>
+
+                {paymentMethod === "wompi" && (
+                  <div className="flex items-center justify-between text-sm text-slate-600">
+                    <span>Comisión pago online</span>
+                    <span className="font-semibold text-slate-800">
+                      {formatPrice(paymentFee)}
+                    </span>
+                  </div>
+                )}
 
                 <div className="flex items-center justify-between border-t border-slate-200 pt-4">
                   <span className="text-lg font-semibold text-slate-800">
@@ -565,7 +612,7 @@ export const OrderConfirmationPage = () => {
                   </span>
 
                   <span className="text-2xl font-bold text-slate-900">
-                    {formatPrice(finalTotal)}
+                    {formatPrice(totalToPay)}
                   </span>
                 </div>
               </div>
@@ -601,7 +648,8 @@ export const OrderConfirmationPage = () => {
               <p className="mt-2 text-sm text-slate-600">
                 Al confirmar, el pedido quedará registrado con snapshot
                 financiero: costo unitario, base sin IVA, IVA por producto,
-                utilidad bruta, margen y método de pago.
+                utilidad bruta, margen, método de pago y comisión de pago si
+                aplica.
               </p>
             </div>
           </div>
