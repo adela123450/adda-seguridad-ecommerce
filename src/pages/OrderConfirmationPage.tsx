@@ -4,8 +4,12 @@ import { useCart } from "../hooks/useCart";
 import { supabase } from "../lib/supabase";
 
 const IVA_RATE = 0.19;
+const WOMPI_FEE_RATE = 0.032;
+const WOMPI_FIXED_FEE = 900;
 
 type TaxMode = "sin_iva" | "con_iva";
+type PaymentMode = "solo_transferencia" | "solo_wompi" | "hibrido";
+type PaymentMethod = "transferencia" | "wompi";
 
 const formatPrice = (value: number) => {
   return new Intl.NumberFormat("es-CO", {
@@ -55,6 +59,7 @@ type ProductCost = {
 type BusinessSettings = {
   tax_mode: TaxMode;
   tax_rate: number | string | null;
+  payment_mode?: PaymentMode | null;
 };
 
 export const OrderConfirmationPage = () => {
@@ -65,16 +70,26 @@ export const OrderConfirmationPage = () => {
   const [loadingSettings, setLoadingSettings] = useState(true);
   const [taxMode, setTaxMode] = useState<TaxMode>("sin_iva");
   const [taxRate, setTaxRate] = useState(IVA_RATE);
+  const [paymentMode, setPaymentMode] = useState<PaymentMode>("hibrido");
 
   const subtotal = Math.round(totalPrice);
   const ivaAmount = taxMode === "con_iva" ? Math.round(subtotal * taxRate) : 0;
   const finalTotal = subtotal + ivaAmount;
 
   const storedCustomer = localStorage.getItem("checkoutCustomer");
+  const storedPaymentMethod = localStorage.getItem("paymentMethod");
 
   const customer: CheckoutCustomer | null = storedCustomer
     ? JSON.parse(storedCustomer)
     : null;
+
+  const paymentMethod: PaymentMethod =
+    storedPaymentMethod === "wompi" ? "wompi" : "transferencia";
+
+  const paymentFee =
+    paymentMethod === "wompi"
+      ? Math.round(finalTotal * WOMPI_FEE_RATE + WOMPI_FIXED_FEE)
+      : 0;
 
   useEffect(() => {
     const loadBusinessSettings = async () => {
@@ -82,7 +97,7 @@ export const OrderConfirmationPage = () => {
 
       const { data, error } = await supabase
         .from("business_settings")
-        .select("tax_mode, tax_rate")
+        .select("tax_mode, tax_rate, payment_mode")
         .limit(1)
         .maybeSingle();
 
@@ -90,17 +105,28 @@ export const OrderConfirmationPage = () => {
         console.error("Error cargando configuración fiscal:", error.message);
         setTaxMode("sin_iva");
         setTaxRate(IVA_RATE);
+        setPaymentMode("hibrido");
         setLoadingSettings(false);
         return;
       }
 
       const settings = data as BusinessSettings | null;
+
       const nextTaxMode: TaxMode =
         settings?.tax_mode === "con_iva" ? "con_iva" : "sin_iva";
+
       const nextTaxRate = Number(settings?.tax_rate ?? 19) / 100;
+
+      const nextPaymentMode: PaymentMode =
+        settings?.payment_mode === "solo_transferencia" ||
+        settings?.payment_mode === "solo_wompi" ||
+        settings?.payment_mode === "hibrido"
+          ? settings.payment_mode
+          : "hibrido";
 
       setTaxMode(nextTaxMode);
       setTaxRate(Number.isNaN(nextTaxRate) ? IVA_RATE : nextTaxRate);
+      setPaymentMode(nextPaymentMode);
       setLoadingSettings(false);
     };
 
@@ -200,8 +226,29 @@ export const OrderConfirmationPage = () => {
     return migratedCart;
   };
 
+  const isPaymentMethodAllowed = () => {
+    if (paymentMode === "hibrido") return true;
+
+    if (paymentMode === "solo_transferencia") {
+      return paymentMethod === "transferencia";
+    }
+
+    if (paymentMode === "solo_wompi") {
+      return paymentMethod === "wompi";
+    }
+
+    return true;
+  };
+
   const handleConfirmOrder = async () => {
     if (!customer || cart.length === 0) return;
+
+    if (!isPaymentMethodAllowed()) {
+      alert(
+        "El método de pago seleccionado ya no está disponible. Regresa al checkout y selecciona un método válido."
+      );
+      return;
+    }
 
     try {
       setLoading(true);
@@ -226,6 +273,8 @@ export const OrderConfirmationPage = () => {
             iva_amount: ivaAmount,
             total_price: finalTotal,
             tax_mode: taxMode,
+            payment_method: paymentMethod,
+            payment_fee: paymentFee,
             status: "pendiente",
           },
         ])
@@ -275,7 +324,6 @@ export const OrderConfirmationPage = () => {
           price: item.price,
           quantity: item.quantity,
           subtotal: itemSubtotal,
-
           unit_cost: unitCost,
           base_price: Math.round(basePrice),
           tax_amount: Math.round(taxAmount),
@@ -301,6 +349,8 @@ export const OrderConfirmationPage = () => {
           ivaAmount,
           totalPrice: finalTotal,
           taxMode,
+          paymentMethod,
+          paymentFee,
           createdAt: new Date().toISOString(),
         })
       );
@@ -451,6 +501,26 @@ export const OrderConfirmationPage = () => {
               ))}
             </div>
           </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-2xl font-bold text-slate-800">
+              Método de pago seleccionado
+            </h2>
+
+            <div className="mt-4 rounded-xl bg-slate-50 p-4">
+              <p className="font-semibold text-slate-800">
+                {paymentMethod === "transferencia"
+                  ? "Transferencia bancaria / Nequi"
+                  : "Pago online seguro"}
+              </p>
+
+              <p className="mt-2 text-sm text-slate-600">
+                {paymentMethod === "transferencia"
+                  ? "Al finalizar, recibirás instrucciones para enviar el soporte de pago por WhatsApp."
+                  : "El pedido quedará registrado con método de pago online. La integración directa con Wompi se realizará en el siguiente sprint."}
+              </p>
+            </div>
+          </div>
         </div>
 
         <aside className="lg:col-span-5">
@@ -531,7 +601,7 @@ export const OrderConfirmationPage = () => {
               <p className="mt-2 text-sm text-slate-600">
                 Al confirmar, el pedido quedará registrado con snapshot
                 financiero: costo unitario, base sin IVA, IVA por producto,
-                utilidad bruta y margen.
+                utilidad bruta, margen y método de pago.
               </p>
             </div>
           </div>

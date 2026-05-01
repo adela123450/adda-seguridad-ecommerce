@@ -6,10 +6,13 @@ import { supabase } from "../lib/supabase";
 const IVA_RATE = 0.19;
 
 type TaxMode = "sin_iva" | "con_iva";
+type PaymentMode = "solo_transferencia" | "solo_wompi" | "hibrido";
+type PaymentMethod = "transferencia" | "wompi";
 
 type BusinessSettings = {
   tax_mode: TaxMode;
   tax_rate: number | string | null;
+  payment_mode?: PaymentMode | null;
 };
 
 const formatPrice = (value: number) => {
@@ -35,6 +38,9 @@ export const CheckoutPage = () => {
 
   const [taxMode, setTaxMode] = useState<TaxMode>("sin_iva");
   const [taxRate, setTaxRate] = useState(IVA_RATE);
+  const [paymentMode, setPaymentMode] = useState<PaymentMode>("hibrido");
+  const [selectedPayment, setSelectedPayment] =
+    useState<PaymentMethod>("transferencia");
 
   const subtotal = Math.round(totalPrice);
   const ivaAmount = taxMode === "con_iva" ? Math.round(subtotal * taxRate) : 0;
@@ -55,7 +61,7 @@ export const CheckoutPage = () => {
     const loadBusinessSettings = async () => {
       const { data, error } = await supabase
         .from("business_settings")
-        .select("tax_mode, tax_rate")
+        .select("tax_mode, tax_rate, payment_mode")
         .limit(1)
         .maybeSingle();
 
@@ -63,16 +69,34 @@ export const CheckoutPage = () => {
         console.error("Error cargando configuración fiscal:", error.message);
         setTaxMode("sin_iva");
         setTaxRate(IVA_RATE);
+        setPaymentMode("hibrido");
+        setSelectedPayment("transferencia");
         return;
       }
 
       const settings = data as BusinessSettings | null;
+
       const nextTaxMode: TaxMode =
         settings?.tax_mode === "con_iva" ? "con_iva" : "sin_iva";
+
       const nextTaxRate = Number(settings?.tax_rate ?? 19) / 100;
+
+      const nextPaymentMode: PaymentMode =
+        settings?.payment_mode === "solo_transferencia" ||
+        settings?.payment_mode === "solo_wompi" ||
+        settings?.payment_mode === "hibrido"
+          ? settings.payment_mode
+          : "hibrido";
 
       setTaxMode(nextTaxMode);
       setTaxRate(Number.isNaN(nextTaxRate) ? IVA_RATE : nextTaxRate);
+      setPaymentMode(nextPaymentMode);
+
+      if (nextPaymentMode === "solo_wompi") {
+        setSelectedPayment("wompi");
+      } else {
+        setSelectedPayment("transferencia");
+      }
     };
 
     loadBusinessSettings();
@@ -124,12 +148,19 @@ export const CheckoutPage = () => {
     return Object.keys(newErrors).length === 0;
   };
 
+  const isTransferAvailable =
+    paymentMode === "hibrido" || paymentMode === "solo_transferencia";
+
+  const isWompiAvailable =
+    paymentMode === "hibrido" || paymentMode === "solo_wompi";
+
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
     if (!validateForm()) return;
 
     localStorage.setItem("checkoutCustomer", JSON.stringify(formData));
+    localStorage.setItem("paymentMethod", selectedPayment);
 
     navigate("/confirmacion-pedido");
   };
@@ -167,7 +198,6 @@ export const CheckoutPage = () => {
       </div>
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
-        {/* Formulario */}
         <div className="lg:col-span-7">
           <form
             onSubmit={handleSubmit}
@@ -282,6 +312,58 @@ export const CheckoutPage = () => {
               </div>
             </div>
 
+            <div className="mt-8 rounded-2xl border border-slate-200 bg-slate-50 p-5">
+              <h3 className="text-lg font-bold text-slate-800">
+                Método de pago
+              </h3>
+
+              <p className="mt-1 text-sm text-slate-600">
+                Selecciona cómo deseas continuar con tu pedido.
+              </p>
+
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                {isTransferAvailable && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPayment("transferencia")}
+                    className={`rounded-2xl border p-5 text-left transition ${
+                      selectedPayment === "transferencia"
+                        ? "border-[#2D5398] bg-[#2D5398]/10 text-[#2D5398]"
+                        : "border-slate-200 bg-white text-slate-700 hover:border-[#2D5398]/40"
+                    }`}
+                  >
+                    <p className="text-base font-bold">
+                      Transferencia bancaria / Nequi
+                    </p>
+                    <p className="mt-2 text-sm">
+                      Recomendado para conservar el mejor precio. La confirmación
+                      se realiza enviando el soporte por WhatsApp.
+                    </p>
+                  </button>
+                )}
+
+                {isWompiAvailable && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPayment("wompi")}
+                    className={`rounded-2xl border p-5 text-left transition ${
+                      selectedPayment === "wompi"
+                        ? "border-[#2D5398] bg-[#2D5398]/10 text-[#2D5398]"
+                        : "border-slate-200 bg-white text-slate-700 hover:border-[#2D5398]/40"
+                    }`}
+                  >
+                    <p className="text-base font-bold">
+                      Pago online seguro
+                    </p>
+                    <p className="mt-2 text-sm">
+                      Opción para pago digital mediante pasarela. La validación
+                      final se realizará en el siguiente paso de integración.
+                    </p>
+                  </button>
+                )}
+              </div>
+            </div>
+
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <button
                 type="submit"
@@ -291,7 +373,7 @@ export const CheckoutPage = () => {
               </button>
 
               <Link
-                to="/cart"
+                to="/carrito"
                 className="inline-flex items-center justify-center rounded-xl border border-slate-300 px-5 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
               >
                 Volver al carrito
@@ -300,7 +382,6 @@ export const CheckoutPage = () => {
           </form>
         </div>
 
-        {/* Resumen */}
         <aside className="lg:col-span-5">
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm lg:sticky lg:top-24">
             <h2 className="text-2xl font-bold text-slate-800">
@@ -374,8 +455,8 @@ export const CheckoutPage = () => {
                 Nota del pedido
               </h3>
               <p className="mt-2 text-sm text-slate-600">
-                Este paso aún no procesa pagos. Solo prepara la información para
-                confirmar tu solicitud correctamente.
+                Este paso prepara la información del pedido y el método de pago
+                seleccionado para la confirmación.
               </p>
             </div>
           </div>

@@ -2,17 +2,20 @@ import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 
 type TaxMode = "sin_iva" | "con_iva";
+type PaymentMode = "solo_transferencia" | "solo_wompi" | "hibrido";
 
 type BusinessSettings = {
   id: string;
   company_name: string | null;
   tax_mode: TaxMode;
   tax_rate: number | string | null;
+  payment_mode: PaymentMode | null;
 };
 
 export const AdminSettingsPage = () => {
   const [settings, setSettings] = useState<BusinessSettings | null>(null);
   const [taxMode, setTaxMode] = useState<TaxMode>("sin_iva");
+  const [paymentMode, setPaymentMode] = useState<PaymentMode>("hibrido");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -22,7 +25,7 @@ export const AdminSettingsPage = () => {
 
     const { data, error } = await supabase
       .from("business_settings")
-      .select("id, company_name, tax_mode, tax_rate")
+      .select("id, company_name, tax_mode, tax_rate, payment_mode")
       .limit(1)
       .maybeSingle();
 
@@ -37,6 +40,15 @@ export const AdminSettingsPage = () => {
       const current = data as BusinessSettings;
       setSettings(current);
       setTaxMode(current.tax_mode === "con_iva" ? "con_iva" : "sin_iva");
+
+      const currentPaymentMode: PaymentMode =
+        current.payment_mode === "solo_transferencia" ||
+        current.payment_mode === "solo_wompi" ||
+        current.payment_mode === "hibrido"
+          ? current.payment_mode
+          : "hibrido";
+
+      setPaymentMode(currentPaymentMode);
     }
 
     setLoading(false);
@@ -56,6 +68,7 @@ export const AdminSettingsPage = () => {
         .update({
           tax_mode: taxMode,
           tax_rate: 19,
+          payment_mode: paymentMode,
           updated_at: new Date().toISOString(),
         })
         .eq("id", settings.id);
@@ -71,6 +84,7 @@ export const AdminSettingsPage = () => {
         company_name: "ADDA Seguridad",
         tax_mode: taxMode,
         tax_rate: 19,
+        payment_mode: paymentMode,
       });
 
       if (error) {
@@ -82,7 +96,7 @@ export const AdminSettingsPage = () => {
     }
 
     await loadSettings();
-    setMessage("Configuración fiscal actualizada correctamente.");
+    setMessage("Configuración empresarial actualizada correctamente.");
     setSaving(false);
   };
 
@@ -140,11 +154,68 @@ export const AdminSettingsPage = () => {
             </button>
           </div>
 
+          <div className="mt-10 border-t border-slate-200 pt-8">
+            <h2 className="text-xl font-bold text-slate-900">
+              Métodos de pago
+            </h2>
+
+            <p className="mt-2 text-sm text-slate-600">
+              Define cómo podrán pagar los clientes en el checkout.
+            </p>
+
+            <div className="mt-6 grid gap-4 md:grid-cols-3">
+              <button
+                type="button"
+                onClick={() => setPaymentMode("solo_transferencia")}
+                className={`rounded-3xl border p-5 text-left transition ${
+                  paymentMode === "solo_transferencia"
+                    ? "border-[#2D5398] bg-[#2D5398]/10 text-[#2D5398]"
+                    : "border-slate-200 bg-slate-50 text-slate-700"
+                }`}
+              >
+                <p className="text-lg font-bold">Solo transferencia</p>
+                <p className="mt-2 text-sm">
+                  El cliente solo verá transferencia bancaria / Nequi.
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPaymentMode("solo_wompi")}
+                className={`rounded-3xl border p-5 text-left transition ${
+                  paymentMode === "solo_wompi"
+                    ? "border-[#2D5398] bg-[#2D5398]/10 text-[#2D5398]"
+                    : "border-slate-200 bg-slate-50 text-slate-700"
+                }`}
+              >
+                <p className="text-lg font-bold">Solo Wompi</p>
+                <p className="mt-2 text-sm">
+                  El cliente solo verá pago online seguro.
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPaymentMode("hibrido")}
+                className={`rounded-3xl border p-5 text-left transition ${
+                  paymentMode === "hibrido"
+                    ? "border-[#2D5398] bg-[#2D5398]/10 text-[#2D5398]"
+                    : "border-slate-200 bg-slate-50 text-slate-700"
+                }`}
+              >
+                <p className="text-lg font-bold">Modo híbrido</p>
+                <p className="mt-2 text-sm">
+                  El cliente podrá elegir transferencia o Wompi.
+                </p>
+              </button>
+            </div>
+          </div>
+
           <button
             type="button"
             onClick={handleSave}
             disabled={saving}
-            className="mt-6 rounded-xl bg-[#2D5398] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#234684] disabled:cursor-not-allowed disabled:opacity-60"
+            className="mt-8 rounded-xl bg-[#2D5398] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#234684] disabled:cursor-not-allowed disabled:opacity-60"
           >
             {saving ? "Guardando..." : "Guardar configuración"}
           </button>

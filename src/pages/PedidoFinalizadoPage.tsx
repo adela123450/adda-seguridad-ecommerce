@@ -25,6 +25,7 @@ type LastOrderCustomer = {
 };
 
 type LastOrder = {
+  orderNumber?: string;
   customer: LastOrderCustomer;
   cart: LastOrderItem[];
   totalItems: number;
@@ -32,6 +33,8 @@ type LastOrder = {
   ivaAmount?: number;
   totalPrice: number;
   taxMode?: "sin_iva" | "con_iva";
+  paymentMethod?: "transferencia" | "wompi";
+  paymentFee?: number;
   createdAt: string;
 };
 
@@ -69,13 +72,21 @@ export const PedidoFinalizadoPage = () => {
     );
 
   const ivaAmount = order.ivaAmount ?? 0;
+  const paymentMethod = order.paymentMethod ?? "transferencia";
+
+  const paymentLabel =
+    paymentMethod === "transferencia"
+      ? "Transferencia bancaria / Nequi"
+      : "Pago online seguro";
 
   const whatsappMessage = encodeURIComponent(
     `Hola ADDA Seguridad, envío mi pedido:%0A%0A` +
+      `${order.orderNumber ? `Pedido: ${order.orderNumber}%0A` : ""}` +
       `Cliente: ${order.customer.fullName}%0A` +
       `Celular: ${order.customer.phone}%0A` +
       `Correo: ${order.customer.email}%0A` +
-      `Ciudad: ${order.customer.city}%0A%0A` +
+      `Ciudad: ${order.customer.city}%0A` +
+      `Método de pago: ${paymentLabel}%0A%0A` +
       `Subtotal: ${formatPrice(subtotal)}%0A` +
       `IVA: ${formatPrice(ivaAmount)}%0A` +
       `Total: ${formatPrice(order.totalPrice)}`
@@ -100,6 +111,35 @@ export const PedidoFinalizadoPage = () => {
           </p>
         </div>
 
+        <div className="mt-8">
+          {paymentMethod === "transferencia" ? (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+              <h2 className="text-lg font-bold text-amber-800">
+                Pago por transferencia
+              </h2>
+
+              <p className="mt-2 text-sm text-amber-800">
+                Para confirmar tu pedido, realiza el pago por transferencia
+                bancaria o Nequi y envía el soporte por WhatsApp. Un asesor de
+                ADDA Seguridad validará el pago y continuará con el proceso.
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-green-200 bg-green-50 p-5">
+              <h2 className="text-lg font-bold text-green-800">
+                Pago online seleccionado
+              </h2>
+
+              <p className="mt-2 text-sm text-green-800">
+                Tu pedido quedó registrado con método de pago online. La
+                integración directa con Wompi se completará en el siguiente
+                sprint; mientras tanto, un asesor podrá compartirte el enlace de
+                pago seguro.
+              </p>
+            </div>
+          )}
+        </div>
+
         <div className="mt-10 grid grid-cols-1 gap-8 lg:grid-cols-2">
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6">
             <h2 className="text-xl font-bold text-slate-800">
@@ -112,6 +152,7 @@ export const PedidoFinalizadoPage = () => {
               <p><strong>Correo:</strong> {order.customer.email}</p>
               <p><strong>Ciudad:</strong> {order.customer.city}</p>
               <p><strong>Dirección:</strong> {order.customer.address}</p>
+              <p><strong>Método de pago:</strong> {paymentLabel}</p>
             </div>
           </div>
 
