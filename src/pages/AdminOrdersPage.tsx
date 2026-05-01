@@ -371,17 +371,17 @@ export const AdminOrdersPage = () => {
   };
 
   return (
-    <section className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
-      <div>
-        <p className="text-sm font-semibold uppercase tracking-[0.25em] text-[#2D5398]">
-          Administración
+    <section className="mx-auto max-w-7xl px-4 py-8">
+      <div className="mb-8 overflow-hidden rounded-3xl bg-gradient-to-r from-[#101935] via-[#243C78] to-[#3F61B3] p-6 text-white shadow-xl">
+        <p className="text-sm font-semibold uppercase tracking-[0.25em] text-blue-100">
+          Panel Administrador
         </p>
 
-        <h1 className="mt-2 text-3xl font-bold text-slate-800">
+        <h1 className="mt-3 text-3xl md:text-4xl font-bold leading-tight">
           Gestión de pedidos
         </h1>
 
-        <p className="mt-2 text-slate-600">
+        <p className="mt-3 max-w-2xl text-sm md:text-base text-white/80">
           Consulta, filtra, revisa detalles y actualiza el estado de los pedidos.
         </p>
       </div>

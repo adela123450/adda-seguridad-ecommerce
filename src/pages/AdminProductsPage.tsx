@@ -1111,9 +1111,9 @@ export const AdminProductsPage = () => {
         </div>
       )}
 
-      <div className="overflow-hidden rounded-2xl bg-[#2D5398] shadow-md">
-        <div className="px-6 py-6 md:px-8 md:py-7">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-100">
+      <div className="mx-auto max-w-7xl px-4 py-8">
+        <div className="mb-8 overflow-hidden rounded-3xl bg-gradient-to-r from-[#101935] via-[#243C78] to-[#3F61B3] p-6 text-white shadow-xl">
+          <p className="text-sm font-semibold uppercase tracking-[0.25em] text-blue-100">
             Panel administrador
           </p>
 
