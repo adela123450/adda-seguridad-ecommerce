@@ -68,6 +68,16 @@ type Toast = {
   message: string;
 };
 
+type TechnicalSheetMedia = {
+  id: string;
+  product_id: string;
+  media_type: string;
+  media_role: string;
+  file_url: string;
+  file_path: string | null;
+  sort_order: number | null;
+};
+
 const initialForm: ProductForm = {
   name: "",
   slug: "",
@@ -386,6 +396,9 @@ export const AdminProductsPage = () => {
   const [taxMode, setTaxMode] = useState<TaxMode>("sin_iva");
   const [taxRate, setTaxRate] = useState(IVA_RATE);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [isUploadingTechnicalSheet, setIsUploadingTechnicalSheet] = useState(false);
+  const [currentTechnicalSheet, setCurrentTechnicalSheet] =
+    useState<TechnicalSheetMedia | null>(null);
 
   const showToast = (type: ToastType, message: string) => {
     setToast({ type, message });
@@ -471,6 +484,7 @@ export const AdminProductsPage = () => {
     setEditingId(null);
     setHasManualSlugEdit(false);
     setFormError(null);
+    setCurrentTechnicalSheet(null);
   };
 
   const handleChange = (field: keyof ProductForm, value: string | boolean) => {
@@ -549,6 +563,153 @@ export const AdminProductsPage = () => {
     }));
   };
 
+  const loadTechnicalSheet = async (productId: string) => {
+    const { data, error } = await supabase
+      .from("product_media")
+      .select("id, product_id, media_type, media_role, file_url, file_path, sort_order")
+      .eq("product_id", productId)
+      .eq("media_type", "pdf")
+      .eq("media_role", "technical_sheet")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      console.error("Load technical sheet error:", error);
+      setCurrentTechnicalSheet(null);
+      return;
+    }
+
+    setCurrentTechnicalSheet((data as TechnicalSheetMedia | null) ?? null);
+  };
+
+  const upsertTechnicalSheetMedia = async ({
+    productId,
+    fileUrl,
+    filePath,
+  }: {
+    productId: string;
+    fileUrl: string;
+    filePath: string;
+  }) => {
+    const { data: existingMedia, error: existingError } = await supabase
+      .from("product_media")
+      .select("id")
+      .eq("product_id", productId)
+      .eq("media_type", "pdf")
+      .eq("media_role", "technical_sheet")
+      .limit(1)
+      .maybeSingle();
+
+    if (existingError) {
+      throw existingError;
+    }
+
+    if (existingMedia?.id) {
+      const { error } = await supabase
+        .from("product_media")
+        .update({
+          file_url: fileUrl,
+          file_path: filePath,
+          sort_order: 10,
+        })
+        .eq("id", existingMedia.id);
+
+      if (error) {
+        throw error;
+      }
+
+      return existingMedia.id as string;
+    }
+
+    const { data, error } = await supabase
+      .from("product_media")
+      .insert({
+        product_id: productId,
+        media_type: "pdf",
+        media_role: "technical_sheet",
+        file_url: fileUrl,
+        file_path: filePath,
+        sort_order: 10,
+      })
+      .select("id")
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    return data.id as string;
+  };
+
+  const handleTechnicalSheetUpload = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+
+    if (!file) return;
+
+    if (!editingId) {
+      showToast(
+        "error",
+        "Primero guarda o edita un producto existente para asociar la ficha técnica."
+      );
+      e.target.value = "";
+      return;
+    }
+
+    const fileExtension = file.name.split(".").pop()?.toLowerCase();
+
+    if (file.type !== "application/pdf" && fileExtension !== "pdf") {
+      showToast("error", "Solo puedes subir fichas técnicas en PDF.");
+      e.target.value = "";
+      return;
+    }
+
+    try {
+      setIsUploadingTechnicalSheet(true);
+
+      const safeSlug = form.slug.trim() || slugify(form.name || "producto");
+      const filePath = `productos/${safeSlug}/ficha-tecnica.pdf`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("technical-sheets")
+        .upload(filePath, file, {
+          cacheControl: "3600",
+          upsert: true,
+        });
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      const { data } = supabase.storage
+        .from("technical-sheets")
+        .getPublicUrl(filePath);
+
+      const mediaId = await upsertTechnicalSheetMedia({
+        productId: editingId,
+        fileUrl: data.publicUrl,
+        filePath,
+      });
+
+      setCurrentTechnicalSheet({
+        id: mediaId,
+        product_id: editingId,
+        media_type: "pdf",
+        media_role: "technical_sheet",
+        file_url: data.publicUrl,
+        file_path: filePath,
+        sort_order: 10,
+      });
+
+      showToast("success", "Ficha técnica PDF subida correctamente.");
+    } catch (error) {
+      console.error("Upload technical sheet error:", error);
+      showToast("error", "No fue posible subir la ficha técnica PDF.");
+    } finally {
+      setIsUploadingTechnicalSheet(false);
+      e.target.value = "";
+    }
+  };
 
   const handleImageUpload = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -723,6 +884,8 @@ export const AdminProductsPage = () => {
     setHasManualSlugEdit(true);
     setFormError(null);
 
+    setCurrentTechnicalSheet(null);
+
     setForm({
       name: product.name ?? "",
       slug: product.slug ?? "",
@@ -744,6 +907,8 @@ export const AdminProductsPage = () => {
           : "",
       offer_label: product.offer_label ?? "",
     });
+
+    loadTechnicalSheet(product.id);
 
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -1684,6 +1849,81 @@ export const AdminProductsPage = () => {
                   Imagen conectada correctamente.
                 </div>
               )}
+            </div>
+          </div>
+
+          <div className="md:col-span-2 xl:col-span-3">
+            <label className="mb-3 block text-sm font-medium text-slate-700">
+              Ficha técnica PDF
+            </label>
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+              <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex-1">
+                  <label
+                    className={`flex items-center justify-center rounded-2xl border-2 border-dashed px-6 py-8 text-center transition ${
+                      isEditing
+                        ? "cursor-pointer border-[#2D5398]/30 bg-white hover:border-[#2D5398] hover:bg-[#2D5398]/5"
+                        : "cursor-not-allowed border-slate-200 bg-slate-100 opacity-70"
+                    }`}
+                  >
+                    <input
+                      type="file"
+                      accept="application/pdf,.pdf"
+                      onChange={handleTechnicalSheetUpload}
+                      disabled={!isEditing || isUploadingTechnicalSheet}
+                      className="hidden"
+                    />
+
+                    <div>
+                      <p className="text-sm font-semibold text-[#2D5398]">
+                        {isUploadingTechnicalSheet
+                          ? "Subiendo ficha técnica..."
+                          : currentTechnicalSheet
+                          ? "Reemplazar ficha técnica PDF"
+                          : "Seleccionar ficha técnica PDF"}
+                      </p>
+
+                      <p className="mt-1 text-xs text-slate-500">
+                        PDF técnico del producto. Se guardará en Supabase Storage y se asociará al catálogo cloud.
+                      </p>
+
+                      {!isEditing && (
+                        <p className="mt-2 text-xs font-semibold text-amber-700">
+                          Guarda el producto primero para poder asociar una ficha técnica.
+                        </p>
+                      )}
+                    </div>
+                  </label>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:min-w-[280px]">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    Estado de la ficha
+                  </p>
+
+                  {currentTechnicalSheet?.file_url ? (
+                    <div className="mt-3 space-y-3">
+                      <div className="rounded-xl bg-emerald-50 px-4 py-3 text-xs font-medium text-emerald-700">
+                        Ficha técnica conectada correctamente.
+                      </div>
+
+                      <a
+                        href={currentTechnicalSheet.file_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex w-full items-center justify-center rounded-xl bg-[#2D5398] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#234684]"
+                      >
+                        Ver PDF actual
+                      </a>
+                    </div>
+                  ) : (
+                    <div className="mt-3 rounded-xl bg-slate-100 px-4 py-3 text-xs font-medium text-slate-600">
+                      Este producto aún no tiene ficha técnica cloud asociada.
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
 

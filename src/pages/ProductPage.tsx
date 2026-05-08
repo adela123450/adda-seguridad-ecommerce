@@ -106,7 +106,6 @@ export const ProductPage = () => {
         .from("product_media")
         .select("id, media_type, media_role, file_url, sort_order")
         .eq("product_id", product.id)
-        .eq("media_type", "image")
         .order("sort_order", { ascending: true });
 
       if (!mediaError && mediaData && mediaData.length > 0) {
