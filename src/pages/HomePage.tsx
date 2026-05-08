@@ -4,7 +4,6 @@ import { Brands } from "../components/home/Brands";
 import { FeatureGrid } from "../components/home/FeatureGrid";
 import { ProductGrid } from "../components/home/ProducGrid";
 
-import { initialData } from "../data/initialData";
 import { prepareProducts } from "../helpers";
 
 import { supabase } from "../lib/supabase";
@@ -14,15 +13,7 @@ export const HomePage = () => {
     "loading" | "success" | "error"
   >("loading");
 
-  const preparedProducts = prepareProducts(initialData.products);
-
-  const newProducts = preparedProducts
-    .filter((product) => product.isNew)
-    .slice(0, 4);
-
-  const featuredProducts = preparedProducts
-    .filter((product) => product.isFeatured)
-    .slice(0, 4);
+  const [products, setProducts] = useState<any[]>([]);
 
   useEffect(() => {
     const testConnection = async () => {
@@ -42,6 +33,37 @@ export const HomePage = () => {
 
     testConnection();
   }, []);
+
+  useEffect(() => {
+    const getProducts = async () => {
+      const { data, error } = await supabase
+        .from("products")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error(
+          "Error cargando productos:",
+          error.message
+        );
+        return;
+      }
+
+      setProducts(data || []);
+    };
+
+    getProducts();
+  }, []);
+
+  const preparedProducts = prepareProducts(products);
+
+  const newProducts = preparedProducts
+    .filter((product) => product.isNew)
+    .slice(0, 4);
+
+  const featuredProducts = preparedProducts
+    .filter((product) => product.isFeatured)
+    .slice(0, 4);
 
   return (
     <div>
@@ -70,12 +92,20 @@ export const HomePage = () => {
 
       <ProductGrid
         title="Nuevos Productos"
-        products={newProducts}
+        products={
+          newProducts.length > 0
+            ? newProducts
+            : preparedProducts.slice(0, 4)
+        }
       />
 
       <ProductGrid
         title="Productos Destacados"
-        products={featuredProducts}
+        products={
+          featuredProducts.length > 0
+            ? featuredProducts
+            : preparedProducts.slice(4, 8)
+        }
       />
 
       <Brands />

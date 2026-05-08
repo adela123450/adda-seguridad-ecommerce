@@ -21,19 +21,35 @@ type Product = {
   subcategory: string;
   price: number;
   slug: string;
-  images: string[];
+
+  images?: string[];
+  image_url?: string | null;
+
   description: string;
   details: ProductDetail[];
   features: string[];
   colors: ProductColor[];
-  variants: ProductVariant[];
-  isNew: boolean;
-  isFeatured: boolean;
+  variants?: ProductVariant[];
+
+  stock?: number | string | null;
+
+  isNew?: boolean;
+  isFeatured?: boolean;
+
+  is_new?: boolean | null;
+  is_featured?: boolean | null;
+
+  has_offer?: boolean | null;
+  offer_price?: number | string | null;
+  offer_label?: string | null;
 };
 
 export const prepareProducts = (products: Product[]) => {
   return products.map((product) => {
-    const stock = product.variants?.[0]?.stock ?? 0;
+    const stock =
+      product.stock !== undefined
+        ? Number(product.stock)
+        : product.variants?.[0]?.stock ?? 0;
 
     let stockLabel = "Disponible";
 
@@ -43,6 +59,21 @@ export const prepareProducts = (products: Product[]) => {
       stockLabel = "Pocas unidades";
     }
 
+    const image =
+      product.image_url ||
+      product.images?.[0] ||
+      `/products/imagenes/${product.slug}.webp`;
+
+    const basePrice = Number(product.price ?? 0);
+    const offerPrice = Number(product.offer_price ?? 0);
+
+    const hasValidOffer =
+      Boolean(product.has_offer) &&
+      offerPrice > 0 &&
+      offerPrice < basePrice;
+
+    const finalPrice = hasValidOffer ? offerPrice : basePrice;
+
     return {
       id: product.id,
       name: product.name,
@@ -50,14 +81,27 @@ export const prepareProducts = (products: Product[]) => {
       category: product.category,
       subcategory: product.subcategory,
       slug: product.slug,
-      img: product.images?.[0] || "/img/placeholder.jpg",
-      price: product.price,
+
+      img: image,
+
+      price: finalPrice,
 
       formattedPrice: new Intl.NumberFormat("es-CO", {
         style: "currency",
         currency: "COP",
         minimumFractionDigits: 0,
-      }).format(product.price),
+      }).format(basePrice),
+
+      formattedOfferPrice: hasValidOffer
+        ? new Intl.NumberFormat("es-CO", {
+            style: "currency",
+            currency: "COP",
+            minimumFractionDigits: 0,
+          }).format(offerPrice)
+        : undefined,
+
+      hasOffer: hasValidOffer,
+      offerLabel: product.offer_label || "Oferta",
 
       description: product.description,
       details: product.details,
@@ -66,8 +110,10 @@ export const prepareProducts = (products: Product[]) => {
       stock,
       stockLabel,
 
-      isNew: product.isNew,
-      isFeatured: product.isFeatured,
+      isNew: Boolean(product.isNew ?? product.is_new),
+      isFeatured: Boolean(
+        product.isFeatured ?? product.is_featured
+      ),
     };
   });
 };

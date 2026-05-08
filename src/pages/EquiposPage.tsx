@@ -427,7 +427,7 @@ export const EquiposPage = () => {
                 return (
                   <CardProduct
                     key={product.id}
-                    img={product.image_url ?? "/placeholder-product.png"}
+                    img={product.image_url ?? ""}
                     name={product.name}
                     brand={product.brand ?? "Sin marca"}
                     formattedPrice={formatPrice(basePrice)}

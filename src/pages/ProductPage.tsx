@@ -21,6 +21,8 @@ type ProductRow = {
   offer_label: string | null;
 };
 
+const PLACEHOLDER_IMAGE = "/placeholder-product.png";
+
 const formatPrice = (value: number) => {
   return new Intl.NumberFormat("es-CO", {
     style: "currency",
@@ -35,6 +37,17 @@ const getStockLabel = (stock: number) => {
   return "Disponible";
 };
 
+const checkImageExists = (url: string) => {
+  return new Promise<boolean>((resolve) => {
+    const image = new Image();
+
+    image.onload = () => resolve(true);
+    image.onerror = () => resolve(false);
+
+    image.src = url;
+  });
+};
+
 export const ProductPage = () => {
   const { slug } = useParams();
   const { addToCart } = useCart();
@@ -44,6 +57,8 @@ export const ProductPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showToast, setShowToast] = useState(false);
+  const [galleryImages, setGalleryImages] = useState<string[]>([]);
+  const [selectedImage, setSelectedImage] = useState<string>("");
 
   useEffect(() => {
     const getProduct = async () => {
@@ -73,6 +88,45 @@ export const ProductPage = () => {
 
     getProduct();
   }, [slug]);
+
+  useEffect(() => {
+    const prepareGallery = async () => {
+      if (!product) return;
+
+      const mainImage =
+        product.image_url && product.image_url.trim() !== ""
+          ? product.image_url
+          : `/products/imagenes/${product.slug}.webp`;
+
+      const candidates = [
+        mainImage,
+        `/products/imagenes/${product.slug}-lateral.webp`,
+        `/products/imagenes/${product.slug}-posterior.webp`,
+        `/products/imagenes/${product.slug}-detalle.webp`,
+      ];
+
+      const uniqueCandidates = Array.from(new Set(candidates));
+
+      const checkedImages = await Promise.all(
+        uniqueCandidates.map(async (image) => {
+          const exists = await checkImageExists(image);
+          return exists ? image : null;
+        })
+      );
+
+      const validImages = checkedImages.filter(
+        (image): image is string => Boolean(image)
+      );
+
+      const finalImages =
+        validImages.length > 0 ? validImages : [PLACEHOLDER_IMAGE];
+
+      setGalleryImages(finalImages);
+      setSelectedImage(finalImages[0]);
+    };
+
+    prepareGallery();
+  }, [product]);
 
   useEffect(() => {
     if (!showToast) return;
@@ -118,7 +172,9 @@ export const ProductPage = () => {
       ? offerPrice
       : basePrice;
 
-  const imageUrl = product.image_url ?? "/placeholder-product.png";
+  const imageUrl = product.image_url ?? PLACEHOLDER_IMAGE;
+  const visibleImage = selectedImage || imageUrl;
+  const technicalSheetUrl = `/products/fichas_tecnicas/${product.slug}.pdf`;
   const brand = product.brand ?? "Sin marca";
   const category = product.category ?? "Sin categoría";
   const subcategory = product.subcategory ?? "Sin subcategoría";
@@ -143,7 +199,7 @@ export const ProductPage = () => {
       id: product.id,
       name: product.name,
       slug: product.slug,
-      img: imageUrl,
+      img: visibleImage,
       price: finalPrice,
       stock,
     });
@@ -156,7 +212,7 @@ export const ProductPage = () => {
       slug: product.slug,
       name: product.name,
       brand,
-      img: imageUrl,
+      img: visibleImage,
       formattedPrice,
     });
   };
@@ -192,11 +248,36 @@ export const ProductPage = () => {
             <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-md transition duration-300 hover:shadow-xl">
               <div className="flex h-[340px] items-center justify-center overflow-hidden rounded-2xl border border-slate-100 bg-gradient-to-br from-slate-50 via-white to-slate-100">
                 <img
-                  src={imageUrl}
+                  src={visibleImage}
                   alt={product.name}
                   className="h-full w-full object-contain p-4 transition duration-300 hover:scale-105"
+                  onError={() => setSelectedImage(PLACEHOLDER_IMAGE)}
                 />
               </div>
+
+              {galleryImages.length > 1 && (
+                <div className="mt-4 grid grid-cols-4 gap-2">
+                  {galleryImages.map((image) => (
+                    <button
+                      key={image}
+                      type="button"
+                      onClick={() => setSelectedImage(image)}
+                      className={`overflow-hidden rounded-xl border bg-white transition duration-300 hover:border-[#2D5398] ${
+                        selectedImage === image
+                          ? "border-[#2D5398] ring-2 ring-blue-100"
+                          : "border-slate-200"
+                      }`}
+                    >
+                      <img
+                        src={image}
+                        alt={`${product.name} vista adicional`}
+                        className="h-16 w-full object-contain p-1"
+                        onError={() => setSelectedImage(PLACEHOLDER_IMAGE)}
+                      />
+                    </button>
+                  ))}
+                </div>
+              )}
 
               <div className="mt-5">
                 <div className="flex flex-wrap items-center gap-2">
@@ -219,16 +300,18 @@ export const ProductPage = () => {
                   {formattedPrice}
                 </p>
 
-                {product.has_offer && offerPrice > 0 && offerPrice < basePrice && (
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <span className="text-sm text-slate-400 line-through">
-                      {formatPrice(basePrice)}
-                    </span>
-                    <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-semibold text-red-600">
-                      {product.offer_label || "Oferta"}
-                    </span>
-                  </div>
-                )}
+                {product.has_offer &&
+                  offerPrice > 0 &&
+                  offerPrice < basePrice && (
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <span className="text-sm text-slate-400 line-through">
+                        {formatPrice(basePrice)}
+                      </span>
+                      <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-semibold text-red-600">
+                        {product.offer_label || "Oferta"}
+                      </span>
+                    </div>
+                  )}
 
                 <p className="mt-2 text-sm text-slate-500">
                   Precio referencial sujeto a disponibilidad
@@ -337,6 +420,80 @@ export const ProductPage = () => {
 
           <aside className="lg:col-span-3">
             <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-md transition duration-300 hover:shadow-xl">
+              <a
+                href={technicalSheetUrl}
+                download
+                className="mb-6 flex w-full items-center justify-between rounded-2xl border border-[#2D5398] bg-[#2D5398] px-4 py-4 text-white shadow-md transition duration-300 hover:-translate-y-0.5 hover:shadow-xl"
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/15">
+                    <svg
+                      viewBox="0 0 24 24"
+                      className="h-7 w-7"
+                      fill="none"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="M7 3h7l4 4v14H7V3Z"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinejoin="round"
+                      />
+                      <path
+                        d="M14 3v5h5"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinejoin="round"
+                      />
+                      <path
+                        d="M9 15c1.8-3.8 3.2-3.8 4 0 .7 2.9 2.1 2.3 3-.2"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                  </div>
+
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold leading-5">
+                      Ficha técnica
+                    </p>
+                    <p className="text-xs font-medium text-blue-100">
+                      Descargar PDF
+                    </p>
+                  </div>
+                </div>
+
+                <div className="ml-3 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white text-[#2D5398]">
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-7 w-7"
+                    fill="none"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M12 4v10"
+                      stroke="currentColor"
+                      strokeWidth="1.9"
+                      strokeLinecap="round"
+                    />
+                    <path
+                      d="M7.5 10.5 12 15l4.5-4.5"
+                      stroke="currentColor"
+                      strokeWidth="1.9"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      d="M5 19h14"
+                      stroke="currentColor"
+                      strokeWidth="1.9"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                </div>
+              </a>
+
               <h2 className="border-l-4 border-[#2D5398] pl-4 text-xl font-bold text-slate-800">
                 Disponibilidad y compra
               </h2>

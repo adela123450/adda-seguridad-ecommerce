@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { FaHeart, FaRegHeart } from "react-icons/fa";
 import { useFavorites } from "../../hooks/useFavorites";
@@ -14,6 +15,19 @@ interface Props {
   offerLabel?: string;
 }
 
+const PLACEHOLDER_IMAGE = "/placeholder-product.png";
+
+const checkImageExists = (url: string) => {
+  return new Promise<boolean>((resolve) => {
+    const image = new Image();
+
+    image.onload = () => resolve(true);
+    image.onerror = () => resolve(false);
+
+    image.src = url;
+  });
+};
+
 export const CardProduct = ({
   img,
   name,
@@ -27,6 +41,32 @@ export const CardProduct = ({
 }: Props) => {
   const { toggleFavorite, isFavorite } = useFavorites();
 
+  const [imageSrc, setImageSrc] = useState<string>(PLACEHOLDER_IMAGE);
+
+  useEffect(() => {
+    const resolveImage = async () => {
+      const imageUrlFromDb = img && img.trim() !== "" ? img.trim() : "";
+      const localImage = `/products/imagenes/${slug}.webp`;
+
+      const candidates = Array.from(
+        new Set([imageUrlFromDb, localImage].filter(Boolean))
+      );
+
+      for (const candidate of candidates) {
+        const exists = await checkImageExists(candidate);
+
+        if (exists) {
+          setImageSrc(candidate);
+          return;
+        }
+      }
+
+      setImageSrc(PLACEHOLDER_IMAGE);
+    };
+
+    resolveImage();
+  }, [img, slug]);
+
   const favoriteActive = isFavorite(slug);
 
   const handleToggleFavorite = () => {
@@ -34,8 +74,9 @@ export const CardProduct = ({
       slug,
       name,
       brand,
-      img,
-      formattedPrice: hasOffer && formattedOfferPrice ? formattedOfferPrice : formattedPrice,
+      img: imageSrc,
+      formattedPrice:
+        hasOffer && formattedOfferPrice ? formattedOfferPrice : formattedPrice,
     });
   };
 
@@ -73,9 +114,10 @@ export const CardProduct = ({
           <div className="absolute inset-0 bg-gradient-to-t from-[#2D5398]/5 via-transparent to-transparent opacity-0 transition duration-300 group-hover:opacity-100" />
 
           <img
-            src={img}
+            src={imageSrc}
             alt={name}
-            className="relative z-[1] h-full w-full object-contain p-3 transition duration-300 group-hover:scale-105"
+            className="h-full w-full object-contain p-4 transition duration-300 group-hover:scale-105"
+            onError={() => setImageSrc(PLACEHOLDER_IMAGE)}
           />
         </div>
       </Link>

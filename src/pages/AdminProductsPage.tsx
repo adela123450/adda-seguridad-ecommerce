@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { FormEvent } from "react";
+import type { ChangeEvent, FormEvent } from "react";
 import { supabase } from "../lib/supabase";
 
 type ProductRow = {
@@ -385,6 +385,7 @@ export const AdminProductsPage = () => {
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [taxMode, setTaxMode] = useState<TaxMode>("sin_iva");
   const [taxRate, setTaxRate] = useState(IVA_RATE);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   const showToast = (type: ToastType, message: string) => {
     setToast({ type, message });
@@ -546,6 +547,50 @@ export const AdminProductsPage = () => {
       ...prev,
       slug: slugify(value),
     }));
+  };
+
+
+  const handleImageUpload = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      showToast("error", "Solo puedes subir archivos de imagen.");
+      return;
+    }
+
+    try {
+      setIsUploadingImage(true);
+
+      const fileExt = file.name.split(".").pop()?.toLowerCase() || "webp";
+      const safeSlug = form.slug.trim() || slugify(form.name || "producto");
+      const fileName = `${safeSlug}-${Date.now()}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("product-images")
+        .upload(fileName, file, {
+          cacheControl: "3600",
+          upsert: true,
+        });
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      const { data } = supabase.storage
+        .from("product-images")
+        .getPublicUrl(fileName);
+
+      handleChange("image_url", data.publicUrl);
+      showToast("success", "Imagen subida correctamente.");
+    } catch (error) {
+      console.error("Upload image error:", error);
+      showToast("error", "No fue posible subir la imagen.");
+    } finally {
+      setIsUploadingImage(false);
+      e.target.value = "";
+    }
   };
 
   const validateForm = () => {
@@ -1586,16 +1631,60 @@ export const AdminProductsPage = () => {
           </div>
 
           <div className="md:col-span-2 xl:col-span-3">
-            <label className="mb-2 block text-sm font-medium text-slate-700">
-              URL imagen
+            <label className="mb-3 block text-sm font-medium text-slate-700">
+              Imagen del producto
             </label>
-            <input
-              type="text"
-              value={form.image_url}
-              onChange={(e) => handleChange("image_url", e.target.value)}
-              placeholder="Por ahora déjalo vacío si aún no tienes imágenes"
-              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
-            />
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+              <div className="flex flex-col gap-5 lg:flex-row lg:items-center">
+                <div className="flex-1">
+                  <label className="flex cursor-pointer items-center justify-center rounded-2xl border-2 border-dashed border-[#2D5398]/30 bg-white px-6 py-8 text-center transition hover:border-[#2D5398] hover:bg-[#2D5398]/5">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageUpload}
+                      disabled={isUploadingImage}
+                      className="hidden"
+                    />
+
+                    <div>
+                      <p className="text-sm font-semibold text-[#2D5398]">
+                        {isUploadingImage
+                          ? "Subiendo imagen..."
+                          : "Seleccionar imagen"}
+                      </p>
+
+                      <p className="mt-1 text-xs text-slate-500">
+                        JPG, PNG o WEBP. La URL se guardará automáticamente.
+                      </p>
+                    </div>
+                  </label>
+                </div>
+
+                <div className="flex justify-center">
+                  <div className="h-36 w-36 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                    <img
+                      src={
+                        form.image_url.trim()
+                          ? form.image_url
+                          : "/placeholder-product.png"
+                      }
+                      alt="Vista previa del producto"
+                      className="h-full w-full object-contain p-3"
+                      onError={(e) => {
+                        e.currentTarget.src = "/placeholder-product.png";
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {form.image_url && (
+                <div className="mt-4 rounded-xl bg-emerald-50 px-4 py-3 text-xs font-medium text-emerald-700">
+                  Imagen conectada correctamente.
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="md:col-span-2 xl:col-span-3">
