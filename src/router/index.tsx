@@ -27,6 +27,7 @@ import { AdminResetPasswordPage } from "../pages/AdminResetPasswordPage";
 import { AdminLayout } from "../layouts/AdminLayout";
 import { ProtectedRoute } from "../components/admin/ProtectedRoute";
 import { AdminSettingsPage } from "../pages/AdminSettingsPage";
+import { AdminMultimediaMigrationPage } from "../pages/AdminMultimediaMigrationPage";
 
 export const router = createBrowserRouter([
   {
@@ -70,6 +71,10 @@ export const router = createBrowserRouter([
           {
             path: "products",
             element: <AdminProductsPage />,
+          },
+          {
+            path: "multimedia-migration",
+            element: <AdminMultimediaMigrationPage />,
           },
           {
             path: "orders",

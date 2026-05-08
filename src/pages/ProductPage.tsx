@@ -21,6 +21,14 @@ type ProductRow = {
   offer_label: string | null;
 };
 
+type ProductMediaRow = {
+  id: string;
+  media_type: string;
+  media_role: string;
+  file_url: string;
+  sort_order: number | null;
+};
+
 const PLACEHOLDER_IMAGE = "/placeholder-product.png";
 
 const formatPrice = (value: number) => {
@@ -59,6 +67,7 @@ export const ProductPage = () => {
   const [showToast, setShowToast] = useState(false);
   const [galleryImages, setGalleryImages] = useState<string[]>([]);
   const [selectedImage, setSelectedImage] = useState<string>("");
+  const [productMedia, setProductMedia] = useState<ProductMediaRow[]>([]);
 
   useEffect(() => {
     const getProduct = async () => {
@@ -93,6 +102,28 @@ export const ProductPage = () => {
     const prepareGallery = async () => {
       if (!product) return;
 
+      const { data: mediaData, error: mediaError } = await supabase
+        .from("product_media")
+        .select("id, media_type, media_role, file_url, sort_order")
+        .eq("product_id", product.id)
+        .eq("media_type", "image")
+        .order("sort_order", { ascending: true });
+
+      if (!mediaError && mediaData && mediaData.length > 0) {
+        const cloudImages = mediaData
+          .map((media) => media.file_url)
+          .filter(Boolean);
+
+        const uniqueCloudImages = Array.from(new Set(cloudImages));
+
+        if (uniqueCloudImages.length > 0) {
+          setProductMedia(mediaData as ProductMediaRow[]);
+          setGalleryImages(uniqueCloudImages);
+          setSelectedImage(uniqueCloudImages[0]);
+          return;
+        }
+      }
+
       const mainImage =
         product.image_url && product.image_url.trim() !== ""
           ? product.image_url
@@ -121,6 +152,7 @@ export const ProductPage = () => {
       const finalImages =
         validImages.length > 0 ? validImages : [PLACEHOLDER_IMAGE];
 
+      setProductMedia([]);
       setGalleryImages(finalImages);
       setSelectedImage(finalImages[0]);
     };
@@ -174,7 +206,15 @@ export const ProductPage = () => {
 
   const imageUrl = product.image_url ?? PLACEHOLDER_IMAGE;
   const visibleImage = selectedImage || imageUrl;
-  const technicalSheetUrl = `/products/fichas_tecnicas/${product.slug}.pdf`;
+
+  const technicalSheetMedia = productMedia.find(
+    (media) => media.media_role === "technical_sheet"
+  );
+
+  const technicalSheetUrl =
+    technicalSheetMedia?.file_url ??
+    `/products/fichas_tecnicas/${product.slug}.pdf`;
+
   const brand = product.brand ?? "Sin marca";
   const category = product.category ?? "Sin categoría";
   const subcategory = product.subcategory ?? "Sin subcategoría";
@@ -423,6 +463,8 @@ export const ProductPage = () => {
               <a
                 href={technicalSheetUrl}
                 download
+                target="_blank"
+                rel="noopener noreferrer"
                 className="mb-6 flex w-full items-center justify-between rounded-2xl border border-[#2D5398] bg-[#2D5398] px-4 py-4 text-white shadow-md transition duration-300 hover:-translate-y-0.5 hover:shadow-xl"
               >
                 <div className="flex min-w-0 items-center gap-3">

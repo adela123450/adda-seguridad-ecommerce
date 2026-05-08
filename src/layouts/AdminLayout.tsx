@@ -63,6 +63,10 @@ export const AdminLayout = () => {
               Productos
             </NavLink>
 
+            <NavLink to="/admin/multimedia-migration" className={navLinkClass}>
+              Multimedia cloud
+            </NavLink>
+
             <NavLink to="/admin/orders" className={navLinkClass}>
               Pedidos
             </NavLink>
