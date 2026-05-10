@@ -48,12 +48,27 @@ const getStockLabel = (stock: number) => {
 const checkImageExists = (url: string) => {
   return new Promise<boolean>((resolve) => {
     const image = new Image();
-
     image.onload = () => resolve(true);
     image.onerror = () => resolve(false);
-
     image.src = url;
   });
+};
+
+const checkPdfExists = async (url: string) => {
+  try {
+    const response = await fetch(url, {
+      method: "HEAD",
+      cache: "no-store",
+    });
+
+    if (!response.ok) return false;
+
+    const contentType = response.headers.get("content-type") ?? "";
+
+    return contentType.includes("application/pdf");
+  } catch {
+    return false;
+  }
 };
 
 export const ProductPage = () => {
@@ -68,6 +83,9 @@ export const ProductPage = () => {
   const [galleryImages, setGalleryImages] = useState<string[]>([]);
   const [selectedImage, setSelectedImage] = useState<string>("");
   const [productMedia, setProductMedia] = useState<ProductMediaRow[]>([]);
+  const [technicalSheetUrl, setTechnicalSheetUrl] = useState<string | null>(
+    null
+  );
 
   useEffect(() => {
     const getProduct = async () => {
@@ -99,8 +117,10 @@ export const ProductPage = () => {
   }, [slug]);
 
   useEffect(() => {
-    const prepareGallery = async () => {
+    const prepareGalleryAndFiles = async () => {
       if (!product) return;
+
+      setTechnicalSheetUrl(null);
 
       const { data: mediaData, error: mediaError } = await supabase
         .from("product_media")
@@ -108,55 +128,73 @@ export const ProductPage = () => {
         .eq("product_id", product.id)
         .order("sort_order", { ascending: true });
 
-      if (!mediaError && mediaData && mediaData.length > 0) {
-        const cloudImages = mediaData
-          .map((media) => media.file_url)
-          .filter(Boolean);
+      const mediaRows = !mediaError && mediaData ? (mediaData as ProductMediaRow[]) : [];
+      setProductMedia(mediaRows);
 
-        const uniqueCloudImages = Array.from(new Set(cloudImages));
+      const cloudImages = mediaRows
+        .filter((media) => media.media_type === "image")
+        .map((media) => media.file_url)
+        .filter(Boolean);
 
-        if (uniqueCloudImages.length > 0) {
-          setProductMedia(mediaData as ProductMediaRow[]);
-          setGalleryImages(uniqueCloudImages);
-          setSelectedImage(uniqueCloudImages[0]);
-          return;
-        }
+      const uniqueCloudImages = Array.from(new Set(cloudImages));
+
+      if (uniqueCloudImages.length > 0) {
+        setGalleryImages(uniqueCloudImages);
+        setSelectedImage(uniqueCloudImages[0]);
+      } else {
+        const mainImage =
+          product.image_url && product.image_url.trim() !== ""
+            ? product.image_url
+            : `/products/imagenes/${product.slug}.webp`;
+
+        const candidates = [
+          mainImage,
+          `/products/imagenes/${product.slug}-lateral.webp`,
+          `/products/imagenes/${product.slug}-posterior.webp`,
+          `/products/imagenes/${product.slug}-detalle.webp`,
+        ];
+
+        const uniqueCandidates = Array.from(new Set(candidates));
+
+        const checkedImages = await Promise.all(
+          uniqueCandidates.map(async (image) => {
+            const exists = await checkImageExists(image);
+            return exists ? image : null;
+          })
+        );
+
+        const validImages = checkedImages.filter(
+          (image): image is string => Boolean(image)
+        );
+
+        const finalImages =
+          validImages.length > 0 ? validImages : [PLACEHOLDER_IMAGE];
+
+        setGalleryImages(finalImages);
+        setSelectedImage(finalImages[0]);
       }
 
-      const mainImage =
-        product.image_url && product.image_url.trim() !== ""
-          ? product.image_url
-          : `/products/imagenes/${product.slug}.webp`;
-
-      const candidates = [
-        mainImage,
-        `/products/imagenes/${product.slug}-lateral.webp`,
-        `/products/imagenes/${product.slug}-posterior.webp`,
-        `/products/imagenes/${product.slug}-detalle.webp`,
-      ];
-
-      const uniqueCandidates = Array.from(new Set(candidates));
-
-      const checkedImages = await Promise.all(
-        uniqueCandidates.map(async (image) => {
-          const exists = await checkImageExists(image);
-          return exists ? image : null;
-        })
+      const cloudTechnicalSheet = mediaRows.find(
+        (media) =>
+          media.media_role === "technical_sheet" ||
+          media.media_type === "pdf" ||
+          media.media_type === "document"
       );
 
-      const validImages = checkedImages.filter(
-        (image): image is string => Boolean(image)
-      );
+      if (cloudTechnicalSheet?.file_url) {
+        setTechnicalSheetUrl(cloudTechnicalSheet.file_url);
+        return;
+      }
 
-      const finalImages =
-        validImages.length > 0 ? validImages : [PLACEHOLDER_IMAGE];
+      const legacyPdfUrl = `/products/fichas_tecnicas/${product.slug}.pdf`;
+      const legacyPdfExists = await checkPdfExists(legacyPdfUrl);
 
-      setProductMedia([]);
-      setGalleryImages(finalImages);
-      setSelectedImage(finalImages[0]);
+      if (legacyPdfExists) {
+        setTechnicalSheetUrl(legacyPdfUrl);
+      }
     };
 
-    prepareGallery();
+    prepareGalleryAndFiles();
   }, [product]);
 
   useEffect(() => {
@@ -205,14 +243,6 @@ export const ProductPage = () => {
 
   const imageUrl = product.image_url ?? PLACEHOLDER_IMAGE;
   const visibleImage = selectedImage || imageUrl;
-
-  const technicalSheetMedia = productMedia.find(
-    (media) => media.media_role === "technical_sheet"
-  );
-
-  const technicalSheetUrl =
-    technicalSheetMedia?.file_url ??
-    `/products/fichas_tecnicas/${product.slug}.pdf`;
 
   const brand = product.brand ?? "Sin marca";
   const category = product.category ?? "Sin categoría";
@@ -449,9 +479,7 @@ export const ProductPage = () => {
                   <div className="bg-slate-50 px-4 py-3 font-semibold text-slate-700">
                     Estado
                   </div>
-                  <div className="px-4 py-3 text-slate-600">
-                    {stockLabel}
-                  </div>
+                  <div className="px-4 py-3 text-slate-600">{stockLabel}</div>
                 </div>
               </div>
             </div>
@@ -459,15 +487,54 @@ export const ProductPage = () => {
 
           <aside className="lg:col-span-3">
             <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-md transition duration-300 hover:shadow-xl">
-              <a
-                href={technicalSheetUrl}
-                download
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mb-6 flex w-full items-center justify-between rounded-2xl border border-[#2D5398] bg-[#2D5398] px-4 py-4 text-white shadow-md transition duration-300 hover:-translate-y-0.5 hover:shadow-xl"
-              >
-                <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/15">
+              {technicalSheetUrl && (
+                <a
+                  href={technicalSheetUrl}
+                  download
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mb-6 flex w-full items-center justify-between rounded-2xl border border-[#2D5398] bg-[#2D5398] px-4 py-4 text-white shadow-md transition duration-300 hover:-translate-y-0.5 hover:shadow-xl"
+                >
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/15">
+                      <svg
+                        viewBox="0 0 24 24"
+                        className="h-7 w-7"
+                        fill="none"
+                        aria-hidden="true"
+                      >
+                        <path
+                          d="M7 3h7l4 4v14H7V3Z"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          strokeLinejoin="round"
+                        />
+                        <path
+                          d="M14 3v5h5"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          strokeLinejoin="round"
+                        />
+                        <path
+                          d="M9 15c1.8-3.8 3.2-3.8 4 0 .7 2.9 2.1 2.3 3-.2"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                    </div>
+
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold leading-5">
+                        Ficha técnica
+                      </p>
+                      <p className="text-xs font-medium text-blue-100">
+                        Descargar PDF
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="ml-3 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white text-[#2D5398]">
                     <svg
                       viewBox="0 0 24 24"
                       className="h-7 w-7"
@@ -475,65 +542,28 @@ export const ProductPage = () => {
                       aria-hidden="true"
                     >
                       <path
-                        d="M7 3h7l4 4v14H7V3Z"
+                        d="M12 4v10"
                         stroke="currentColor"
-                        strokeWidth="1.8"
+                        strokeWidth="1.9"
+                        strokeLinecap="round"
+                      />
+                      <path
+                        d="M7.5 10.5 12 15l4.5-4.5"
+                        stroke="currentColor"
+                        strokeWidth="1.9"
+                        strokeLinecap="round"
                         strokeLinejoin="round"
                       />
                       <path
-                        d="M14 3v5h5"
+                        d="M5 19h14"
                         stroke="currentColor"
-                        strokeWidth="1.8"
-                        strokeLinejoin="round"
-                      />
-                      <path
-                        d="M9 15c1.8-3.8 3.2-3.8 4 0 .7 2.9 2.1 2.3 3-.2"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
+                        strokeWidth="1.9"
                         strokeLinecap="round"
                       />
                     </svg>
                   </div>
-
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold leading-5">
-                      Ficha técnica
-                    </p>
-                    <p className="text-xs font-medium text-blue-100">
-                      Descargar PDF
-                    </p>
-                  </div>
-                </div>
-
-                <div className="ml-3 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white text-[#2D5398]">
-                  <svg
-                    viewBox="0 0 24 24"
-                    className="h-7 w-7"
-                    fill="none"
-                    aria-hidden="true"
-                  >
-                    <path
-                      d="M12 4v10"
-                      stroke="currentColor"
-                      strokeWidth="1.9"
-                      strokeLinecap="round"
-                    />
-                    <path
-                      d="M7.5 10.5 12 15l4.5-4.5"
-                      stroke="currentColor"
-                      strokeWidth="1.9"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                    <path
-                      d="M5 19h14"
-                      stroke="currentColor"
-                      strokeWidth="1.9"
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                </div>
-              </a>
+                </a>
+              )}
 
               <h2 className="border-l-4 border-[#2D5398] pl-4 text-xl font-bold text-slate-800">
                 Disponibilidad y compra
