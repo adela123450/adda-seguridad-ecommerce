@@ -44,6 +44,15 @@ type Product = {
   offer_label?: string | null;
 };
 
+const PLACEHOLDER_IMAGE = "/placeholder-product.png";
+
+const getProductImage = (product: Product) => {
+  const cloudImage = product.image_url?.trim();
+  const legacyImage = product.images?.[0]?.trim();
+
+  return cloudImage || legacyImage || PLACEHOLDER_IMAGE;
+};
+
 export const prepareProducts = (products: Product[]) => {
   return products.map((product) => {
     const stock =
@@ -58,11 +67,6 @@ export const prepareProducts = (products: Product[]) => {
     } else if (stock <= 5) {
       stockLabel = "Pocas unidades";
     }
-
-    const image =
-      product.image_url ||
-      product.images?.[0] ||
-      `/products/imagenes/${product.slug}.webp`;
 
     const basePrice = Number(product.price ?? 0);
     const offerPrice = Number(product.offer_price ?? 0);
@@ -82,7 +86,7 @@ export const prepareProducts = (products: Product[]) => {
       subcategory: product.subcategory,
       slug: product.slug,
 
-      img: image,
+      img: getProductImage(product),
 
       price: finalPrice,
 
@@ -111,9 +115,7 @@ export const prepareProducts = (products: Product[]) => {
       stockLabel,
 
       isNew: Boolean(product.isNew ?? product.is_new),
-      isFeatured: Boolean(
-        product.isFeatured ?? product.is_featured
-      ),
+      isFeatured: Boolean(product.isFeatured ?? product.is_featured),
     };
   });
 };
@@ -124,7 +126,5 @@ export const getPreparedProductBySlug = (
 ) => {
   const preparedProducts = prepareProducts(products);
 
-  return preparedProducts.find(
-    (product) => product.slug === slug
-  );
+  return preparedProducts.find((product) => product.slug === slug);
 };

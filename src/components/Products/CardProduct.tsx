@@ -17,17 +17,6 @@ interface Props {
 
 const PLACEHOLDER_IMAGE = "/placeholder-product.png";
 
-const checkImageExists = (url: string) => {
-  return new Promise<boolean>((resolve) => {
-    const image = new Image();
-
-    image.onload = () => resolve(true);
-    image.onerror = () => resolve(false);
-
-    image.src = url;
-  });
-};
-
 export const CardProduct = ({
   img,
   name,
@@ -40,32 +29,12 @@ export const CardProduct = ({
   offerLabel,
 }: Props) => {
   const { toggleFavorite, isFavorite } = useFavorites();
-
   const [imageSrc, setImageSrc] = useState<string>(PLACEHOLDER_IMAGE);
 
   useEffect(() => {
-    const resolveImage = async () => {
-      const imageUrlFromDb = img && img.trim() !== "" ? img.trim() : "";
-      const localImage = `/products/imagenes/${slug}.webp`;
-
-      const candidates = Array.from(
-        new Set([imageUrlFromDb, localImage].filter(Boolean))
-      );
-
-      for (const candidate of candidates) {
-        const exists = await checkImageExists(candidate);
-
-        if (exists) {
-          setImageSrc(candidate);
-          return;
-        }
-      }
-
-      setImageSrc(PLACEHOLDER_IMAGE);
-    };
-
-    resolveImage();
-  }, [img, slug]);
+    const imageUrlFromDb = img && img.trim() !== "" ? img.trim() : "";
+    setImageSrc(imageUrlFromDb || PLACEHOLDER_IMAGE);
+  }, [img]);
 
   const favoriteActive = isFavorite(slug);
 

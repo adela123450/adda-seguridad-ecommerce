@@ -396,9 +396,13 @@ export const AdminProductsPage = () => {
   const [taxMode, setTaxMode] = useState<TaxMode>("sin_iva");
   const [taxRate, setTaxRate] = useState(IVA_RATE);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
-  const [isUploadingTechnicalSheet, setIsUploadingTechnicalSheet] = useState(false);
+  const [isUploadingTechnicalSheet, setIsUploadingTechnicalSheet] =
+    useState(false);
   const [currentTechnicalSheet, setCurrentTechnicalSheet] =
     useState<TechnicalSheetMedia | null>(null);
+  const [isRemovingImage, setIsRemovingImage] = useState(false);
+  const [isRemovingTechnicalSheet, setIsRemovingTechnicalSheet] =
+    useState(false);
 
   const showToast = (type: ToastType, message: string) => {
     setToast({ type, message });
@@ -751,6 +755,94 @@ export const AdminProductsPage = () => {
     } finally {
       setIsUploadingImage(false);
       e.target.value = "";
+    }
+  };
+
+  const getProductImagePathFromUrl = (imageUrl: string) => {
+    try {
+      const url = new URL(imageUrl);
+      const pathParts = url.pathname.split("/product-images/");
+
+      if (pathParts.length < 2) return null;
+
+      return decodeURIComponent(pathParts[1]);
+    } catch {
+      return null;
+    }
+  };
+
+  const handleRemoveImage = async () => {
+    if (!editingId || !form.image_url) return;
+
+    const confirmed = window.confirm(
+      "¿Seguro que deseas eliminar la imagen actual del producto?"
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setIsRemovingImage(true);
+
+      const filePath = getProductImagePathFromUrl(form.image_url);
+
+      if (filePath) {
+        await supabase.storage.from("product-images").remove([filePath]);
+      }
+
+      const { error } = await supabase
+        .from("products")
+        .update({ image_url: null })
+        .eq("id", editingId);
+
+      if (error) {
+        throw error;
+      }
+
+      handleChange("image_url", "");
+      showToast("success", "Imagen eliminada correctamente.");
+      await fetchProducts();
+    } catch (error) {
+      console.error("Remove image error:", error);
+      showToast("error", "No fue posible eliminar la imagen.");
+    } finally {
+      setIsRemovingImage(false);
+    }
+  };
+
+  const handleRemoveTechnicalSheet = async () => {
+    if (!currentTechnicalSheet?.id) return;
+
+    const confirmed = window.confirm(
+      "¿Seguro que deseas eliminar la ficha técnica PDF?"
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setIsRemovingTechnicalSheet(true);
+
+      if (currentTechnicalSheet.file_path) {
+        await supabase.storage
+          .from("technical-sheets")
+          .remove([currentTechnicalSheet.file_path]);
+      }
+
+      const { error } = await supabase
+        .from("product_media")
+        .delete()
+        .eq("id", currentTechnicalSheet.id);
+
+      if (error) {
+        throw error;
+      }
+
+      setCurrentTechnicalSheet(null);
+      showToast("success", "Ficha técnica eliminada correctamente.");
+    } catch (error) {
+      console.error("Remove technical sheet error:", error);
+      showToast("error", "No fue posible eliminar la ficha técnica.");
+    } finally {
+      setIsRemovingTechnicalSheet(false);
     }
   };
 
@@ -1845,8 +1937,21 @@ export const AdminProductsPage = () => {
               </div>
 
               {form.image_url && (
-                <div className="mt-4 rounded-xl bg-emerald-50 px-4 py-3 text-xs font-medium text-emerald-700">
-                  Imagen conectada correctamente.
+                <div className="mt-4 space-y-3">
+                  <div className="rounded-xl bg-emerald-50 px-4 py-3 text-xs font-medium text-emerald-700">
+                    Imagen conectada correctamente.
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleRemoveImage}
+                    disabled={isRemovingImage}
+                    className="inline-flex rounded-xl bg-red-100 px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-200 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isRemovingImage
+                      ? "Eliminando imagen..."
+                      : "Eliminar imagen actual"}
+                  </button>
                 </div>
               )}
             </div>
@@ -1916,6 +2021,17 @@ export const AdminProductsPage = () => {
                       >
                         Ver PDF actual
                       </a>
+
+                      <button
+                        type="button"
+                        onClick={handleRemoveTechnicalSheet}
+                        disabled={isRemovingTechnicalSheet}
+                        className="inline-flex w-full items-center justify-center rounded-xl bg-red-100 px-4 py-3 text-sm font-semibold text-red-700 transition hover:bg-red-200 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {isRemovingTechnicalSheet
+                          ? "Eliminando PDF..."
+                          : "Eliminar ficha técnica"}
+                      </button>
                     </div>
                   ) : (
                     <div className="mt-3 rounded-xl bg-slate-100 px-4 py-3 text-xs font-medium text-slate-600">
