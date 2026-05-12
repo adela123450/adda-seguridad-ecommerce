@@ -13,6 +13,9 @@ import {
   AdminFinancePage,
   AdminExpensesPage,
   AdminCatalogPage,
+  AdminTemplatesPage,
+  AdminQuotesPage,
+  AdminQuoteEditorPage,
 } from "../pages";
 
 import { CheckoutPage } from "../pages/CheckoutPage";
@@ -96,6 +99,18 @@ export const router = createBrowserRouter([
           {
             path: "catalog",
             element: <AdminCatalogPage />,
+          },
+          {
+            path: "templates",
+            element: <AdminTemplatesPage />,
+          },
+          {
+            path: "quotes",
+            element: <AdminQuotesPage />,
+          },
+          {
+            path: "quotes/:quoteId",
+            element: <AdminQuoteEditorPage />,
           },
         ],
       },
