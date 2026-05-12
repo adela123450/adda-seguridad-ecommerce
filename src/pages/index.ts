@@ -8,3 +8,5 @@ export * from "./AdminDashboardPage";
 export * from "./AdminOrdersPage";
 export * from "./AdminFinancePage";
 export * from "./AdminExpensesPage";
+export * from "./AdminSettingsPage";
+export * from "./AdminCatalogPage";
