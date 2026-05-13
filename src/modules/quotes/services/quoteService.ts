@@ -1,5 +1,5 @@
 import { supabase } from "../../../lib/supabase";
-import type { QuoteTotals } from "../helpers/calculateQuoteTotals.ts";
+import type { QuoteTotals } from "../helpers/calculateQuoteTotals";
 
 export type QuoteStatus =
   | "draft"
@@ -27,6 +27,10 @@ export type QuoteDetail = {
   commercial_terms: string | null;
   warranty_terms: string | null;
   exclusions: string | null;
+  parent_quote_id?: string | null;
+  version_number?: number | null;
+  version_label?: string | null;
+  version_notes?: string | null;
 };
 
 export type QuoteItem = {
@@ -95,7 +99,7 @@ export const getQuoteById = async (quoteId: string) => {
   const { data, error } = await supabase
     .from("quotes")
     .select(
-      "id, quote_number, customer_name, customer_phone, customer_email, customer_city, project_address, technical_scope, status, subtotal, tax_amount, total, issue_date, expiration_date, commercial_terms, warranty_terms, exclusions"
+      "id, quote_number, customer_name, customer_phone, customer_email, customer_city, project_address, technical_scope, status, subtotal, tax_amount, total, issue_date, expiration_date, commercial_terms, warranty_terms, exclusions, parent_quote_id, version_number, version_label, version_notes"
     )
     .eq("id", quoteId)
     .single();
@@ -166,3 +170,204 @@ export const deleteQuoteItem = async (quoteId: string, itemId: string) => {
 
   if (error) throw error;
 };
+
+const duplicateQuote = async (quoteId: string) => {
+  const { data: originalQuote, error: quoteError } = await supabase
+    .from("quotes")
+    .select("*")
+    .eq("id", quoteId)
+    .single();
+
+  if (quoteError) throw quoteError;
+
+  const { data: originalItems, error: itemsError } = await supabase
+    .from("quote_items")
+    .select("*")
+    .eq("quote_id", quoteId)
+    .order("created_at", { ascending: true });
+
+  if (itemsError) throw itemsError;
+
+  const today = new Date();
+  const expirationDate = new Date();
+  expirationDate.setDate(today.getDate() + 7);
+
+  const { data: newQuote, error: createQuoteError } = await supabase
+    .from("quotes")
+    .insert({
+      customer_name: originalQuote.customer_name,
+      customer_phone: originalQuote.customer_phone,
+      customer_email: originalQuote.customer_email,
+      customer_city: originalQuote.customer_city,
+      project_address: originalQuote.project_address,
+      technical_scope: originalQuote.technical_scope,
+      commercial_terms: originalQuote.commercial_terms,
+      warranty_terms: originalQuote.warranty_terms,
+      exclusions: originalQuote.exclusions,
+      subtotal: originalQuote.subtotal ?? 0,
+      tax_amount: originalQuote.tax_amount ?? 0,
+      total: originalQuote.total ?? 0,
+      internal_cost_total: originalQuote.internal_cost_total ?? 0,
+      gross_profit: originalQuote.gross_profit ?? 0,
+      margin_percentage: originalQuote.margin_percentage ?? 0,
+      validity_days: 7,
+      status: "draft",
+      parent_quote_id: null,
+      version_number: 1,
+      version_label: null,
+      version_notes: null,
+      issue_date: today.toISOString().split("T")[0],
+      expiration_date: expirationDate.toISOString().split("T")[0],
+    })
+    .select("id, quote_number")
+    .single();
+
+  if (createQuoteError) throw createQuoteError;
+
+  if (originalItems && originalItems.length > 0) {
+    const clonedItems = originalItems.map((item) => ({
+      quote_id: newQuote.id,
+      item_type: item.item_type,
+      item_name: item.item_name,
+      item_description: item.item_description,
+      sku: item.sku,
+      quantity: item.quantity,
+      unit_cost: item.unit_cost,
+      unit_price: item.unit_price,
+      discount: item.discount,
+      subtotal: item.subtotal,
+      total_cost: item.total_cost,
+      profit: item.profit,
+      margin_percentage: item.margin_percentage,
+      notes: item.notes,
+    }));
+
+    const { error: cloneItemsError } = await supabase
+      .from("quote_items")
+      .insert(clonedItems);
+
+    if (cloneItemsError) throw cloneItemsError;
+  }
+
+  return newQuote as { id: string; quote_number: string };
+};
+
+const getNextQuoteVersionNumber = async (quoteId: string) => {
+  const { data: originalQuote, error: quoteError } = await supabase
+    .from("quotes")
+    .select("id, parent_quote_id, version_number")
+    .eq("id", quoteId)
+    .single();
+
+  if (quoteError) throw quoteError;
+
+  const rootQuoteId = originalQuote.parent_quote_id ?? originalQuote.id;
+
+  const { data: versions, error: versionsError } = await supabase
+    .from("quotes")
+    .select("version_number")
+    .or(`id.eq.${rootQuoteId},parent_quote_id.eq.${rootQuoteId}`);
+
+  if (versionsError) throw versionsError;
+
+  const maxVersion = (versions ?? []).reduce((max, version) => {
+    const currentVersion = Number(version.version_number ?? 1);
+    return currentVersion > max ? currentVersion : max;
+  }, 1);
+
+  return {
+    rootQuoteId,
+    nextVersionNumber: maxVersion + 1,
+  };
+};
+
+const createQuoteVersion = async (quoteId: string) => {
+  const { rootQuoteId, nextVersionNumber } = await getNextQuoteVersionNumber(quoteId);
+
+  const { data: originalQuote, error: quoteError } = await supabase
+    .from("quotes")
+    .select("*")
+    .eq("id", quoteId)
+    .single();
+
+  if (quoteError) throw quoteError;
+
+  const { data: originalItems, error: itemsError } = await supabase
+    .from("quote_items")
+    .select("*")
+    .eq("quote_id", quoteId)
+    .order("created_at", { ascending: true });
+
+  if (itemsError) throw itemsError;
+
+  const today = new Date();
+  const expirationDate = new Date();
+  expirationDate.setDate(today.getDate() + 7);
+
+  const { data: newQuote, error: createQuoteError } = await supabase
+    .from("quotes")
+    .insert({
+      customer_name: originalQuote.customer_name,
+      customer_phone: originalQuote.customer_phone,
+      customer_email: originalQuote.customer_email,
+      customer_city: originalQuote.customer_city,
+      project_address: originalQuote.project_address,
+      technical_scope: originalQuote.technical_scope,
+      commercial_terms: originalQuote.commercial_terms,
+      warranty_terms: originalQuote.warranty_terms,
+      exclusions: originalQuote.exclusions,
+      subtotal: originalQuote.subtotal ?? 0,
+      tax_amount: originalQuote.tax_amount ?? 0,
+      total: originalQuote.total ?? 0,
+      internal_cost_total: originalQuote.internal_cost_total ?? 0,
+      gross_profit: originalQuote.gross_profit ?? 0,
+      margin_percentage: originalQuote.margin_percentage ?? 0,
+      validity_days: 7,
+      status: "draft",
+      parent_quote_id: rootQuoteId,
+      version_number: nextVersionNumber,
+      version_label: `V${nextVersionNumber}`,
+      version_notes: `Versión creada a partir de ${originalQuote.quote_number}.`,
+      issue_date: today.toISOString().split("T")[0],
+      expiration_date: expirationDate.toISOString().split("T")[0],
+    })
+    .select("id, quote_number, version_number, version_label")
+    .single();
+
+  if (createQuoteError) throw createQuoteError;
+
+  if (originalItems && originalItems.length > 0) {
+    const clonedItems = originalItems.map((item) => ({
+      quote_id: newQuote.id,
+      item_type: item.item_type,
+      item_name: item.item_name,
+      item_description: item.item_description,
+      sku: item.sku,
+      quantity: item.quantity,
+      unit_cost: item.unit_cost,
+      unit_price: item.unit_price,
+      discount: item.discount,
+      subtotal: item.subtotal,
+      total_cost: item.total_cost,
+      profit: item.profit,
+      margin_percentage: item.margin_percentage,
+      notes: item.notes,
+    }));
+
+    const { error: cloneItemsError } = await supabase
+      .from("quote_items")
+      .insert(clonedItems);
+
+    if (cloneItemsError) throw cloneItemsError;
+  }
+
+  return newQuote as {
+    id: string;
+    quote_number: string;
+    version_number: number;
+    version_label: string | null;
+  };
+};
+
+
+export { duplicateQuote, createQuoteVersion };

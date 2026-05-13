@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
+import { createQuoteVersion, duplicateQuote } from "../modules/quotes/services/quoteService";
 
 type Quote = {
   id: string;
@@ -21,6 +22,9 @@ type Quote = {
   total: number;
   expiration_date: string;
   created_at: string;
+  parent_quote_id: string | null;
+  version_number: number | null;
+  version_label: string | null;
 };
 
 type NewQuoteForm = {
@@ -60,6 +64,8 @@ export const AdminQuotesPage = () => {
   const [statusFilter, setStatusFilter] = useState("todas");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [form, setForm] = useState<NewQuoteForm>(initialForm);
+  const [duplicatingQuoteId, setDuplicatingQuoteId] = useState<string | null>(null);
+  const [versioningQuoteId, setVersioningQuoteId] = useState<string | null>(null);
 
   const loadQuotes = async () => {
     setLoading(true);
@@ -68,7 +74,7 @@ export const AdminQuotesPage = () => {
     const { data, error } = await supabase
       .from("quotes")
       .select(
-        "id, quote_number, customer_name, customer_phone, customer_email, technical_scope, customer_city, status, total, expiration_date, created_at"
+        "id, quote_number, customer_name, customer_phone, customer_email, technical_scope, customer_city, status, total, expiration_date, created_at, parent_quote_id, version_number, version_label"
       )
       .order("created_at", { ascending: false });
 
@@ -223,6 +229,60 @@ export const AdminQuotesPage = () => {
 
     setSuccessMessage(`Cotización ${quote.quote_number} eliminada correctamente.`);
     await loadQuotes();
+  };
+
+
+  const handleDuplicateQuote = async (quote: Quote) => {
+    setDuplicatingQuoteId(quote.id);
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+      const duplicatedQuote = await duplicateQuote(quote.id);
+
+      setSuccessMessage(
+        `Cotización ${quote.quote_number} duplicada correctamente.`
+      );
+
+      await loadQuotes();
+
+      navigate(`/admin/quotes/${duplicatedQuote.id}`);
+    } catch (error) {
+      const currentError = error as Error;
+
+      setErrorMessage(
+        `No fue posible duplicar la cotización: ${currentError.message}`
+      );
+    } finally {
+      setDuplicatingQuoteId(null);
+    }
+  };
+
+
+  const handleCreateQuoteVersion = async (quote: Quote) => {
+    setVersioningQuoteId(quote.id);
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+      const versionQuote = await createQuoteVersion(quote.id);
+
+      setSuccessMessage(
+        `Versión ${versionQuote.version_label ?? `V${versionQuote.version_number}`} creada correctamente desde ${quote.quote_number}.`
+      );
+
+      await loadQuotes();
+
+      navigate(`/admin/quotes/${versionQuote.id}`);
+    } catch (error) {
+      const currentError = error as Error;
+
+      setErrorMessage(
+        `No fue posible crear la versión de la cotización: ${currentError.message}`
+      );
+    } finally {
+      setVersioningQuoteId(null);
+    }
   };
 
   const statusLabels = {
@@ -390,8 +450,15 @@ export const AdminQuotesPage = () => {
                 <tbody>
                   {filteredQuotes.map((quote) => (
                     <tr key={quote.id} className="border-b border-slate-100">
-                      <td className="px-4 py-4 font-bold text-[#2D5398]">
-                        {quote.quote_number}
+                      <td className="px-4 py-4">
+                        <p className="font-bold text-[#2D5398]">
+                          {quote.quote_number}
+                        </p>
+                        {quote.version_number && quote.version_number > 1 && (
+                          <span className="mt-1 inline-flex rounded-full bg-amber-50 px-2 py-1 text-[11px] font-bold text-amber-700">
+                            {quote.version_label ?? `V${quote.version_number}`}
+                          </span>
+                        )}
                       </td>
 
                       <td className="px-4 py-4">
@@ -433,6 +500,28 @@ export const AdminQuotesPage = () => {
                             className="rounded-xl bg-[#2D5398]/10 px-3 py-2 text-xs font-bold text-[#2D5398] transition hover:bg-[#2D5398]/20"
                           >
                             Abrir
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDuplicateQuote(quote)}
+                            disabled={duplicatingQuoteId === quote.id}
+                            className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-bold text-amber-700 transition hover:bg-amber-100 disabled:opacity-60"
+                          >
+                            {duplicatingQuoteId === quote.id
+                              ? "Duplicando..."
+                              : "Duplicar"}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleCreateQuoteVersion(quote)}
+                            disabled={versioningQuoteId === quote.id}
+                            className="rounded-xl bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-700 transition hover:bg-indigo-100 disabled:opacity-60"
+                          >
+                            {versioningQuoteId === quote.id
+                              ? "Creando..."
+                              : "Crear versión"}
                           </button>
 
                           {quote.status === "draft" ? (
