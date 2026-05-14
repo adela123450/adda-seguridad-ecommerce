@@ -9,7 +9,6 @@ export * from "./AdminOrdersPage";
 export * from "./AdminFinancePage";
 export * from "./AdminExpensesPage";
 export * from "./AdminSettingsPage";
-export * from "./AdminCatalogPage";
 export * from "./AdminTemplatesPage";
 export * from "./AdminQuotesPage";
 export * from "./AdminQuoteEditorPage";

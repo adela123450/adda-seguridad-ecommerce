@@ -63,10 +63,6 @@ export const AdminLayout = () => {
               Productos
             </NavLink>
 
-            <NavLink to="/admin/catalog" className={navLinkClass}>
-              Catálogo técnico
-            </NavLink>
-
             <NavLink to="/admin/templates" className={navLinkClass}>
               Plantillas
             </NavLink>

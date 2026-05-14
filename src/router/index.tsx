@@ -12,7 +12,6 @@ import {
   AdminOrdersPage,
   AdminFinancePage,
   AdminExpensesPage,
-  AdminCatalogPage,
   AdminTemplatesPage,
   AdminQuotesPage,
   AdminQuoteEditorPage,
@@ -95,11 +94,7 @@ export const router = createBrowserRouter([
           {
             path: "settings",
             element: <AdminSettingsPage />,
-          },
-          {
-            path: "catalog",
-            element: <AdminCatalogPage />,
-          },
+          }, 
           {
             path: "templates",
             element: <AdminTemplatesPage />,
