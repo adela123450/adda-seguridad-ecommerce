@@ -16,6 +16,8 @@ type ProductRow = {
   image_url: string | null;
   stock: number | string | null;
   sale_unit: string | null;
+  public_sale_unit: string | null;
+  quote_unit: string | null;
   purchase_unit: string | null;
   unit_content: number | string | null;
   quote_by_unit: boolean | null;
@@ -39,7 +41,8 @@ type ProductForm = {
   description: string;
   image_url: string;
   stock: string;
-  sale_unit: string;
+  public_sale_unit: string;
+  quote_unit: string;
   purchase_unit: string;
   unit_content: string;
   quote_by_unit: boolean;
@@ -100,7 +103,8 @@ const initialForm: ProductForm = {
   description: "",
   image_url: "",
   stock: "0",
-  sale_unit: "unidad",
+  public_sale_unit: "unidad",
+  quote_unit: "unidad",
   purchase_unit: "unidad",
   unit_content: "1",
   quote_by_unit: false,
@@ -187,6 +191,77 @@ const calculateSuggestedSalePrice = (
 const roundPriceToHundred = (value: number) => {
   if (value <= 0) return 0;
   return Math.ceil(value / 100) * 100;
+};
+
+
+type ProportionalPricingInput = {
+  price: number | string | null | undefined;
+  costPrice: number | string | null | undefined;
+  unitContent: number | string | null | undefined;
+  quoteByUnit: boolean | null | undefined;
+};
+
+type ProportionalPricingResult = {
+  isProportional: boolean;
+  unitContent: number;
+  unitSalePrice: number;
+  unitCostPrice: number;
+  unitProfit: number;
+  unitMargin: number;
+};
+
+const toSafeNumber = (value: number | string | null | undefined) => {
+  const numericValue = Number(value ?? 0);
+  return Number.isFinite(numericValue) ? numericValue : 0;
+};
+
+const calculateProportionalPricing = ({
+  price,
+  costPrice,
+  unitContent,
+  quoteByUnit,
+}: ProportionalPricingInput): ProportionalPricingResult => {
+  const safePrice = toSafeNumber(price);
+  const safeCostPrice = toSafeNumber(costPrice);
+  const safeUnitContent = toSafeNumber(unitContent);
+  const isProportional = Boolean(quoteByUnit) && safeUnitContent > 0;
+
+  const unitSalePrice = isProportional
+    ? safePrice / safeUnitContent
+    : safePrice;
+
+  const unitCostPrice = isProportional
+    ? safeCostPrice / safeUnitContent
+    : safeCostPrice;
+
+  const unitProfit = unitSalePrice - unitCostPrice;
+  const unitMargin =
+    unitSalePrice > 0 ? (unitProfit / unitSalePrice) * 100 : 0;
+
+  return {
+    isProportional,
+    unitContent: safeUnitContent,
+    unitSalePrice,
+    unitCostPrice,
+    unitProfit,
+    unitMargin,
+  };
+};
+
+const calculateProportionalSubtotal = (
+  quantity: number | string | null | undefined,
+  unitSalePrice: number
+) => {
+  const safeQuantity = toSafeNumber(quantity);
+  return safeQuantity * unitSalePrice;
+};
+
+const calculateProportionalTotalCost = (
+  quantity: number | string | null | undefined,
+  unitCostPrice: number
+) => {
+  const safeQuantity = toSafeNumber(quantity);
+  return safeQuantity * unitCostPrice;
 };
 
 
@@ -473,7 +548,7 @@ export const AdminProductsPage = () => {
     const { data, error } = await supabase
       .from("products")
       .select(
-        "id, name, slug, sku, brand, category, subcategory, price, cost_price, description, image_url, stock, sale_unit, purchase_unit, unit_content, quote_by_unit, has_offer, offer_price, offer_label, created_at"
+        "id, name, slug, sku, brand, category, subcategory, price, cost_price, description, image_url, stock, sale_unit, public_sale_unit, quote_unit, purchase_unit, unit_content, quote_by_unit, has_offer, offer_price, offer_label, created_at"
       )
       .order("created_at", { ascending: false });
 
@@ -922,7 +997,10 @@ export const AdminProductsPage = () => {
       description: form.description.trim() || null,
       image_url: form.image_url.trim() || null,
       stock: Math.round(Number(form.stock)),
-      sale_unit: form.sale_unit || "unidad",
+      // Mantener sale_unit por compatibilidad legacy mientras el resto del proyecto migra.
+      sale_unit: form.public_sale_unit || "unidad",
+      public_sale_unit: form.public_sale_unit || "unidad",
+      quote_unit: form.quote_unit || "unidad",
       purchase_unit: form.purchase_unit || "unidad",
       unit_content: Number(form.unit_content || 1),
       quote_by_unit: form.quote_by_unit,
@@ -954,7 +1032,7 @@ export const AdminProductsPage = () => {
         .from("products")
         .insert(payload)
         .select(
-          "id, name, slug, sku, brand, category, subcategory, price, cost_price, description, image_url, stock, sale_unit, purchase_unit, unit_content, quote_by_unit, has_offer, offer_price, offer_label, created_at"
+          "id, name, slug, sku, brand, category, subcategory, price, cost_price, description, image_url, stock, sale_unit, public_sale_unit, quote_unit, purchase_unit, unit_content, quote_by_unit, has_offer, offer_price, offer_label, created_at"
         )
         .single();
 
@@ -1010,7 +1088,8 @@ export const AdminProductsPage = () => {
       description: product.description ?? "",
       image_url: product.image_url ?? "",
       stock: String(product.stock ?? 0),
-      sale_unit: product.sale_unit ?? "unidad",
+      public_sale_unit: product.public_sale_unit ?? product.sale_unit ?? "unidad",
+      quote_unit: product.quote_unit ?? product.sale_unit ?? "unidad",
       purchase_unit: product.purchase_unit ?? "unidad",
       unit_content: String(product.unit_content ?? 1),
       quote_by_unit: Boolean(product.quote_by_unit),
@@ -1360,6 +1439,91 @@ export const AdminProductsPage = () => {
   const isFormLowMargin = !isFormLoss && formRealMargin < 15;
   const isFormHealthyMargin = formRealMargin >= 30;
 
+  const projectedTaxAmount =
+    taxMode === "con_iva" ? Math.round(suggestedSalePrice * taxRate) : 0;
+  const projectedCustomerTotalWithTax = suggestedSalePrice + projectedTaxAmount;
+  const projectedPaymentGatewayCost =
+    form.include_wompi_fee_in_price && suggestedSalePrice > 0
+      ? Math.round(projectedCustomerTotalWithTax * WOMPI_FEE_RATE + WOMPI_FIXED_FEE)
+      : 0;
+  const projectedContributionProfit =
+    suggestedSalePrice - projectedPaymentGatewayCost - formCostPrice;
+  const projectedMargin =
+    suggestedSalePrice > 0
+      ? (projectedContributionProfit / suggestedSalePrice) * 100
+      : 0;
+  const projectedPriceSafetyMargin = suggestedSalePrice - breakEvenPrice;
+
+  const proportionalPreview = calculateProportionalPricing({
+    price: formEffectiveSalePrice,
+    costPrice: formCostPrice,
+    unitContent: form.unit_content,
+    quoteByUnit: form.quote_by_unit,
+  });
+  const proportionalExampleQuantity = proportionalPreview.isProportional
+    ? Math.min(proportionalPreview.unitContent, 100)
+    : 1;
+  const proportionalExampleSubtotal = calculateProportionalSubtotal(
+    proportionalExampleQuantity,
+    proportionalPreview.unitSalePrice
+  );
+  const proportionalExampleTotalCost = calculateProportionalTotalCost(
+    proportionalExampleQuantity,
+    proportionalPreview.unitCostPrice
+  );
+  const proportionalExampleProfit =
+    proportionalExampleSubtotal - proportionalExampleTotalCost;
+  const proportionalExampleMargin =
+    proportionalExampleSubtotal > 0
+      ? (proportionalExampleProfit / proportionalExampleSubtotal) * 100
+      : 0;
+
+  // Precio proyectado para cotizaciones de proyecto.
+  // En proyectos con instalación normalmente NO se absorbe Wompi,
+  // porque el pago suele manejarse por transferencia/anticipo/acuerdo comercial.
+  const quoteSuggestedSalePrice = roundPriceToHundred(
+    calculateSuggestedSalePrice(
+      formCostPrice,
+      desiredMarginValue,
+      false
+    )
+  );
+
+  const proportionalProjectedPreview = calculateProportionalPricing({
+    price: quoteSuggestedSalePrice,
+    costPrice: formCostPrice,
+    unitContent: form.unit_content,
+    quoteByUnit: form.quote_by_unit,
+  });
+
+  const SectionHeader = ({
+    title,
+    description,
+    badge,
+  }: {
+    title: string;
+    description: string;
+    badge?: string;
+  }) => (
+    <summary className="flex cursor-pointer list-none flex-col gap-3 rounded-2xl bg-slate-50 px-5 py-4 transition hover:bg-slate-100 md:flex-row md:items-center md:justify-between">
+      <div>
+        <h3 className="text-lg font-bold text-slate-900">{title}</h3>
+        <p className="mt-1 text-sm leading-6 text-slate-500">{description}</p>
+      </div>
+
+      <div className="flex items-center gap-3">
+        {badge && (
+          <span className="inline-flex w-fit rounded-full bg-[#2D5398]/10 px-3 py-1.5 text-xs font-bold text-[#2D5398]">
+            {badge}
+          </span>
+        )}
+        <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-500 shadow-sm">
+          Abrir / cerrar
+        </span>
+      </div>
+    </summary>
+  );
+
   const PaginationControls = () => (
     <div className="mt-6 flex flex-col gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:flex-row md:items-center md:justify-between">
       <div className="text-sm font-medium text-slate-600">
@@ -1474,607 +1638,553 @@ export const AdminProductsPage = () => {
           </div>
         )}
 
-        <form
-          onSubmit={handleSubmit}
-          className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3"
-        >
-          <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">
-              Nombre
-            </label>
-            <input
-              type="text"
-              value={form.name}
-              onChange={(e) => handleChange("name", e.target.value)}
-              placeholder="Ej: Cámara domo Dahua 1080p"
-              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
+        <form onSubmit={handleSubmit} className="mt-6 space-y-5">
+          <details open className="group rounded-3xl border border-slate-200 bg-white shadow-sm">
+            <SectionHeader
+              title="1. Información comercial"
+              description="Datos mínimos para identificar, clasificar y publicar el producto en el catálogo maestro ERP."
+              badge={isEditing ? "Edición activa" : "Nuevo producto"}
             />
-          </div>
 
-          <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">
-              URL amigable
-            </label>
-            <input
-              type="text"
-              value={form.slug}
-              onChange={(e) => handleSlugChange(e.target.value)}
-              placeholder="Ej: camara-domo-dahua-1080p"
-              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
-            />
-          </div>
-
-          <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">
-              SKU
-            </label>
-            <input
-              type="text"
-              value={form.sku}
-              onChange={(e) => handleChange("sku", e.target.value)}
-              placeholder="Ej: CAM-DH-D-001"
-              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
-            />
-          </div>
-
-          <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">
-              Marca
-            </label>
-            <select
-              value={form.brand}
-              onChange={(e) => handleChange("brand", e.target.value)}
-              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
-            >
-              <option value="">Selecciona una marca</option>
-              {brandOptions.map((brand) => (
-                <option key={brand} value={brand}>
-                  {brand}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">
-              Categoría
-            </label>
-            <select
-              value={form.category}
-              onChange={(e) => handleCategoryChange(e.target.value)}
-              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
-            >
-              <option value="">Selecciona una categoría</option>
-              {categoryOptions.map((category) => (
-                <option key={category} value={category}>
-                  {category}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">
-              Subcategoría
-            </label>
-            <select
-              value={form.subcategory}
-              onChange={(e) => handleChange("subcategory", e.target.value)}
-              disabled={!form.category}
-              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#2D5398] disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
-            >
-              <option value="">
-                {form.category
-                  ? "Selecciona una subcategoría"
-                  : "Primero selecciona una categoría"}
-              </option>
-              {formSubcategoryOptions.map((subcategory) => (
-                <option key={subcategory} value={subcategory}>
-                  {subcategory}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">
-              Precio de venta
-            </label>
-            <input
-              type="number"
-              step="1"
-              min="0"
-              value={form.price}
-              onChange={(e) => handleChange("price", e.target.value)}
-              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
-            />
-          </div>
-
-          <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">
-              Costo del producto
-            </label>
-            <input
-              type="number"
-              step="1"
-              min="0"
-              value={form.cost_price}
-              onChange={(e) => handleChange("cost_price", e.target.value)}
-              placeholder="Costo real de compra"
-              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
-            />
-            <p className="mt-1 text-xs text-slate-500">
-              Base para utilidad bruta y margen comercial.
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-[#2D5398]/15 bg-[#2D5398]/5 p-5 md:col-span-2 xl:col-span-3">
-            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+            <div className="grid grid-cols-1 gap-5 p-5 md:grid-cols-2 xl:grid-cols-3">
               <div>
-                <h3 className="text-lg font-bold text-slate-900">
-                  Precio inteligente PRO
-                </h3>
-                <p className="mt-1 text-sm text-slate-600">
-                  Define el precio desde el costo, el margen objetivo y la
-                  decisión de absorber la pasarela dentro de un precio único.
-                </p>
+                <label className="mb-2 block text-sm font-medium text-slate-700">Nombre</label>
+                <input
+                  type="text"
+                  value={form.name}
+                  onChange={(e) => handleChange("name", e.target.value)}
+                  placeholder="Ej: Cámara domo Dahua 1080p"
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
+                />
               </div>
 
-              <span className="inline-flex w-fit rounded-full bg-white px-3 py-1.5 text-xs font-bold text-[#2D5398] shadow-sm">
-                Precio único para cliente
-              </span>
-            </div>
-
-            <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_1fr_1fr_auto]">
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">
-                  Margen deseado %
-                </label>
+                <label className="mb-2 block text-sm font-medium text-slate-700">URL amigable</label>
                 <input
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  max="90"
-                  value={form.desired_margin}
-                  onChange={(e) =>
-                    handleChange("desired_margin", e.target.value)
-                  }
-                  placeholder="Ej: 30"
+                  type="text"
+                  value={form.slug}
+                  onChange={(e) => handleSlugChange(e.target.value)}
+                  placeholder="Ej: camara-domo-dahua-1080p"
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">SKU</label>
+                <input
+                  type="text"
+                  value={form.sku}
+                  onChange={(e) => handleChange("sku", e.target.value)}
+                  placeholder="Ej: CAM-DH-D-001"
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">Marca</label>
+                <select
+                  value={form.brand}
+                  onChange={(e) => handleChange("brand", e.target.value)}
                   className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
-                />
+                >
+                  <option value="">Selecciona una marca</option>
+                  {brandOptions.map((brand) => (
+                    <option key={brand} value={brand}>{brand}</option>
+                  ))}
+                </select>
               </div>
 
-              <label className="flex min-h-[74px] items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={form.include_wompi_fee_in_price}
-                  onChange={(e) =>
-                    handleChange(
-                      "include_wompi_fee_in_price",
-                      e.target.checked
-                    )
-                  }
-                  className="h-4 w-4 rounded border-slate-300"
-                />
-                Absorber costo Wompi en el precio sugerido
-              </label>
-
-              <article className="rounded-xl border border-slate-200 bg-white p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  Precio sugerido
-                </p>
-                <p className="mt-2 text-2xl font-bold text-[#2D5398]">
-                  {formatPrice(suggestedSalePrice)}
-                </p>
-                <p className="mt-1 text-xs text-slate-500">
-                  {form.include_wompi_fee_in_price
-                    ? "Incluye costo variable de pasarela."
-                    : "Calculado solo con margen comercial."}
-                </p>
-              </article>
-
-              <button
-                type="button"
-                disabled={suggestedSalePrice <= 0}
-                onClick={() =>
-                  handleChange("price", String(suggestedSalePrice))
-                }
-                className="inline-flex min-h-[74px] items-center justify-center rounded-xl bg-[#2D5398] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#234684] disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                Aplicar precio sugerido
-              </button>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:col-span-2 xl:col-span-3">
-            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
               <div>
-                <h3 className="text-lg font-bold text-slate-900">
-                  Análisis de rentabilidad del producto
-                </h3>
-                <p className="mt-1 text-sm text-slate-500">
-                  Lectura contable del precio actual u oferta activa. El IVA no se trata como ingreso; si está activo, se calcula aparte para el cliente.
-                </p>
+                <label className="mb-2 block text-sm font-medium text-slate-700">Categoría</label>
+                <select
+                  value={form.category}
+                  onChange={(e) => handleCategoryChange(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
+                >
+                  <option value="">Selecciona una categoría</option>
+                  {categoryOptions.map((category) => (
+                    <option key={category} value={category}>{category}</option>
+                  ))}
+                </select>
               </div>
 
-              <span
-                className={`inline-flex w-fit rounded-full px-3 py-1.5 text-xs font-bold ${
-                  isFormLoss
-                    ? "bg-red-100 text-red-700"
-                    : isFormLowMargin
-                    ? "bg-amber-100 text-amber-700"
-                    : isFormHealthyMargin
-                    ? "bg-emerald-100 text-emerald-700"
-                    : "bg-blue-100 text-[#2D5398]"
-                }`}
-              >
-                {isFormLoss
-                  ? "Riesgo de pérdida"
-                  : isFormLowMargin
-                  ? "Margen bajo"
-                  : isFormHealthyMargin
-                  ? "Rentable"
-                  : "En evaluación"}
-              </span>
-            </div>
-
-            <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-              <article className="rounded-2xl bg-slate-50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  Base de venta sin IVA
-                </p>
-                <p className="mt-2 text-xl font-bold text-slate-900">
-                  {formatPrice(formAccountingRevenue)}
-                </p>
-                <p className="mt-1 text-xs text-slate-500">
-                  Precio del producto usado para margen. El IVA se calcula aparte si está activo.
-                </p>
-              </article>
-
-              <article className="rounded-2xl bg-slate-50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  IVA al cliente
-                </p>
-                <p className="mt-2 text-xl font-bold text-slate-900">
-                  {formatPrice(formTaxAmount)}
-                </p>
-                <p className="mt-1 text-xs text-slate-500">
-                  {taxMode === "con_iva"
-                    ? "Se suma en checkout, no afecta utilidad."
-                    : "Configuración actual sin IVA."}
-                </p>
-              </article>
-
-              <article className="rounded-2xl bg-slate-50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  Costo variable pasarela
-                </p>
-                <p className="mt-2 text-xl font-bold text-slate-900">
-                  {formatPrice(formPaymentGatewayCost)}
-                </p>
-                <p className="mt-1 text-xs text-slate-500">
-                  {form.include_wompi_fee_in_price
-                    ? "Estimado con 3.2% + $900 sobre el total pagado por el cliente."
-                    : "No se descuenta en este escenario."}
-                </p>
-              </article>
-
-              <article className="rounded-2xl bg-slate-50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  Utilidad contributiva
-                </p>
-                <p
-                  className={`mt-2 text-xl font-bold ${
-                    formContributionProfit < 0
-                      ? "text-red-700"
-                      : "text-emerald-700"
-                  }`}
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">Subcategoría</label>
+                <select
+                  value={form.subcategory}
+                  onChange={(e) => handleChange("subcategory", e.target.value)}
+                  disabled={!form.category}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#2D5398] disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                 >
-                  {formatPrice(formContributionProfit)}
-                </p>
-                <p className="mt-1 text-xs text-slate-500">
-                  Después de costo de compra y pasarela.
-                </p>
-              </article>
+                  <option value="">{form.category ? "Selecciona una subcategoría" : "Primero selecciona una categoría"}</option>
+                  {formSubcategoryOptions.map((subcategory) => (
+                    <option key={subcategory} value={subcategory}>{subcategory}</option>
+                  ))}
+                </select>
+              </div>
 
-              <article className="rounded-2xl bg-slate-50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  Margen real
-                </p>
-                <p
-                  className={`mt-2 text-xl font-bold ${
-                    isFormLoss
-                      ? "text-red-700"
-                      : isFormLowMargin
-                      ? "text-amber-700"
-                      : "text-emerald-700"
-                  }`}
-                >
-                  {formatPercent(formRealMargin)}
-                </p>
-                <p className="mt-1 text-xs text-slate-500">
-                  Utilidad contributiva / base de venta sin IVA.
-                </p>
-              </article>
-            </div>
-
-            <div className="mt-4 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-              <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  Precio mínimo sin pérdida
-                </p>
-                <p className="mt-2 text-2xl font-bold text-slate-900">
-                  {formatPrice(breakEvenPrice)}
-                </p>
-                <p
-                  className={`mt-2 text-sm font-semibold ${
-                    priceSafetyMargin < 0 ? "text-red-700" : "text-emerald-700"
-                  }`}
-                >
-                  Colchón frente al mínimo: {formatPrice(priceSafetyMargin)}
-                </p>
-              </article>
-
-              <article
-                className={`rounded-2xl p-4 text-sm leading-6 ${
-                  isFormLoss
-                    ? "bg-red-50 text-red-700"
-                    : isFormLowMargin
-                    ? "bg-amber-50 text-amber-700"
-                    : "bg-emerald-50 text-emerald-700"
-                }`}
-              >
-                {isFormLoss ? (
-                  <p>
-                    Contablemente no conviene: el precio evaluado no cubre el
-                    costo de compra y los costos variables asociados a la venta.
-                  </p>
-                ) : isFormLowMargin ? (
-                  <p>
-                    Operación viable, pero con margen bajo. Antes de aprobar
-                    descuentos revisa garantía, logística, empaque y gastos
-                    operativos para no afectar la utilidad neta.
-                  </p>
-                ) : (
-                  <p>
-                    Escenario saludable: el producto conserva utilidad después
-                    del costo de compra y la pasarela absorbida. La utilidad neta
-                    final dependerá de gastos operativos, logística e impuestos.
-                  </p>
-                )}
-
-                {form.has_offer && formOfferPrice > 0 && (
-                  <p className="mt-3 font-semibold">
-                    Oferta activa: descuento de {formatPrice(formDiscountValue)}
-                    ({formatPercent(formDiscountPercent)}). El análisis ya está
-                    evaluando el precio de oferta.
-                  </p>
-                )}
-              </article>
-            </div>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 md:col-span-2 xl:col-span-3">
-            <div className="mb-4">
-              <h3 className="text-lg font-bold text-slate-900">Oferta del producto</h3>
-              <p className="mt-1 text-sm text-slate-500">Actívala solo si el análisis de rentabilidad mantiene utilidad positiva.</p>
-            </div>
-
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:gap-6">
-              <label className="flex items-center gap-3 text-sm font-medium text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={form.has_offer}
-                  onChange={(e) => handleChange("has_offer", e.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300"
+              <div className="md:col-span-2 xl:col-span-3">
+                <label className="mb-2 block text-sm font-medium text-slate-700">Descripción</label>
+                <textarea
+                  value={form.description}
+                  onChange={(e) => handleChange("description", e.target.value)}
+                  rows={3}
+                  placeholder="Describe el producto, sus usos principales y notas comerciales."
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
                 />
-                Activar oferta segura
-              </label>
+              </div>
+            </div>
+          </details>
 
-              {form.has_offer && (
-                <>
+          <details open className="group rounded-3xl border border-slate-200 bg-white shadow-sm">
+            <SectionHeader
+              title="2. Pricing & rentabilidad ERP"
+              description="Define precio, costo, stock, margen deseado, Wompi, IVA, oferta y rentabilidad real/proyectada."
+              badge="Finanzas PRO"
+            />
+
+            <div className="space-y-5 p-5">
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">Precio de venta actual</label>
                   <input
                     type="number"
                     step="1"
                     min="0"
-                    value={form.offer_price}
-                    onChange={(e) => handleChange("offer_price", e.target.value)}
-                    placeholder="Precio en oferta"
-                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398] md:max-w-[220px]"
+                    value={form.price}
+                    onChange={(e) => handleChange("price", e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
                   />
+                  <p className="mt-1 text-xs text-slate-500">Es el precio real guardado y usado por ecommerce.</p>
+                </div>
 
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">Costo del producto</label>
                   <input
-                    type="text"
-                    value={form.offer_label}
-                    onChange={(e) => handleChange("offer_label", e.target.value)}
-                    placeholder="Etiqueta de oferta"
-                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398] md:max-w-[240px]"
+                    type="number"
+                    step="1"
+                    min="0"
+                    value={form.cost_price}
+                    onChange={(e) => handleChange("cost_price", e.target.value)}
+                    placeholder="Costo real de compra"
+                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
                   />
-                </>
-              )}
-            </div>
-          </div>
-
-
-          <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">
-              Stock
-            </label>
-            <input
-              type="number"
-              step="1"
-              min="0"
-              value={form.stock}
-              onChange={(e) => handleChange("stock", e.target.value)}
-              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
-            />
-          </div>
-
-          <div className="rounded-2xl border border-[#2D5398]/15 bg-[#2D5398]/5 p-5 md:col-span-2 xl:col-span-3">
-            <div className="mb-4">
-              <h3 className="text-lg font-bold text-slate-900">
-                Unidades comerciales y cotización
-              </h3>
-              <p className="mt-1 text-sm text-slate-500">
-                Configura cómo se compra el producto y cómo se cotiza. Útil para cables por metro, mano de obra por punto o servicios por hora.
-              </p>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">
-                  Unidad de venta
-                </label>
-                <select
-                  value={form.sale_unit}
-                  onChange={(e) => handleChange("sale_unit", e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
-                >
-                  <option value="unidad">Unidad</option>
-                  <option value="metro">Metro</option>
-                  <option value="hora">Hora</option>
-                  <option value="punto">Punto</option>
-                  <option value="tramo">Tramo</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">
-                  Unidad de compra
-                </label>
-                <select
-                  value={form.purchase_unit}
-                  onChange={(e) => handleChange("purchase_unit", e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
-                >
-                  <option value="unidad">Unidad</option>
-                  <option value="rollo">Rollo</option>
-                  <option value="caja">Caja</option>
-                  <option value="paquete">Paquete</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">
-                  Contenido por unidad de compra
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  step="0.01"
-                  value={form.unit_content}
-                  onChange={(e) => handleChange("unit_content", e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
-                  placeholder="Ej: 304"
-                />
-                <p className="mt-1 text-xs text-slate-500">
-                  Ejemplo: un rollo trae 304 metros.
-                </p>
-              </div>
-
-              <label className="flex min-h-[74px] items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={form.quote_by_unit}
-                  onChange={(e) => handleChange("quote_by_unit", e.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300"
-                />
-                <span>
-                  <span className="block font-semibold text-slate-700">
-                    Cotización proporcional
-                  </span>
-                  <span className="mt-1 block text-xs font-normal text-slate-500">
-                    Calcula el valor por metro, hora, punto o tramo.
-                  </span>
-                </span>
-              </label>
-            </div>
-          </div>
-
-          <div className="md:col-span-2 xl:col-span-3">
-            <label className="mb-3 block text-sm font-medium text-slate-700">
-              Imagen del producto
-            </label>
-
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-              <div className="flex flex-col gap-5 lg:flex-row lg:items-center">
-                <div className="flex-1">
-                  <label className="flex cursor-pointer items-center justify-center rounded-2xl border-2 border-dashed border-[#2D5398]/30 bg-white px-6 py-8 text-center transition hover:border-[#2D5398] hover:bg-[#2D5398]/5">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleImageUpload}
-                      disabled={isUploadingImage}
-                      className="hidden"
-                    />
-
-                    <div>
-                      <p className="text-sm font-semibold text-[#2D5398]">
-                        {isUploadingImage
-                          ? "Subiendo imagen..."
-                          : "Seleccionar imagen"}
-                      </p>
-
-                      <p className="mt-1 text-xs text-slate-500">
-                        JPG, PNG o WEBP. La URL se guardará automáticamente.
-                      </p>
-                    </div>
-                  </label>
+                  <p className="mt-1 text-xs text-slate-500">Base para utilidad y margen comercial.</p>
                 </div>
 
-                <div className="flex justify-center">
-                  <div className="h-36 w-36 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                    <img
-                      src={
-                        form.image_url.trim()
-                          ? form.image_url
-                          : "/placeholder-product.png"
-                      }
-                      alt="Vista previa del producto"
-                      className="h-full w-full object-contain p-3"
-                      onError={(e) => {
-                        e.currentTarget.src = "/placeholder-product.png";
-                      }}
-                    />
-                  </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">Stock</label>
+                  <input
+                    type="number"
+                    step="1"
+                    min="0"
+                    value={form.stock}
+                    onChange={(e) => handleChange("stock", e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
+                  />
+                  <p className="mt-1 text-xs text-slate-500">Control operativo base del catálogo.</p>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">Margen deseado %</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="90"
+                    value={form.desired_margin}
+                    onChange={(e) => handleChange("desired_margin", e.target.value)}
+                    placeholder="Ej: 30"
+                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
+                  />
+                  <p className="mt-1 text-xs text-slate-500">Simula el precio sugerido; no cambia el precio hasta aplicar.</p>
                 </div>
               </div>
 
-              {form.image_url && (
-                <div className="mt-4 space-y-3">
-                  <div className="rounded-xl bg-emerald-50 px-4 py-3 text-xs font-medium text-emerald-700">
-                    Imagen conectada correctamente.
+              <div className="grid gap-4 lg:grid-cols-[1fr_1fr_1fr_auto]">
+                <label className="flex min-h-[74px] items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={form.include_wompi_fee_in_price}
+                    onChange={(e) => handleChange("include_wompi_fee_in_price", e.target.checked)}
+                    className="mt-1 h-4 w-4 rounded border-slate-300"
+                  />
+                  <span>
+                    <span className="block font-semibold text-slate-800">Absorber costo Wompi</span>
+                    <span className="mt-1 block text-xs font-normal leading-5 text-slate-500">
+                      Recomendado para ventas ecommerce. En cotizaciones con instalación normalmente se deja desactivado salvo pago por pasarela.
+                    </span>
+                  </span>
+                </label>
+
+                <article className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Precio sugerido</p>
+                  <p className="mt-2 text-2xl font-bold text-[#2D5398]">{formatPrice(suggestedSalePrice)}</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {form.include_wompi_fee_in_price ? "Incluye costo estimado de pasarela." : "Calculado con margen comercial."}
+                  </p>
+                </article>
+
+                <article className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Margen proyectado</p>
+                  <p className={`mt-2 text-2xl font-bold ${projectedMargin < 15 ? "text-amber-700" : "text-emerald-700"}`}>
+                    {formatPercent(projectedMargin)}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">Si aplicas el precio sugerido.</p>
+                </article>
+
+                <button
+                  type="button"
+                  disabled={suggestedSalePrice <= 0}
+                  onClick={() => handleChange("price", String(suggestedSalePrice))}
+                  className="inline-flex min-h-[74px] items-center justify-center rounded-xl bg-[#2D5398] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#234684] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Aplicar precio sugerido
+                </button>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900">Análisis de rentabilidad del producto</h3>
+                    <p className="mt-1 text-sm text-slate-500">
+                      El margen real se calcula con el precio actual. El margen proyectado se calcula con el precio sugerido.
+                    </p>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={handleRemoveImage}
-                    disabled={isRemovingImage}
-                    className="inline-flex rounded-xl bg-red-100 px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-200 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {isRemovingImage
-                      ? "Eliminando imagen..."
-                      : "Eliminar imagen actual"}
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="md:col-span-2 xl:col-span-3">
-            <label className="mb-3 block text-sm font-medium text-slate-700">
-              Ficha técnica PDF
-            </label>
-
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-              <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex-1">
-                  <label
-                    className={`flex items-center justify-center rounded-2xl border-2 border-dashed px-6 py-8 text-center transition ${
-                      isEditing
-                        ? "cursor-pointer border-[#2D5398]/30 bg-white hover:border-[#2D5398] hover:bg-[#2D5398]/5"
-                        : "cursor-not-allowed border-slate-200 bg-slate-100 opacity-70"
+                  <span
+                    className={`inline-flex w-fit rounded-full px-3 py-1.5 text-xs font-bold ${
+                      isFormLoss
+                        ? "bg-red-100 text-red-700"
+                        : isFormLowMargin
+                        ? "bg-amber-100 text-amber-700"
+                        : isFormHealthyMargin
+                        ? "bg-emerald-100 text-emerald-700"
+                        : "bg-blue-100 text-[#2D5398]"
                     }`}
                   >
+                    {isFormLoss ? "Riesgo de pérdida" : isFormLowMargin ? "Margen bajo" : isFormHealthyMargin ? "Rentable" : "En evaluación"}
+                  </span>
+                </div>
+
+                <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+                  <article className="rounded-2xl bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Base sin IVA</p>
+                    <p className="mt-2 text-xl font-bold text-slate-900">{formatPrice(formAccountingRevenue)}</p>
+                    <p className="mt-1 text-xs text-slate-500">Precio actual/oferta activa.</p>
+                  </article>
+
+                  <article className="rounded-2xl bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">IVA al cliente</p>
+                    <p className="mt-2 text-xl font-bold text-slate-900">{formatPrice(formTaxAmount)}</p>
+                    <p className="mt-1 text-xs text-slate-500">{taxMode === "con_iva" ? "Se suma en checkout." : "Modo actual sin IVA."}</p>
+                  </article>
+
+                  <article className="rounded-2xl bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Costo Wompi</p>
+                    <p className="mt-2 text-xl font-bold text-slate-900">{formatPrice(formPaymentGatewayCost)}</p>
+                    <p className="mt-1 text-xs text-slate-500">{form.include_wompi_fee_in_price ? "3.2% + $900 estimado." : "No aplicado."}</p>
+                  </article>
+
+                  <article className="rounded-2xl bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Utilidad actual</p>
+                    <p className={`mt-2 text-xl font-bold ${formContributionProfit < 0 ? "text-red-700" : "text-emerald-700"}`}>
+                      {formatPrice(formContributionProfit)}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">Después de costo y pasarela.</p>
+                  </article>
+
+                  <article className="rounded-2xl bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Margen real actual</p>
+                    <p className={`mt-2 text-xl font-bold ${isFormLoss ? "text-red-700" : isFormLowMargin ? "text-amber-700" : "text-emerald-700"}`}>
+                      {formatPercent(formRealMargin)}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">No cambia hasta aplicar precio.</p>
+                  </article>
+
+                  <article className="rounded-2xl bg-blue-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-[#2D5398]">Margen proyectado</p>
+                    <p className={`mt-2 text-xl font-bold ${projectedMargin < 15 ? "text-amber-700" : "text-[#2D5398]"}`}>
+                      {formatPercent(projectedMargin)}
+                    </p>
+                    <p className="mt-1 text-xs text-[#2D5398]">Con precio sugerido.</p>
+                  </article>
+                </div>
+
+                <div className="mt-4 grid gap-4 lg:grid-cols-3">
+                  <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Precio mínimo sin pérdida</p>
+                    <p className="mt-2 text-2xl font-bold text-slate-900">{formatPrice(breakEvenPrice)}</p>
+                    <p className={`mt-2 text-sm font-semibold ${priceSafetyMargin < 0 ? "text-red-700" : "text-emerald-700"}`}>
+                      Colchón actual: {formatPrice(priceSafetyMargin)}
+                    </p>
+                    <p className={`mt-1 text-sm font-semibold ${projectedPriceSafetyMargin < 0 ? "text-red-700" : "text-[#2D5398]"}`}>
+                      Colchón proyectado: {formatPrice(projectedPriceSafetyMargin)}
+                    </p>
+                  </article>
+
+                  <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Utilidad proyectada</p>
+                    <p className={`mt-2 text-2xl font-bold ${projectedContributionProfit < 0 ? "text-red-700" : "text-emerald-700"}`}>
+                      {formatPrice(projectedContributionProfit)}
+                    </p>
+                    <p className="mt-2 text-sm text-slate-500">Calculada con precio sugerido, IVA fiscal y Wompi si está activo.</p>
+                  </article>
+
+                  <article className={`rounded-2xl p-4 text-sm leading-6 ${isFormLoss ? "bg-red-50 text-red-700" : isFormLowMargin ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>
+                    {isFormLoss ? (
+                      <p>El precio actual no cubre adecuadamente el costo y los costos variables. Revisa antes de publicar o cotizar.</p>
+                    ) : isFormLowMargin ? (
+                      <p>Operación viable, pero con margen bajo. Considera garantía, logística, empaque y gastos operativos.</p>
+                    ) : (
+                      <p>Escenario saludable con el precio actual. La utilidad neta final dependerá de gastos operativos, logística e impuestos.</p>
+                    )}
+                    {form.has_offer && formOfferPrice > 0 && (
+                      <p className="mt-3 font-semibold">Oferta activa: descuento de {formatPrice(formDiscountValue)} ({formatPercent(formDiscountPercent)}).</p>
+                    )}
+                  </article>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <div className="mb-4">
+                  <h3 className="text-lg font-bold text-slate-900">Oferta del producto</h3>
+                  <p className="mt-1 text-sm text-slate-500">Actívala solo si el análisis mantiene utilidad positiva.</p>
+                </div>
+
+                <div className="flex flex-col gap-4 md:flex-row md:items-center md:gap-6">
+                  <label className="flex items-center gap-3 text-sm font-medium text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={form.has_offer}
+                      onChange={(e) => handleChange("has_offer", e.target.checked)}
+                      className="h-4 w-4 rounded border-slate-300"
+                    />
+                    Activar oferta segura
+                  </label>
+
+                  {form.has_offer && (
+                    <>
+                      <input
+                        type="number"
+                        step="1"
+                        min="0"
+                        value={form.offer_price}
+                        onChange={(e) => handleChange("offer_price", e.target.value)}
+                        placeholder="Precio en oferta"
+                        className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398] md:max-w-[220px]"
+                      />
+
+                      <input
+                        type="text"
+                        value={form.offer_label}
+                        onChange={(e) => handleChange("offer_label", e.target.value)}
+                        placeholder="Etiqueta de oferta"
+                        className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398] md:max-w-[240px]"
+                      />
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          </details>
+
+          <details className="group rounded-3xl border border-slate-200 bg-white shadow-sm">
+            <SectionHeader
+              title="3. Unidades ERP y consumo proporcional"
+              description="Separa compra, venta pública ecommerce y consumo técnico en cotizaciones por metro, unidad, tramo o servicio."
+              badge={form.quote_by_unit ? "Proporcional activo" : "Unitario"}
+            />
+
+            <div className="space-y-5 p-5">
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">Unidad de compra</label>
+                  <select
+                    value={form.purchase_unit}
+                    onChange={(e) => handleChange("purchase_unit", e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
+                  >
+                    <option value="unidad">Unidad</option>
+                    <option value="rollo">Rollo</option>
+                    <option value="caja">Caja</option>
+                    <option value="paquete">Paquete</option>
+                    <option value="kit">Kit</option>
+                    <option value="tramo">Tramo</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">Unidad de venta pública</label>
+                  <select
+                    value={form.public_sale_unit}
+                    onChange={(e) => handleChange("public_sale_unit", e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
+                  >
+                    <option value="unidad">Unidad</option>
+                    <option value="rollo">Rollo</option>
+                    <option value="caja">Caja</option>
+                    <option value="paquete">Paquete</option>
+                    <option value="kit">Kit</option>
+                    <option value="tramo">Tramo</option>
+                    <option value="servicio">Servicio</option>
+                  </select>
+                  <p className="mt-1 text-xs text-slate-500">La ve el cliente en ecommerce.</p>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">Unidad de cotización</label>
+                  <select
+                    value={form.quote_unit}
+                    onChange={(e) => handleChange("quote_unit", e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
+                  >
+                    <option value="unidad">Unidad</option>
+                    <option value="metro">Metro</option>
+                    <option value="hora">Hora</option>
+                    <option value="punto">Punto</option>
+                    <option value="tramo">Tramo</option>
+                    <option value="servicio">Servicio</option>
+                  </select>
+                  <p className="mt-1 text-xs text-slate-500">Se usa en cotizaciones técnicas.</p>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">Contenido por compra</label>
+                  <input
+                    type="number"
+                    min="1"
+                    step="0.01"
+                    value={form.unit_content}
+                    onChange={(e) => handleChange("unit_content", e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
+                    placeholder="Ej: 304"
+                  />
+                  <p className="mt-1 text-xs text-slate-500">Rollo 304m, caja 500 und, tramo 2m.</p>
+                </div>
+
+                <label className="flex min-h-[74px] items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={form.quote_by_unit}
+                    onChange={(e) => handleChange("quote_by_unit", e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300"
+                  />
+                  <span>
+                    <span className="block font-semibold text-slate-700">Cotización proporcional</span>
+                    <span className="mt-1 block text-xs font-normal text-slate-500">Permite consumo parcial en proyectos.</span>
+                  </span>
+                </label>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <h4 className="text-base font-bold text-slate-900">Vista proporcional ERP</h4>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Actual usa el precio real. Proyectado cotización usa margen deseado sin absorber Wompi.
+                    </p>
+                  </div>
+
+                  <span className={`inline-flex w-fit rounded-full px-3 py-1.5 text-xs font-bold ${proportionalPreview.isProportional ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"}`}>
+                    {proportionalPreview.isProportional ? "Proporcional activo" : "Producto unitario"}
+                  </span>
+                </div>
+
+                <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <article className="rounded-2xl bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Costo por {form.quote_unit}</p>
+                    <p className="mt-2 text-xl font-bold text-slate-900">{formatPrice(Math.round(proportionalPreview.unitCostPrice))}</p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {proportionalPreview.isProportional ? `${formatPrice(formCostPrice)} / ${proportionalPreview.unitContent}` : "Mismo costo unitario."}
+                    </p>
+                  </article>
+
+                  <article className="rounded-2xl bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Precio actual por {form.quote_unit}</p>
+                    <p className="mt-2 text-xl font-bold text-[#2D5398]">{formatPrice(Math.round(proportionalPreview.unitSalePrice))}</p>
+                    <p className="mt-1 text-xs text-slate-500">Margen actual: {formatPercent(proportionalPreview.unitMargin)}</p>
+                  </article>
+
+                  <article className="rounded-2xl bg-blue-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-[#2D5398]">Precio proyectado por {form.quote_unit}</p>
+                    <p className="mt-2 text-xl font-bold text-[#2D5398]">{formatPrice(Math.round(proportionalProjectedPreview.unitSalePrice))}</p>
+                    <p className="mt-1 text-xs text-[#2D5398]">Margen cotización: {formatPercent(proportionalProjectedPreview.unitMargin)}</p>
+                  </article>
+
+                  <article className="rounded-2xl bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Ejemplo cotizable actual</p>
+                    <p className="mt-2 text-xl font-bold text-slate-900">{formatPrice(Math.round(proportionalExampleSubtotal))}</p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {proportionalExampleQuantity} {form.quote_unit}
+                      {proportionalPreview.isProportional ? ` · utilidad ${formatPrice(Math.round(proportionalExampleProfit))} · margen ${formatPercent(proportionalExampleMargin)}` : " · cálculo unitario"}
+                    </p>
+                  </article>
+                </div>
+
+                {proportionalPreview.isProportional && (
+                  <div className="mt-4 rounded-2xl bg-blue-50 px-4 py-3 text-sm font-medium text-[#2D5398]">
+                    Este producto se compra por {form.purchase_unit}, se vende públicamente por {form.public_sale_unit} y se consume en cotización por {form.quote_unit}.
+                  </div>
+                )}
+              </div>
+            </div>
+          </details>
+
+          <details className="group rounded-3xl border border-slate-200 bg-white shadow-sm">
+            <SectionHeader
+              title="4. Multimedia y ficha técnica"
+              description="Gestiona la imagen comercial y la ficha técnica PDF asociada al producto."
+              badge={currentTechnicalSheet ? "PDF conectado" : "Multimedia"}
+            />
+
+            <div className="grid gap-5 p-5 lg:grid-cols-2">
+              <div>
+                <label className="mb-3 block text-sm font-medium text-slate-700">Imagen del producto</label>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                  <div className="flex flex-col gap-5 lg:flex-row lg:items-center">
+                    <div className="flex-1">
+                      <label className="flex cursor-pointer items-center justify-center rounded-2xl border-2 border-dashed border-[#2D5398]/30 bg-white px-6 py-8 text-center transition hover:border-[#2D5398] hover:bg-[#2D5398]/5">
+                        <input type="file" accept="image/*" onChange={handleImageUpload} disabled={isUploadingImage} className="hidden" />
+                        <div>
+                          <p className="text-sm font-semibold text-[#2D5398]">{isUploadingImage ? "Subiendo imagen..." : "Seleccionar imagen"}</p>
+                          <p className="mt-1 text-xs text-slate-500">JPG, PNG o WEBP.</p>
+                        </div>
+                      </label>
+                    </div>
+
+                    <div className="flex justify-center">
+                      <div className="h-36 w-36 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                        <img
+                          src={form.image_url.trim() ? form.image_url : "/placeholder-product.png"}
+                          alt="Vista previa del producto"
+                          className="h-full w-full object-contain p-3"
+                          onError={(e) => { e.currentTarget.src = "/placeholder-product.png"; }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {form.image_url && (
+                    <div className="mt-4 space-y-3">
+                      <div className="rounded-xl bg-emerald-50 px-4 py-3 text-xs font-medium text-emerald-700">Imagen conectada correctamente.</div>
+                      <button
+                        type="button"
+                        onClick={handleRemoveImage}
+                        disabled={isRemovingImage}
+                        className="inline-flex rounded-xl bg-red-100 px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-200 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {isRemovingImage ? "Eliminando imagen..." : "Eliminar imagen actual"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-3 block text-sm font-medium text-slate-700">Ficha técnica PDF</label>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                  <label className={`flex items-center justify-center rounded-2xl border-2 border-dashed px-6 py-8 text-center transition ${isEditing ? "cursor-pointer border-[#2D5398]/30 bg-white hover:border-[#2D5398] hover:bg-[#2D5398]/5" : "cursor-not-allowed border-slate-200 bg-slate-100 opacity-70"}`}>
                     <input
                       type="file"
                       accept="application/pdf,.pdf"
@@ -2082,102 +2192,69 @@ export const AdminProductsPage = () => {
                       disabled={!isEditing || isUploadingTechnicalSheet}
                       className="hidden"
                     />
-
                     <div>
                       <p className="text-sm font-semibold text-[#2D5398]">
-                        {isUploadingTechnicalSheet
-                          ? "Subiendo ficha técnica..."
-                          : currentTechnicalSheet
-                          ? "Reemplazar ficha técnica PDF"
-                          : "Seleccionar ficha técnica PDF"}
+                        {isUploadingTechnicalSheet ? "Subiendo ficha técnica..." : currentTechnicalSheet ? "Reemplazar ficha técnica PDF" : "Seleccionar ficha técnica PDF"}
                       </p>
-
-                      <p className="mt-1 text-xs text-slate-500">
-                        PDF técnico del producto. Se guardará en Supabase Storage y se asociará al catálogo cloud.
-                      </p>
-
-                      {!isEditing && (
-                        <p className="mt-2 text-xs font-semibold text-amber-700">
-                          Guarda el producto primero para poder asociar una ficha técnica.
-                        </p>
-                      )}
+                      <p className="mt-1 text-xs text-slate-500">PDF técnico asociado al producto.</p>
+                      {!isEditing && <p className="mt-2 text-xs font-semibold text-amber-700">Guarda el producto primero para asociar una ficha técnica.</p>}
                     </div>
                   </label>
-                </div>
 
-                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:min-w-[280px]">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                    Estado de la ficha
-                  </p>
-
-                  {currentTechnicalSheet?.file_url ? (
-                    <div className="mt-3 space-y-3">
-                      <div className="rounded-xl bg-emerald-50 px-4 py-3 text-xs font-medium text-emerald-700">
-                        Ficha técnica conectada correctamente.
+                  <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Estado de la ficha</p>
+                    {currentTechnicalSheet?.file_url ? (
+                      <div className="mt-3 space-y-3">
+                        <div className="rounded-xl bg-emerald-50 px-4 py-3 text-xs font-medium text-emerald-700">Ficha técnica conectada correctamente.</div>
+                        <a
+                          href={currentTechnicalSheet.file_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex w-full items-center justify-center rounded-xl bg-[#2D5398] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#234684]"
+                        >
+                          Ver PDF actual
+                        </a>
+                        <button
+                          type="button"
+                          onClick={handleRemoveTechnicalSheet}
+                          disabled={isRemovingTechnicalSheet}
+                          className="inline-flex w-full items-center justify-center rounded-xl bg-red-100 px-4 py-3 text-sm font-semibold text-red-700 transition hover:bg-red-200 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {isRemovingTechnicalSheet ? "Eliminando PDF..." : "Eliminar ficha técnica"}
+                        </button>
                       </div>
-
-                      <a
-                        href={currentTechnicalSheet.file_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex w-full items-center justify-center rounded-xl bg-[#2D5398] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#234684]"
-                      >
-                        Ver PDF actual
-                      </a>
-
-                      <button
-                        type="button"
-                        onClick={handleRemoveTechnicalSheet}
-                        disabled={isRemovingTechnicalSheet}
-                        className="inline-flex w-full items-center justify-center rounded-xl bg-red-100 px-4 py-3 text-sm font-semibold text-red-700 transition hover:bg-red-200 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        {isRemovingTechnicalSheet
-                          ? "Eliminando PDF..."
-                          : "Eliminar ficha técnica"}
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="mt-3 rounded-xl bg-slate-100 px-4 py-3 text-xs font-medium text-slate-600">
-                      Este producto aún no tiene ficha técnica cloud asociada.
-                    </div>
-                  )}
+                    ) : (
+                      <div className="mt-3 rounded-xl bg-slate-100 px-4 py-3 text-xs font-medium text-slate-600">Este producto aún no tiene ficha técnica asociada.</div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          </details>
 
-          <div className="md:col-span-2 xl:col-span-3">
-            <label className="mb-2 block text-sm font-medium text-slate-700">
-              Descripción
-            </label>
-            <textarea
-              value={form.description}
-              onChange={(e) => handleChange("description", e.target.value)}
-              rows={4}
-              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
-            />
-          </div>
+          <div className="sticky bottom-4 z-20 flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white/95 p-4 shadow-2xl backdrop-blur md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-sm font-bold text-slate-800">{isEditing ? "Editando producto" : "Nuevo producto"}</p>
+              <p className="text-xs text-slate-500">Guarda los cambios cuando termines de revisar cada bloque.</p>
+            </div>
 
-          <div className="flex flex-wrap gap-3 md:col-span-2 xl:col-span-3">
-            <button
-              type="submit"
-              disabled={isSaving}
-              className="inline-flex rounded-xl bg-[#2D5398] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#234684] disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              {isSaving
-                ? "Guardando..."
-                : isEditing
-                ? "Actualizar producto"
-                : "Crear producto"}
-            </button>
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="submit"
+                disabled={isSaving}
+                className="inline-flex rounded-xl bg-[#2D5398] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#234684] disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {isSaving ? "Guardando..." : isEditing ? "Actualizar producto" : "Crear producto"}
+              </button>
 
-            <button
-              type="button"
-              onClick={resetForm}
-              className="inline-flex rounded-xl border border-slate-300 px-6 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-            >
-              Limpiar formulario
-            </button>
+              <button
+                type="button"
+                onClick={resetForm}
+                className="inline-flex rounded-xl border border-slate-300 px-6 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Limpiar formulario
+              </button>
+            </div>
           </div>
         </form>
       </div>
@@ -2378,6 +2455,13 @@ export const AdminProductsPage = () => {
                           {product.subcategory
                             ? ` / ${product.subcategory}`
                             : ""}
+                          <div className="mt-1 text-xs text-slate-500">
+                            {product.quote_by_unit
+                              ? `Compra: ${product.purchase_unit ?? "unidad"} x ${
+                                  product.unit_content ?? 1
+                                } · Ecommerce: ${product.public_sale_unit ?? product.sale_unit ?? "unidad"} · Cotiza: ${product.quote_unit ?? product.sale_unit ?? "unidad"}`
+                              : `Ecommerce: ${product.public_sale_unit ?? product.sale_unit ?? "unidad"}`}
+                          </div>
                         </td>
                         <td className="px-3 py-4">
                           {formatPrice(product.price)}
@@ -2518,6 +2602,13 @@ export const AdminProductsPage = () => {
                               {product.subcategory}
                             </p>
                           )}
+                          <p className="mt-1 text-xs text-slate-500">
+                            {product.quote_by_unit
+                              ? `Compra: ${product.purchase_unit ?? "unidad"} x ${
+                                  product.unit_content ?? 1
+                                } · Ecommerce: ${product.public_sale_unit ?? product.sale_unit ?? "unidad"} · Cotiza: ${product.quote_unit ?? product.sale_unit ?? "unidad"}`
+                              : `Ecommerce: ${product.public_sale_unit ?? product.sale_unit ?? "unidad"}`}
+                          </p>
                         </div>
 
                         <div className="rounded-2xl bg-white p-3">
