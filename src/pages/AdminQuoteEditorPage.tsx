@@ -5,11 +5,14 @@ import { QuoteItemsTable } from "../modules/quotes/components/QuoteItemsTable.ts
 import { QuoteTotalsCards } from "../modules/quotes/components/QuoteTotalsCards.tsx";
 import { useQuoteFinancials } from "../modules/quotes/hooks/useQuoteFinancials.ts";
 import {
+  createCatalogQuoteItem,
   createManualQuoteItem,
   deleteQuoteItem,
   getQuoteById,
   getQuoteItems,
+  searchQuoteCatalogProducts,
   updateQuoteHeader,
+  type CatalogProduct,
   type QuoteDetail,
   type QuoteItem,
   type QuoteStatus,
@@ -35,12 +38,24 @@ type ItemForm = {
   notes: string;
 };
 
+type CatalogItemForm = {
+  quantity: string;
+  discount: string;
+  notes: string;
+};
+
 const initialItemForm: ItemForm = {
   item_name: "",
   item_description: "",
   quantity: "1",
   unit_cost: "0",
   unit_price: "0",
+  discount: "0",
+  notes: "",
+};
+
+const initialCatalogItemForm: CatalogItemForm = {
+  quantity: "1",
   discount: "0",
   notes: "",
 };
@@ -85,11 +100,19 @@ export const AdminQuoteEditorPage = () => {
   const [items, setItems] = useState<QuoteItem[]>([]);
   const [form, setForm] = useState<EditForm | null>(null);
   const [itemForm, setItemForm] = useState<ItemForm>(initialItemForm);
+  const [itemModalMode, setItemModalMode] = useState<"manual" | "catalog">("manual");
+  const [catalogSearch, setCatalogSearch] = useState("");
+  const [catalogProducts, setCatalogProducts] = useState<CatalogProduct[]>([]);
+  const [selectedCatalogProduct, setSelectedCatalogProduct] =
+    useState<CatalogProduct | null>(null);
+  const [catalogItemForm, setCatalogItemForm] =
+    useState<CatalogItemForm>(initialCatalogItemForm);
 
   const [loading, setLoading] = useState(true);
   const [itemsLoading, setItemsLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savingItem, setSavingItem] = useState(false);
+  const [catalogLoading, setCatalogLoading] = useState(false);
 
   const [isEditing, setIsEditing] = useState(false);
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
@@ -189,6 +212,47 @@ export const AdminQuoteEditorPage = () => {
     }));
   };
 
+  const handleCatalogItemChange = (field: keyof CatalogItemForm, value: string) => {
+    setCatalogItemForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  };
+
+  const handleSearchCatalogProducts = async () => {
+    const searchTerm = catalogSearch.trim();
+
+    if (searchTerm.length < 2) {
+      setItemError("Escribe mínimo 2 caracteres para buscar en el catálogo maestro.");
+      setCatalogProducts([]);
+      return;
+    }
+
+    setCatalogLoading(true);
+    setItemError("");
+
+    try {
+      const products = await searchQuoteCatalogProducts(searchTerm);
+      setCatalogProducts(products);
+
+      if (products.length === 0) {
+        setItemError("No se encontraron productos activos con ese criterio de búsqueda.");
+      }
+    } catch (error) {
+      const currentError = error as Error;
+      setItemError(`No fue posible buscar productos: ${currentError.message}`);
+      setCatalogProducts([]);
+    } finally {
+      setCatalogLoading(false);
+    }
+  };
+
+  const handleSelectCatalogProduct = (product: CatalogProduct) => {
+    setSelectedCatalogProduct(product);
+    setCatalogItemForm(initialCatalogItemForm);
+    setItemError("");
+  };
+
   const handleCancelEdit = () => {
     if (!quote) return;
 
@@ -242,7 +306,12 @@ export const AdminQuoteEditorPage = () => {
   };
 
   const handleOpenItemModal = () => {
+    setItemModalMode("manual");
     setItemForm(initialItemForm);
+    setCatalogSearch("");
+    setCatalogProducts([]);
+    setSelectedCatalogProduct(null);
+    setCatalogItemForm(initialCatalogItemForm);
     setItemError("");
     setIsItemModalOpen(true);
   };
@@ -250,7 +319,12 @@ export const AdminQuoteEditorPage = () => {
   const handleCloseItemModal = () => {
     if (!savingItem) {
       setIsItemModalOpen(false);
+      setItemModalMode("manual");
       setItemForm(initialItemForm);
+      setCatalogSearch("");
+      setCatalogProducts([]);
+      setSelectedCatalogProduct(null);
+      setCatalogItemForm(initialCatalogItemForm);
       setItemError("");
     }
   };
@@ -314,6 +388,73 @@ export const AdminQuoteEditorPage = () => {
     } catch (error) {
       const currentError = error as Error;
       setItemError(`No fue posible agregar el ítem: ${currentError.message}`);
+    } finally {
+      setSavingItem(false);
+    }
+  };
+
+  const handleCreateCatalogItem = async () => {
+    if (!quote) return;
+
+    if (!canEdit) {
+      setItemError("Solo se pueden agregar productos cuando la cotización está en borrador.");
+      return;
+    }
+
+    if (!selectedCatalogProduct) {
+      setItemError("Selecciona un producto del catálogo maestro.");
+      return;
+    }
+
+    const quantity = parseNumber(catalogItemForm.quantity);
+    const discount = parseNumber(catalogItemForm.discount);
+    const unitCost = Number(selectedCatalogProduct.cost_price ?? 0);
+    const unitPrice = Number(selectedCatalogProduct.price ?? 0);
+
+    if (quantity <= 0) {
+      setItemError("La cantidad debe ser mayor a cero.");
+      return;
+    }
+
+    const subtotal = Math.max(quantity * unitPrice - discount, 0);
+    const totalCost = quantity * unitCost;
+    const profit = subtotal - totalCost;
+    const marginPercentage = subtotal > 0 ? (profit / subtotal) * 100 : 0;
+
+    setSavingItem(true);
+    setItemError("");
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+      await createCatalogQuoteItem({
+        quote_id: quote.id,
+        item_type: "product",
+        item_name: selectedCatalogProduct.name,
+        item_description: selectedCatalogProduct.description ?? null,
+        sku: selectedCatalogProduct.sku ?? null,
+        quantity,
+        unit_cost: unitCost,
+        unit_price: unitPrice,
+        discount,
+        subtotal,
+        total_cost: totalCost,
+        profit,
+        margin_percentage: marginPercentage,
+        notes: catalogItemForm.notes.trim() || null,
+      });
+
+      setSuccessMessage("Producto del catálogo agregado correctamente.");
+      setIsItemModalOpen(false);
+      setItemModalMode("manual");
+      setCatalogSearch("");
+      setCatalogProducts([]);
+      setSelectedCatalogProduct(null);
+      setCatalogItemForm(initialCatalogItemForm);
+      await refreshAll();
+    } catch (error) {
+      const currentError = error as Error;
+      setItemError(`No fue posible agregar el producto: ${currentError.message}`);
     } finally {
       setSavingItem(false);
     }
@@ -578,14 +719,14 @@ export const AdminQuoteEditorPage = () => {
 
       {isItemModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4">
-          <div className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-xl">
+          <div className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-3xl bg-white p-6 shadow-xl">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-2xl font-bold text-slate-800">
-                  Agregar ítem manual
+                  Agregar ítem a la cotización
                 </h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  Registra un producto, servicio, mano de obra o costo adicional.
+                  Agrega un ítem manual o selecciona un producto real desde el catálogo maestro.
                 </p>
               </div>
 
@@ -598,85 +739,287 @@ export const AdminQuoteEditorPage = () => {
               </button>
             </div>
 
+            <div className="mt-6 grid gap-3 rounded-2xl bg-slate-100 p-2 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setItemModalMode("manual");
+                  setItemError("");
+                }}
+                className={`rounded-xl px-4 py-3 text-sm font-bold transition ${
+                  itemModalMode === "manual"
+                    ? "bg-white text-[#2D5398] shadow-sm"
+                    : "text-slate-500 hover:bg-white/70"
+                }`}
+              >
+                Ítem manual
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setItemModalMode("catalog");
+                  setItemError("");
+                }}
+                className={`rounded-xl px-4 py-3 text-sm font-bold transition ${
+                  itemModalMode === "catalog"
+                    ? "bg-white text-[#2D5398] shadow-sm"
+                    : "text-slate-500 hover:bg-white/70"
+                }`}
+              >
+                Catálogo maestro
+              </button>
+            </div>
+
             {itemError && (
               <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
                 {itemError}
               </div>
             )}
 
-            <form onSubmit={handleCreateManualItem} className="mt-6 grid gap-4 md:grid-cols-2">
-              <input
-                value={itemForm.item_name}
-                onChange={(event) => handleItemChange("item_name", event.target.value)}
-                className="md:col-span-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
-                placeholder="Nombre del ítem"
-              />
+            {itemModalMode === "manual" ? (
+              <form onSubmit={handleCreateManualItem} className="mt-6 grid gap-4 md:grid-cols-2">
+                <input
+                  value={itemForm.item_name}
+                  onChange={(event) => handleItemChange("item_name", event.target.value)}
+                  className="md:col-span-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
+                  placeholder="Nombre del ítem"
+                />
 
-              <textarea
-                value={itemForm.item_description}
-                onChange={(event) =>
-                  handleItemChange("item_description", event.target.value)
-                }
-                rows={3}
-                className="md:col-span-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
-                placeholder="Descripción"
-              />
+                <textarea
+                  value={itemForm.item_description}
+                  onChange={(event) =>
+                    handleItemChange("item_description", event.target.value)
+                  }
+                  rows={3}
+                  className="md:col-span-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
+                  placeholder="Descripción"
+                />
 
-              <input
-                value={itemForm.quantity}
-                onChange={(event) => handleItemChange("quantity", event.target.value)}
-                className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
-                placeholder="Cantidad"
-              />
+                <input
+                  value={itemForm.quantity}
+                  onChange={(event) => handleItemChange("quantity", event.target.value)}
+                  className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
+                  placeholder="Cantidad"
+                />
 
-              <input
-                value={itemForm.unit_cost}
-                onChange={(event) => handleItemChange("unit_cost", event.target.value)}
-                className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
-                placeholder="Costo unitario"
-              />
+                <input
+                  value={itemForm.unit_cost}
+                  onChange={(event) => handleItemChange("unit_cost", event.target.value)}
+                  className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
+                  placeholder="Costo unitario"
+                />
 
-              <input
-                value={itemForm.unit_price}
-                onChange={(event) => handleItemChange("unit_price", event.target.value)}
-                className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
-                placeholder="Precio unitario"
-              />
+                <input
+                  value={itemForm.unit_price}
+                  onChange={(event) => handleItemChange("unit_price", event.target.value)}
+                  className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
+                  placeholder="Precio unitario"
+                />
 
-              <input
-                value={itemForm.discount}
-                onChange={(event) => handleItemChange("discount", event.target.value)}
-                className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
-                placeholder="Descuento"
-              />
+                <input
+                  value={itemForm.discount}
+                  onChange={(event) => handleItemChange("discount", event.target.value)}
+                  className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
+                  placeholder="Descuento"
+                />
 
-              <textarea
-                value={itemForm.notes}
-                onChange={(event) => handleItemChange("notes", event.target.value)}
-                rows={2}
-                className="md:col-span-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
-                placeholder="Notas internas"
-              />
+                <textarea
+                  value={itemForm.notes}
+                  onChange={(event) => handleItemChange("notes", event.target.value)}
+                  rows={2}
+                  className="md:col-span-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
+                  placeholder="Notas internas"
+                />
 
-              <div className="flex justify-end gap-3 md:col-span-2">
-                <button
-                  type="button"
-                  onClick={handleCloseItemModal}
-                  disabled={savingItem}
-                  className="rounded-2xl bg-slate-100 px-5 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-200 disabled:opacity-60"
-                >
-                  Cancelar
-                </button>
+                <div className="flex justify-end gap-3 md:col-span-2">
+                  <button
+                    type="button"
+                    onClick={handleCloseItemModal}
+                    disabled={savingItem}
+                    className="rounded-2xl bg-slate-100 px-5 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-200 disabled:opacity-60"
+                  >
+                    Cancelar
+                  </button>
 
-                <button
-                  type="submit"
-                  disabled={savingItem}
-                  className="rounded-2xl bg-[#2D5398] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#234684] disabled:opacity-60"
-                >
-                  {savingItem ? "Guardando..." : "Guardar ítem"}
-                </button>
+                  <button
+                    type="submit"
+                    disabled={savingItem}
+                    className="rounded-2xl bg-[#2D5398] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#234684] disabled:opacity-60"
+                  >
+                    {savingItem ? "Guardando..." : "Guardar ítem"}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div className="mt-6 grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
+                <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                  <h3 className="text-lg font-bold text-slate-800">
+                    Buscar en catálogo maestro
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Busca por nombre, SKU o categoría. No se filtra por visibilidad pública.
+                  </p>
+
+                  <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+                    <input
+                      value={catalogSearch}
+                      onChange={(event) => setCatalogSearch(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          handleSearchCatalogProducts();
+                        }
+                      }}
+                      className="min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-[#2D5398]"
+                      placeholder="Ejemplo: cámara, DVR, mano de obra, SKU..."
+                    />
+
+                    <button
+                      type="button"
+                      onClick={handleSearchCatalogProducts}
+                      disabled={catalogLoading}
+                      className="rounded-2xl bg-[#2D5398] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#234684] disabled:opacity-60"
+                    >
+                      {catalogLoading ? "Buscando..." : "Buscar"}
+                    </button>
+                  </div>
+
+                  <div className="mt-4 flex max-h-80 flex-col gap-3 overflow-y-auto pr-1">
+                    {catalogProducts.map((product) => {
+                      const isSelected = selectedCatalogProduct?.id === product.id;
+
+                      return (
+                        <button
+                          key={product.id}
+                          type="button"
+                          onClick={() => handleSelectCatalogProduct(product)}
+                          className={`rounded-2xl border p-4 text-left transition ${
+                            isSelected
+                              ? "border-[#2D5398] bg-white shadow-sm"
+                              : "border-slate-200 bg-white hover:border-[#2D5398]/60"
+                          }`}
+                        >
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                              <p className="font-bold text-slate-800">{product.name}</p>
+                              <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                                {product.sku ?? "Sin SKU"} · {product.category ?? "Sin categoría"}
+                              </p>
+                            </div>
+
+                            <span className="w-fit rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
+                              Stock: {product.stock ?? 0}
+                            </span>
+                          </div>
+
+                          <div className="mt-3 grid gap-2 text-sm text-slate-600 sm:grid-cols-2">
+                            <span>Costo: {moneyFormatter.format(Number(product.cost_price ?? 0))}</span>
+                            <span>Precio: {moneyFormatter.format(Number(product.price ?? 0))}</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="rounded-3xl border border-slate-200 bg-white p-4">
+                  <h3 className="text-lg font-bold text-slate-800">
+                    Producto seleccionado
+                  </h3>
+
+                  {selectedCatalogProduct ? (
+                    <div className="mt-4">
+                      <p className="text-xl font-bold text-slate-800">
+                        {selectedCatalogProduct.name}
+                      </p>
+                      <p className="mt-1 text-sm text-slate-500">
+                        {selectedCatalogProduct.description ?? "Sin descripción registrada."}
+                      </p>
+
+                      <div className="mt-4 grid gap-3 text-sm">
+                        <div className="rounded-2xl bg-slate-50 p-3">
+                          <span className="font-semibold text-slate-500">SKU</span>
+                          <p className="font-bold text-slate-800">
+                            {selectedCatalogProduct.sku ?? "No registrado"}
+                          </p>
+                        </div>
+
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div className="rounded-2xl bg-slate-50 p-3">
+                            <span className="font-semibold text-slate-500">Costo</span>
+                            <p className="font-bold text-slate-800">
+                              {moneyFormatter.format(Number(selectedCatalogProduct.cost_price ?? 0))}
+                            </p>
+                          </div>
+
+                          <div className="rounded-2xl bg-slate-50 p-3">
+                            <span className="font-semibold text-slate-500">Precio</span>
+                            <p className="font-bold text-slate-800">
+                              {moneyFormatter.format(Number(selectedCatalogProduct.price ?? 0))}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                        <input
+                          value={catalogItemForm.quantity}
+                          onChange={(event) =>
+                            handleCatalogItemChange("quantity", event.target.value)
+                          }
+                          className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
+                          placeholder="Cantidad"
+                        />
+
+                        <input
+                          value={catalogItemForm.discount}
+                          onChange={(event) =>
+                            handleCatalogItemChange("discount", event.target.value)
+                          }
+                          className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
+                          placeholder="Descuento"
+                        />
+                      </div>
+
+                      <textarea
+                        value={catalogItemForm.notes}
+                        onChange={(event) =>
+                          handleCatalogItemChange("notes", event.target.value)
+                        }
+                        rows={3}
+                        className="mt-3 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
+                        placeholder="Notas internas"
+                      />
+
+                      <div className="mt-5 flex justify-end gap-3">
+                        <button
+                          type="button"
+                          onClick={handleCloseItemModal}
+                          disabled={savingItem}
+                          className="rounded-2xl bg-slate-100 px-5 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-200 disabled:opacity-60"
+                        >
+                          Cancelar
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleCreateCatalogItem}
+                          disabled={savingItem}
+                          className="rounded-2xl bg-[#2D5398] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#234684] disabled:opacity-60"
+                        >
+                          {savingItem ? "Agregando..." : "Agregar producto"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm font-semibold text-slate-500">
+                      Selecciona un producto del listado para agregarlo a la cotización.
+                    </div>
+                  )}
+                </div>
               </div>
-            </form>
+            )}
           </div>
         </div>
       )}

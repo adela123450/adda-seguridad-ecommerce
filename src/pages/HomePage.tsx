@@ -39,13 +39,11 @@ export const HomePage = () => {
       const { data, error } = await supabase
         .from("products")
         .select("*")
+        .eq("visible", true)
         .order("created_at", { ascending: false });
 
       if (error) {
-        console.error(
-          "Error cargando productos:",
-          error.message
-        );
+        console.error("Error cargando productos:", error.message);
         return;
       }
 
@@ -67,35 +65,12 @@ export const HomePage = () => {
 
   return (
     <div>
-      {/* TEST CONEXIÓN SUPABASE */}
-      <div className="mx-auto mt-4 max-w-7xl px-4">
-        {connectionStatus === "loading" && (
-          <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500 shadow-sm">
-            Verificando conexión backend...
-          </div>
-        )}
-
-        {connectionStatus === "success" && (
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 shadow-sm">
-            Backend conectado correctamente con Supabase.
-          </div>
-        )}
-
-        {connectionStatus === "error" && (
-          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 shadow-sm">
-            Error de conexión con Supabase.
-          </div>
-        )}
-      </div>
-
       <FeatureGrid />
 
       <ProductGrid
         title="Nuevos Productos"
         products={
-          newProducts.length > 0
-            ? newProducts
-            : preparedProducts.slice(0, 4)
+          newProducts.length > 0 ? newProducts : preparedProducts.slice(0, 4)
         }
       />
 

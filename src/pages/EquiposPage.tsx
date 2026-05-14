@@ -69,8 +69,9 @@ export const EquiposPage = () => {
       const { data, error } = await supabase
         .from("products")
         .select(
-          "id, name, slug, brand, category, subcategory, price, description, image_url, stock, is_new, is_featured, has_offer, offer_price, offer_label, created_at"
+          "id, name, slug, brand, category, subcategory, price, description, image_url, stock, is_new, is_featured, has_offer, offer_price, offer_label, created_at, visible",
         )
+        .eq("visible", true)
         .order("created_at", { ascending: false });
 
       if (error) {
@@ -95,8 +96,8 @@ export const EquiposPage = () => {
         new Set(
           products
             .map((product) => product.category?.trim())
-            .filter((category): category is string => Boolean(category))
-        )
+            .filter((category): category is string => Boolean(category)),
+        ),
       ).sort((a, b) => a.localeCompare(b)),
     ];
   }, [products]);
@@ -113,8 +114,10 @@ export const EquiposPage = () => {
         new Set(
           filteredByCategory
             .map((product) => product.subcategory?.trim())
-            .filter((subcategory): subcategory is string => Boolean(subcategory))
-        )
+            .filter((subcategory): subcategory is string =>
+              Boolean(subcategory),
+            ),
+        ),
       ).sort((a, b) => a.localeCompare(b)),
     ];
   }, [products, selectedCategory]);
@@ -126,8 +129,8 @@ export const EquiposPage = () => {
         new Set(
           products
             .map((product) => product.brand?.trim())
-            .filter((brand): brand is string => Boolean(brand))
-        )
+            .filter((brand): brand is string => Boolean(brand)),
+        ),
       ).sort((a, b) => a.localeCompare(b)),
     ];
   }, [products]);
@@ -136,12 +139,14 @@ export const EquiposPage = () => {
     let result = [...products];
 
     if (selectedCategory !== "todas") {
-      result = result.filter((product) => product.category === selectedCategory);
+      result = result.filter(
+        (product) => product.category === selectedCategory,
+      );
     }
 
     if (selectedSubcategory !== "todas") {
       result = result.filter(
-        (product) => product.subcategory === selectedSubcategory
+        (product) => product.subcategory === selectedSubcategory,
       );
     }
 
@@ -169,16 +174,24 @@ export const EquiposPage = () => {
 
     if (sortOrder === "price-asc") {
       result.sort((a, b) => {
-        const aPrice = hasValidOffer(a) ? Number(a.offer_price) : Number(a.price);
-        const bPrice = hasValidOffer(b) ? Number(b.offer_price) : Number(b.price);
+        const aPrice = hasValidOffer(a)
+          ? Number(a.offer_price)
+          : Number(a.price);
+        const bPrice = hasValidOffer(b)
+          ? Number(b.offer_price)
+          : Number(b.price);
         return aPrice - bPrice;
       });
     }
 
     if (sortOrder === "price-desc") {
       result.sort((a, b) => {
-        const aPrice = hasValidOffer(a) ? Number(a.offer_price) : Number(a.price);
-        const bPrice = hasValidOffer(b) ? Number(b.offer_price) : Number(b.price);
+        const aPrice = hasValidOffer(a)
+          ? Number(a.offer_price)
+          : Number(a.price);
+        const bPrice = hasValidOffer(b)
+          ? Number(b.offer_price)
+          : Number(b.price);
         return bPrice - aPrice;
       });
     }

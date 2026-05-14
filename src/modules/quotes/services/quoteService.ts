@@ -57,6 +57,19 @@ export type BusinessSettings = {
   tax_rate: number | string | null;
 };
 
+export type CatalogProduct = {
+  id: string;
+  name: string;
+  sku: string | null;
+  category: string | null;
+  subcategory: string | null;
+  description: string | null;
+  cost_price: number | string | null;
+  price: number | string | null;
+  stock: number | string | null;
+  active: boolean | null;
+};
+
 export type QuoteHeaderUpdatePayload = {
   customer_name: string;
   customer_phone: string | null;
@@ -72,6 +85,23 @@ export type ManualQuoteItemPayload = {
   item_type: "manual";
   item_name: string;
   item_description: string | null;
+  quantity: number;
+  unit_cost: number;
+  unit_price: number;
+  discount: number;
+  subtotal: number;
+  total_cost: number;
+  profit: number;
+  margin_percentage: number;
+  notes: string | null;
+};
+
+export type CatalogQuoteItemPayload = {
+  quote_id: string;
+  item_type: "product";
+  item_name: string;
+  item_description: string | null;
+  sku: string | null;
   quantity: number;
   unit_cost: number;
   unit_price: number;
@@ -151,6 +181,34 @@ export const updateQuoteFinancialTotals = async (
       margin_percentage: totals.margin,
     })
     .eq("id", quoteId);
+
+  if (error) throw error;
+};
+
+export const searchQuoteCatalogProducts = async (searchTerm: string) => {
+  const normalizedSearch = searchTerm.trim();
+
+  if (normalizedSearch.length < 2) return [];
+
+  const { data, error } = await supabase
+    .from("products")
+    .select(
+      "id, name, sku, category, subcategory, description, cost_price, price, stock, active"
+    )
+    .eq("active", true)
+    .or(
+      `name.ilike.%${normalizedSearch}%,sku.ilike.%${normalizedSearch}%,category.ilike.%${normalizedSearch}%,subcategory.ilike.%${normalizedSearch}%`
+    )
+    .order("name", { ascending: true })
+    .limit(20);
+
+  if (error) throw error;
+
+  return (data ?? []) as CatalogProduct[];
+};
+
+export const createCatalogQuoteItem = async (payload: CatalogQuoteItemPayload) => {
+  const { error } = await supabase.from("quote_items").insert(payload);
 
   if (error) throw error;
 };

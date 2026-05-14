@@ -11,7 +11,11 @@ type CatalogItem = {
   category: string;
   subcategory: string | null;
   cost_price: number;
-  suggested_sale_price: number;
+  suggested_sale_price: number | null;
+  price?: number | null;
+  type?: string | null;
+  visible?: boolean | null;
+  estado?: string | null;
   margin_percentage: number;
   tax_rate: number;
   unit_type: string;
@@ -248,7 +252,7 @@ export const AdminCatalogPage = () => {
     setError("");
 
     const { data, error } = await supabase
-      .from("catalog_items")
+      .from("products")
       .select("*")
       .order("category", { ascending: true })
       .order("name", { ascending: true });
@@ -331,12 +335,12 @@ export const AdminCatalogPage = () => {
       name: item.name,
       slug: item.slug ?? "",
       description: item.description ?? "",
-      item_type: item.item_type,
+      item_type: item.item_type ?? item.type ?? "product",
       category: item.category,
       subcategory: isKnownSubcategory ? existingSubcategory : "Otra",
       custom_subcategory: isKnownSubcategory ? "" : existingSubcategory,
       cost_price: String(item.cost_price ?? 0),
-      suggested_sale_price: String(item.suggested_sale_price ?? 0),
+      suggested_sale_price: String(item.suggested_sale_price ?? item.price ?? 0),
       tax_rate: String(item.tax_rate ?? 0),
       unit_type: item.unit_type,
       unit_quantity: String(item.unit_quantity ?? 1),
@@ -351,7 +355,7 @@ export const AdminCatalogPage = () => {
       cable_category: item.cable_category ?? "",
       amperage: item.amperage ?? "",
       color: item.color ?? "",
-      visible_to_customer: item.visible_to_customer,
+      visible_to_customer: Boolean(item.visible_to_customer ?? item.visible ?? false),
       public_name: item.public_name ?? "",
       public_group: item.public_group ?? "",
       inventory_track: item.inventory_track,
@@ -391,13 +395,16 @@ export const AdminCatalogPage = () => {
 
     const payload = {
       sku: form.sku.trim() || null,
+      brand: "ADDA",
       name: form.name.trim(),
       slug: form.slug.trim() || normalizeSlug(form.name),
       description: form.description.trim() || null,
       item_type: form.item_type,
+      type: form.item_type,
       category: form.category,
       subcategory: finalSubcategory || null,
       cost_price: toNumber(form.cost_price),
+      price: toNumber(form.suggested_sale_price),
       suggested_sale_price: toNumber(form.suggested_sale_price),
       margin_percentage: calculateMargin(),
       tax_rate: toNumber(form.tax_rate),
@@ -415,20 +422,22 @@ export const AdminCatalogPage = () => {
       amperage: form.amperage.trim() || null,
       color: form.color.trim() || null,
       visible_to_customer: form.visible_to_customer,
+      visible: form.visible_to_customer,
       public_name: form.public_name.trim() || null,
       public_group: form.public_group.trim() || null,
       inventory_track: form.inventory_track,
       active: form.active,
+      estado: form.active ? "activo" : "inactivo",
       reusable_in_templates: form.reusable_in_templates,
       updated_at: new Date().toISOString(),
     };
 
     const response = editingItem
       ? await supabase
-          .from("catalog_items")
+          .from("products")
           .update(payload)
           .eq("id", editingItem.id)
-      : await supabase.from("catalog_items").insert(payload);
+      : await supabase.from("products").insert(payload);
 
     if (response.error) {
       setError(
@@ -453,9 +462,12 @@ export const AdminCatalogPage = () => {
     setError("");
 
     const { error } = await supabase
-      .from("catalog_items")
+      .from("products")
       .update({
         active: !item.active,
+        estado: !item.active ? "activo" : "inactivo",
+        visible: !item.active ? item.visible ?? false : false,
+        visible_to_customer: !item.active ? item.visible_to_customer ?? false : false,
         updated_at: new Date().toISOString(),
       })
       .eq("id", item.id);
@@ -929,7 +941,7 @@ export const AdminCatalogPage = () => {
           </div>
         </form>
 
-        <div className="min-w-0 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="min-w-0 overflow-hidden rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-5">
             <h3 className="text-lg font-black text-slate-800">
               Catálogo registrado
@@ -984,6 +996,10 @@ export const AdminCatalogPage = () => {
             </select>
           </div>
 
+          <div className="mb-4 rounded-2xl bg-blue-50 px-4 py-3 text-xs font-semibold text-blue-700">
+            Desactivar mantiene el producto en el catálogo maestro, pero lo oculta de la tienda pública y lo deja fuera de uso activo. No elimina el registro ni su historial.
+          </div>
+
           {loading ? (
             <div className="rounded-2xl bg-slate-50 p-6 text-center text-sm font-semibold text-slate-500">
               Cargando catálogo...
@@ -993,18 +1009,21 @@ export const AdminCatalogPage = () => {
               No hay ítems que coincidan con los filtros.
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full border-separate border-spacing-y-3">
+            <div className="w-full overflow-x-auto pb-3">
+              <table className="min-w-[1320px] border-separate border-spacing-y-3">
                 <thead>
                   <tr className="text-left text-xs font-black uppercase tracking-wide text-slate-400">
-                    <th className="px-3">Ítem</th>
-                    <th className="px-3">Tipo</th>
-                    <th className="px-3">Costo</th>
-                    <th className="px-3">Precio</th>
-                    <th className="px-3">Margen</th>
-                    <th className="px-3">Compatibilidad</th>
-                    <th className="px-3">Estado</th>
-                    <th className="px-3 text-right">Acciones</th>
+                    <th className="w-[300px] px-3">Ítem</th>
+                    <th className="w-[170px] px-3">Tipo</th>
+                    <th className="w-[170px] px-3">Categoría</th>
+                    <th className="w-[110px] px-3">Costo</th>
+                    <th className="w-[110px] px-3">Precio</th>
+                    <th className="w-[95px] px-3">Margen</th>
+                    <th className="w-[120px] px-3">Público</th>
+                    <th className="w-[130px] px-3">Plantillas</th>
+                    <th className="w-[190px] px-3">Compatibilidad</th>
+                    <th className="w-[110px] px-3">Estado</th>
+                    <th className="w-[190px] px-3 text-right">Acciones</th>
                   </tr>
                 </thead>
 
@@ -1032,16 +1051,25 @@ export const AdminCatalogPage = () => {
                       </td>
 
                       <td className="px-3 py-4 text-sm font-semibold text-slate-600">
-                        {getItemTypeLabel(item.item_type)}
+                        {getItemTypeLabel(item.item_type ?? item.type ?? "product")}
+                      </td>
+
+                      <td className="px-3 py-4 text-sm font-semibold text-slate-600">
+                        <p className="font-bold text-slate-700">{item.category}</p>
+                        {item.subcategory && (
+                          <p className="mt-1 text-xs text-slate-500">
+                            {item.subcategory}
+                          </p>
+                        )}
                       </td>
 
                       <td className="px-3 py-4 text-sm font-semibold text-slate-700">
-                        ${Number(item.cost_price).toLocaleString("es-CO")}
+                        ${Number(item.cost_price ?? 0).toLocaleString("es-CO")}
                       </td>
 
                       <td className="px-3 py-4 text-sm font-semibold text-slate-700">
                         $
-                        {Number(item.suggested_sale_price).toLocaleString(
+                        {Number(item.suggested_sale_price ?? item.price ?? 0).toLocaleString(
                           "es-CO"
                         )}
                       </td>
@@ -1049,12 +1077,38 @@ export const AdminCatalogPage = () => {
                       <td className="px-3 py-4">
                         <span
                           className={`rounded-full px-3 py-1 text-xs font-black ${
-                            item.margin_percentage < 15
+                            Number(item.margin_percentage ?? 0) < 15
                               ? "bg-red-100 text-red-700"
                               : "bg-emerald-100 text-emerald-700"
                           }`}
                         >
-                          {Number(item.margin_percentage).toFixed(2)}%
+                          {Number(item.margin_percentage ?? 0).toFixed(2)}%
+                        </span>
+                      </td>
+
+                      <td className="px-3 py-4">
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-black ${
+                            Boolean(item.visible_to_customer ?? item.visible)
+                              ? "bg-blue-100 text-blue-700"
+                              : "bg-slate-200 text-slate-600"
+                          }`}
+                        >
+                          {Boolean(item.visible_to_customer ?? item.visible)
+                            ? "Visible"
+                            : "Interno"}
+                        </span>
+                      </td>
+
+                      <td className="px-3 py-4">
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-black ${
+                            item.reusable_in_templates
+                              ? "bg-indigo-100 text-indigo-700"
+                              : "bg-slate-200 text-slate-600"
+                          }`}
+                        >
+                          {item.reusable_in_templates ? "Reusable" : "No reusable"}
                         </span>
                       </td>
 
@@ -1085,6 +1139,15 @@ export const AdminCatalogPage = () => {
                               AJAX
                             </span>
                           )}
+                          {!item.compatible_analog &&
+                            !item.compatible_ip &&
+                            !item.compatible_wifi &&
+                            !item.compatible_solar &&
+                            !item.compatible_ajax && (
+                              <span className="text-xs font-semibold text-slate-400">
+                                Sin definir
+                              </span>
+                            )}
                         </div>
                       </td>
 
@@ -1101,7 +1164,7 @@ export const AdminCatalogPage = () => {
                       </td>
 
                       <td className="rounded-r-2xl px-3 py-4">
-                        <div className="flex justify-end gap-2">
+                        <div className="flex justify-end gap-2 whitespace-nowrap">
                           <button
                             type="button"
                             onClick={() => handleEdit(item)}
@@ -1115,7 +1178,7 @@ export const AdminCatalogPage = () => {
                             onClick={() => toggleActive(item)}
                             className="rounded-xl bg-slate-200 px-3 py-2 text-xs font-black text-slate-600 transition hover:bg-slate-300"
                           >
-                            {item.active ? "Desactivar" : "Activar"}
+                            {item.active ? "Desactivar" : "Reactivar"}
                           </button>
                         </div>
                       </td>

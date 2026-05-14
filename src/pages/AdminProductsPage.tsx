@@ -15,6 +15,10 @@ type ProductRow = {
   description: string | null;
   image_url: string | null;
   stock: number | string | null;
+  sale_unit: string | null;
+  purchase_unit: string | null;
+  unit_content: number | string | null;
+  quote_by_unit: boolean | null;
   has_offer: boolean | null;
   offer_price: number | string | null;
   offer_label: string | null;
@@ -35,6 +39,10 @@ type ProductForm = {
   description: string;
   image_url: string;
   stock: string;
+  sale_unit: string;
+  purchase_unit: string;
+  unit_content: string;
+  quote_by_unit: boolean;
   has_offer: boolean;
   offer_price: string;
   offer_label: string;
@@ -92,6 +100,10 @@ const initialForm: ProductForm = {
   description: "",
   image_url: "",
   stock: "0",
+  sale_unit: "unidad",
+  purchase_unit: "unidad",
+  unit_content: "1",
+  quote_by_unit: false,
   has_offer: false,
   offer_price: "",
   offer_label: "",
@@ -461,7 +473,7 @@ export const AdminProductsPage = () => {
     const { data, error } = await supabase
       .from("products")
       .select(
-        "id, name, slug, sku, brand, category, subcategory, price, cost_price, description, image_url, stock, has_offer, offer_price, offer_label, created_at"
+        "id, name, slug, sku, brand, category, subcategory, price, cost_price, description, image_url, stock, sale_unit, purchase_unit, unit_content, quote_by_unit, has_offer, offer_price, offer_label, created_at"
       )
       .order("created_at", { ascending: false });
 
@@ -859,8 +871,10 @@ export const AdminProductsPage = () => {
     if (Number.isNaN(Number(form.price))) return "El precio debe ser numérico.";
     if (Number.isNaN(Number(form.cost_price))) return "El costo del producto debe ser numérico.";
     if (Number.isNaN(Number(form.stock))) return "El stock debe ser numérico.";
+    if (Number.isNaN(Number(form.unit_content))) return "El contenido por unidad debe ser numérico.";
 
     if (Number(form.cost_price) < 0) return "El costo del producto no puede ser negativo.";
+    if (Number(form.unit_content) <= 0) return "El contenido por unidad debe ser mayor a cero.";
     if (Number(form.price) < 0) return "El precio no puede ser negativo.";
 
     const allowedSubcategories = SUBCATEGORY_OPTIONS[form.category] ?? [];
@@ -908,6 +922,10 @@ export const AdminProductsPage = () => {
       description: form.description.trim() || null,
       image_url: form.image_url.trim() || null,
       stock: Math.round(Number(form.stock)),
+      sale_unit: form.sale_unit || "unidad",
+      purchase_unit: form.purchase_unit || "unidad",
+      unit_content: Number(form.unit_content || 1),
+      quote_by_unit: form.quote_by_unit,
       has_offer: form.has_offer,
       offer_price:
         form.has_offer && form.offer_price.trim()
@@ -936,7 +954,7 @@ export const AdminProductsPage = () => {
         .from("products")
         .insert(payload)
         .select(
-          "id, name, slug, sku, brand, category, subcategory, price, cost_price, description, image_url, stock, has_offer, offer_price, offer_label, created_at"
+          "id, name, slug, sku, brand, category, subcategory, price, cost_price, description, image_url, stock, sale_unit, purchase_unit, unit_content, quote_by_unit, has_offer, offer_price, offer_label, created_at"
         )
         .single();
 
@@ -992,6 +1010,10 @@ export const AdminProductsPage = () => {
       description: product.description ?? "",
       image_url: product.image_url ?? "",
       stock: String(product.stock ?? 0),
+      sale_unit: product.sale_unit ?? "unidad",
+      purchase_unit: product.purchase_unit ?? "unidad",
+      unit_content: String(product.unit_content ?? 1),
+      quote_by_unit: Boolean(product.quote_by_unit),
       has_offer: Boolean(product.has_offer),
       offer_price:
         product.offer_price !== null && product.offer_price !== undefined
@@ -1885,6 +1907,87 @@ export const AdminProductsPage = () => {
               onChange={(e) => handleChange("stock", e.target.value)}
               className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
             />
+          </div>
+
+          <div className="rounded-2xl border border-[#2D5398]/15 bg-[#2D5398]/5 p-5 md:col-span-2 xl:col-span-3">
+            <div className="mb-4">
+              <h3 className="text-lg font-bold text-slate-900">
+                Unidades comerciales y cotización
+              </h3>
+              <p className="mt-1 text-sm text-slate-500">
+                Configura cómo se compra el producto y cómo se cotiza. Útil para cables por metro, mano de obra por punto o servicios por hora.
+              </p>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Unidad de venta
+                </label>
+                <select
+                  value={form.sale_unit}
+                  onChange={(e) => handleChange("sale_unit", e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
+                >
+                  <option value="unidad">Unidad</option>
+                  <option value="metro">Metro</option>
+                  <option value="hora">Hora</option>
+                  <option value="punto">Punto</option>
+                  <option value="tramo">Tramo</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Unidad de compra
+                </label>
+                <select
+                  value={form.purchase_unit}
+                  onChange={(e) => handleChange("purchase_unit", e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
+                >
+                  <option value="unidad">Unidad</option>
+                  <option value="rollo">Rollo</option>
+                  <option value="caja">Caja</option>
+                  <option value="paquete">Paquete</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Contenido por unidad de compra
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  step="0.01"
+                  value={form.unit_content}
+                  onChange={(e) => handleChange("unit_content", e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
+                  placeholder="Ej: 304"
+                />
+                <p className="mt-1 text-xs text-slate-500">
+                  Ejemplo: un rollo trae 304 metros.
+                </p>
+              </div>
+
+              <label className="flex min-h-[74px] items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={form.quote_by_unit}
+                  onChange={(e) => handleChange("quote_by_unit", e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300"
+                />
+                <span>
+                  <span className="block font-semibold text-slate-700">
+                    Cotización proporcional
+                  </span>
+                  <span className="mt-1 block text-xs font-normal text-slate-500">
+                    Calcula el valor por metro, hora, punto o tramo.
+                  </span>
+                </span>
+              </label>
+            </div>
           </div>
 
           <div className="md:col-span-2 xl:col-span-3">
