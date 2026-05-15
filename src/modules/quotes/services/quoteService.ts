@@ -68,6 +68,12 @@ export type CatalogProduct = {
   price: number | string | null;
   stock: number | string | null;
   active: boolean | null;
+
+  quote_by_unit?: boolean | null;
+  quote_unit?: string | null;
+  unit_content?: number | string | null;
+  purchase_unit?: string | null;
+  public_sale_unit?: string | null;
 };
 
 export type QuoteHeaderUpdatePayload = {
@@ -129,7 +135,7 @@ export const getQuoteById = async (quoteId: string) => {
   const { data, error } = await supabase
     .from("quotes")
     .select(
-      "id, quote_number, customer_name, customer_phone, customer_email, customer_city, project_address, technical_scope, status, subtotal, tax_amount, total, issue_date, expiration_date, commercial_terms, warranty_terms, exclusions, parent_quote_id, version_number, version_label, version_notes"
+      "id, quote_number, customer_name, customer_phone, customer_email, customer_city, project_address, technical_scope, status, subtotal, tax_amount, total, issue_date, expiration_date, commercial_terms, warranty_terms, exclusions, parent_quote_id, version_number, version_label, version_notes",
     )
     .eq("id", quoteId)
     .single();
@@ -143,7 +149,7 @@ export const getQuoteItems = async (quoteId: string) => {
   const { data, error } = await supabase
     .from("quote_items")
     .select(
-      "id, quote_id, item_type, item_name, item_description, sku, quantity, unit_cost, unit_price, discount, subtotal, total_cost, profit, margin_percentage, notes, created_at"
+      "id, quote_id, item_type, item_name, item_description, sku, quantity, unit_cost, unit_price, discount, subtotal, total_cost, profit, margin_percentage, notes, created_at",
     )
     .eq("quote_id", quoteId)
     .order("created_at", { ascending: true });
@@ -155,7 +161,7 @@ export const getQuoteItems = async (quoteId: string) => {
 
 export const updateQuoteHeader = async (
   quoteId: string,
-  payload: QuoteHeaderUpdatePayload
+  payload: QuoteHeaderUpdatePayload,
 ) => {
   const { error } = await supabase
     .from("quotes")
@@ -168,7 +174,7 @@ export const updateQuoteHeader = async (
 
 export const updateQuoteFinancialTotals = async (
   quoteId: string,
-  totals: QuoteTotals
+  totals: QuoteTotals,
 ) => {
   const { error } = await supabase
     .from("quotes")
@@ -193,11 +199,27 @@ export const searchQuoteCatalogProducts = async (searchTerm: string) => {
   const { data, error } = await supabase
     .from("products")
     .select(
-      "id, name, sku, category, subcategory, description, cost_price, price, stock, active"
+      `
+  id,
+  name,
+  sku,
+  category,
+  subcategory,
+  description,
+  cost_price,
+  price,
+  stock,
+  active,
+  quote_by_unit,
+  quote_unit,
+  unit_content,
+  purchase_unit,
+  public_sale_unit
+`,
     )
     .eq("active", true)
     .or(
-      `name.ilike.%${normalizedSearch}%,sku.ilike.%${normalizedSearch}%,category.ilike.%${normalizedSearch}%,subcategory.ilike.%${normalizedSearch}%`
+      `name.ilike.%${normalizedSearch}%,sku.ilike.%${normalizedSearch}%,category.ilike.%${normalizedSearch}%,subcategory.ilike.%${normalizedSearch}%`,
     )
     .order("name", { ascending: true })
     .limit(20);
@@ -208,13 +230,19 @@ export const searchQuoteCatalogProducts = async (searchTerm: string) => {
 };
 
 export const createCatalogQuoteItem = async (payload: CatalogQuoteItemPayload) => {
-  const { error } = await supabase.from("quote_items").insert(payload);
+  const { error } = await supabase.from("quote_items").insert({
+    ...payload,
+    name_internal: payload.item_name,
+  });
 
   if (error) throw error;
 };
 
 export const createManualQuoteItem = async (payload: ManualQuoteItemPayload) => {
-  const { error } = await supabase.from("quote_items").insert(payload);
+  const { error } = await supabase.from("quote_items").insert({
+    ...payload,
+    name_internal: payload.item_name,
+  });
 
   if (error) throw error;
 };
@@ -340,7 +368,8 @@ const getNextQuoteVersionNumber = async (quoteId: string) => {
 };
 
 const createQuoteVersion = async (quoteId: string) => {
-  const { rootQuoteId, nextVersionNumber } = await getNextQuoteVersionNumber(quoteId);
+  const { rootQuoteId, nextVersionNumber } =
+    await getNextQuoteVersionNumber(quoteId);
 
   const { data: originalQuote, error: quoteError } = await supabase
     .from("quotes")
@@ -426,6 +455,5 @@ const createQuoteVersion = async (quoteId: string) => {
     version_label: string | null;
   };
 };
-
 
 export { duplicateQuote, createQuoteVersion };

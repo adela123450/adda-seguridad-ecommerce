@@ -92,6 +92,106 @@ const buildEditFormFromQuote = (quote: QuoteDetail): EditForm => ({
   expiration_date: quote.expiration_date ?? "",
 });
 
+type UnitAwareCatalogProduct = CatalogProduct & {
+  sale_unit?: string | null;
+  public_sale_unit?: string | null;
+  quote_unit?: string | null;
+  purchase_unit?: string | null;
+  unit_content?: number | string | null;
+  quote_by_unit?: boolean | null;
+};
+
+type CatalogPricingSnapshot = {
+  quantity: number;
+  discount: number;
+  unitCost: number;
+  unitPrice: number;
+  subtotal: number;
+  totalCost: number;
+  profit: number;
+  marginPercentage: number;
+  isProportional: boolean;
+  unitContent: number;
+  purchaseUnit: string;
+  publicSaleUnit: string;
+  quoteUnit: string;
+};
+
+const getUnitDisplayName = (unit: string) => {
+  const normalizedUnit = unit?.trim() || "unidad";
+
+  const labels: Record<string, string> = {
+    unidad: "unidades",
+    metro: "metros",
+    hora: "horas",
+    punto: "puntos",
+    tramo: "tramos",
+    rollo: "rollos",
+    caja: "cajas",
+    paquete: "paquetes",
+    kit: "kits",
+    servicio: "servicios",
+  };
+
+  return labels[normalizedUnit] ?? normalizedUnit;
+};
+
+const getQuantityLabel = (pricing: CatalogPricingSnapshot | null) => {
+  if (!pricing) return "Cantidad";
+
+  return pricing.isProportional
+    ? `Cantidad en ${getUnitDisplayName(pricing.quoteUnit)}`
+    : `Cantidad en ${getUnitDisplayName(pricing.quoteUnit)}`;
+};
+
+const getCatalogPricingSnapshot = (
+  product: CatalogProduct,
+  quantityValue: string,
+  discountValue: string,
+): CatalogPricingSnapshot => {
+  const unitAwareProduct = product as UnitAwareCatalogProduct;
+  const quantity = parseNumber(quantityValue);
+  const discount = parseNumber(discountValue);
+  const baseCost = Number(unitAwareProduct.cost_price ?? 0);
+  const basePrice = Number(unitAwareProduct.price ?? 0);
+  const rawUnitContent = Number(unitAwareProduct.unit_content ?? 1);
+  const unitContent =
+    Number.isFinite(rawUnitContent) && rawUnitContent > 0 ? rawUnitContent : 1;
+  const isProportional =
+    Boolean(unitAwareProduct.quote_by_unit) && unitContent > 1;
+
+  const unitCost = isProportional
+    ? Math.round(baseCost / unitContent)
+    : Math.round(baseCost);
+  const unitPrice = isProportional
+    ? Math.round(basePrice / unitContent)
+    : Math.round(basePrice);
+  const subtotal = Math.max(Math.round(quantity * unitPrice) - discount, 0);
+  const totalCost = Math.round(quantity * unitCost);
+  const profit = subtotal - totalCost;
+  const marginPercentage = subtotal > 0 ? (profit / subtotal) * 100 : 0;
+
+  return {
+    quantity,
+    discount,
+    unitCost,
+    unitPrice,
+    subtotal,
+    totalCost,
+    profit,
+    marginPercentage,
+    isProportional,
+    unitContent,
+    purchaseUnit: unitAwareProduct.purchase_unit ?? "unidad",
+    publicSaleUnit:
+      unitAwareProduct.public_sale_unit ??
+      unitAwareProduct.sale_unit ??
+      "unidad",
+    quoteUnit:
+      unitAwareProduct.quote_unit ?? unitAwareProduct.sale_unit ?? "unidad",
+  };
+};
+
 export const AdminQuoteEditorPage = () => {
   const { quoteId } = useParams();
   const navigate = useNavigate();
@@ -100,13 +200,16 @@ export const AdminQuoteEditorPage = () => {
   const [items, setItems] = useState<QuoteItem[]>([]);
   const [form, setForm] = useState<EditForm | null>(null);
   const [itemForm, setItemForm] = useState<ItemForm>(initialItemForm);
-  const [itemModalMode, setItemModalMode] = useState<"manual" | "catalog">("manual");
+  const [itemModalMode, setItemModalMode] = useState<"manual" | "catalog">(
+    "manual",
+  );
   const [catalogSearch, setCatalogSearch] = useState("");
   const [catalogProducts, setCatalogProducts] = useState<CatalogProduct[]>([]);
   const [selectedCatalogProduct, setSelectedCatalogProduct] =
     useState<CatalogProduct | null>(null);
-  const [catalogItemForm, setCatalogItemForm] =
-    useState<CatalogItemForm>(initialCatalogItemForm);
+  const [catalogItemForm, setCatalogItemForm] = useState<CatalogItemForm>(
+    initialCatalogItemForm,
+  );
 
   const [loading, setLoading] = useState(true);
   const [itemsLoading, setItemsLoading] = useState(false);
@@ -157,7 +260,9 @@ export const AdminQuoteEditorPage = () => {
       setForm(buildEditFormFromQuote(quoteData));
     } catch (error) {
       const currentError = error as Error;
-      setErrorMessage(`No fue posible cargar la cotización: ${currentError.message}`);
+      setErrorMessage(
+        `No fue posible cargar la cotización: ${currentError.message}`,
+      );
       setQuote(null);
       setForm(null);
     }
@@ -173,7 +278,9 @@ export const AdminQuoteEditorPage = () => {
       setItems(quoteItems);
     } catch (error) {
       const currentError = error as Error;
-      setErrorMessage(`No fue posible cargar los ítems: ${currentError.message}`);
+      setErrorMessage(
+        `No fue posible cargar los ítems: ${currentError.message}`,
+      );
       setItems([]);
     } finally {
       setItemsLoading(false);
@@ -212,7 +319,10 @@ export const AdminQuoteEditorPage = () => {
     }));
   };
 
-  const handleCatalogItemChange = (field: keyof CatalogItemForm, value: string) => {
+  const handleCatalogItemChange = (
+    field: keyof CatalogItemForm,
+    value: string,
+  ) => {
     setCatalogItemForm((current) => ({
       ...current,
       [field]: value,
@@ -223,7 +333,9 @@ export const AdminQuoteEditorPage = () => {
     const searchTerm = catalogSearch.trim();
 
     if (searchTerm.length < 2) {
-      setItemError("Escribe mínimo 2 caracteres para buscar en el catálogo maestro.");
+      setItemError(
+        "Escribe mínimo 2 caracteres para buscar en el catálogo maestro.",
+      );
       setCatalogProducts([]);
       return;
     }
@@ -236,7 +348,9 @@ export const AdminQuoteEditorPage = () => {
       setCatalogProducts(products);
 
       if (products.length === 0) {
-        setItemError("No se encontraron productos activos con ese criterio de búsqueda.");
+        setItemError(
+          "No se encontraron productos activos con ese criterio de búsqueda.",
+        );
       }
     } catch (error) {
       const currentError = error as Error;
@@ -269,7 +383,7 @@ export const AdminQuoteEditorPage = () => {
 
     if (quote.status !== "draft") {
       setErrorMessage(
-        "Solo se pueden editar los datos generales cuando la cotización está en borrador."
+        "Solo se pueden editar los datos generales cuando la cotización está en borrador.",
       );
       return;
     }
@@ -299,7 +413,9 @@ export const AdminQuoteEditorPage = () => {
       await loadQuote();
     } catch (error) {
       const currentError = error as Error;
-      setErrorMessage(`No fue posible actualizar la cotización: ${currentError.message}`);
+      setErrorMessage(
+        `No fue posible actualizar la cotización: ${currentError.message}`,
+      );
     } finally {
       setSaving(false);
     }
@@ -335,7 +451,9 @@ export const AdminQuoteEditorPage = () => {
     if (!quote) return;
 
     if (!canEdit) {
-      setItemError("Solo se pueden agregar ítems cuando la cotización está en borrador.");
+      setItemError(
+        "Solo se pueden agregar ítems cuando la cotización está en borrador.",
+      );
       return;
     }
 
@@ -397,7 +515,9 @@ export const AdminQuoteEditorPage = () => {
     if (!quote) return;
 
     if (!canEdit) {
-      setItemError("Solo se pueden agregar productos cuando la cotización está en borrador.");
+      setItemError(
+        "Solo se pueden agregar productos cuando la cotización está en borrador.",
+      );
       return;
     }
 
@@ -406,25 +526,30 @@ export const AdminQuoteEditorPage = () => {
       return;
     }
 
-    const quantity = parseNumber(catalogItemForm.quantity);
-    const discount = parseNumber(catalogItemForm.discount);
-    const unitCost = Number(selectedCatalogProduct.cost_price ?? 0);
-    const unitPrice = Number(selectedCatalogProduct.price ?? 0);
+    const pricingSnapshot = getCatalogPricingSnapshot(
+      selectedCatalogProduct,
+      catalogItemForm.quantity,
+      catalogItemForm.discount,
+    );
 
-    if (quantity <= 0) {
+    if (pricingSnapshot.quantity <= 0) {
       setItemError("La cantidad debe ser mayor a cero.");
       return;
     }
-
-    const subtotal = Math.max(quantity * unitPrice - discount, 0);
-    const totalCost = quantity * unitCost;
-    const profit = subtotal - totalCost;
-    const marginPercentage = subtotal > 0 ? (profit / subtotal) * 100 : 0;
 
     setSavingItem(true);
     setItemError("");
     setErrorMessage("");
     setSuccessMessage("");
+
+    const proportionalNote = pricingSnapshot.isProportional
+      ? `Consumo proporcional: compra por ${pricingSnapshot.purchaseUnit} x ${pricingSnapshot.unitContent}, venta pública por ${pricingSnapshot.publicSaleUnit}, cotización por ${pricingSnapshot.quoteUnit}.`
+      : `Unidad de cotización: ${pricingSnapshot.quoteUnit}.`;
+
+    const itemNotes =
+      [catalogItemForm.notes.trim(), proportionalNote]
+        .filter(Boolean)
+        .join(" | ") || null;
 
     try {
       await createCatalogQuoteItem({
@@ -433,15 +558,15 @@ export const AdminQuoteEditorPage = () => {
         item_name: selectedCatalogProduct.name,
         item_description: selectedCatalogProduct.description ?? null,
         sku: selectedCatalogProduct.sku ?? null,
-        quantity,
-        unit_cost: unitCost,
-        unit_price: unitPrice,
-        discount,
-        subtotal,
-        total_cost: totalCost,
-        profit,
-        margin_percentage: marginPercentage,
-        notes: catalogItemForm.notes.trim() || null,
+        quantity: pricingSnapshot.quantity,
+        unit_cost: pricingSnapshot.unitCost,
+        unit_price: pricingSnapshot.unitPrice,
+        discount: pricingSnapshot.discount,
+        subtotal: pricingSnapshot.subtotal,
+        total_cost: pricingSnapshot.totalCost,
+        profit: pricingSnapshot.profit,
+        margin_percentage: pricingSnapshot.marginPercentage,
+        notes: itemNotes,
       });
 
       setSuccessMessage("Producto del catálogo agregado correctamente.");
@@ -454,19 +579,33 @@ export const AdminQuoteEditorPage = () => {
       await refreshAll();
     } catch (error) {
       const currentError = error as Error;
-      setItemError(`No fue posible agregar el producto: ${currentError.message}`);
+      setItemError(
+        `No fue posible agregar el producto: ${currentError.message}`,
+      );
     } finally {
       setSavingItem(false);
     }
   };
 
+  const selectedCatalogPricing = selectedCatalogProduct
+    ? getCatalogPricingSnapshot(
+        selectedCatalogProduct,
+        catalogItemForm.quantity,
+        catalogItemForm.discount,
+      )
+    : null;
+
   const handleDeleteItem = async (item: QuoteItem) => {
     if (!quote || !canEdit) {
-      setErrorMessage("Solo se pueden eliminar ítems cuando la cotización está en borrador.");
+      setErrorMessage(
+        "Solo se pueden eliminar ítems cuando la cotización está en borrador.",
+      );
       return;
     }
 
-    const confirmDelete = window.confirm(`¿Eliminar el ítem "${item.item_name}"?`);
+    const confirmDelete = window.confirm(
+      `¿Eliminar el ítem "${item.item_name}"?`,
+    );
     if (!confirmDelete) return;
 
     setErrorMessage("");
@@ -478,7 +617,9 @@ export const AdminQuoteEditorPage = () => {
       await refreshAll();
     } catch (error) {
       const currentError = error as Error;
-      setErrorMessage(`No fue posible eliminar el ítem: ${currentError.message}`);
+      setErrorMessage(
+        `No fue posible eliminar el ítem: ${currentError.message}`,
+      );
     }
   };
 
@@ -579,7 +720,10 @@ export const AdminQuoteEditorPage = () => {
         )}
 
         {isEditing ? (
-          <form onSubmit={handleSaveChanges} className="rounded-3xl bg-white p-6 shadow-sm">
+          <form
+            onSubmit={handleSaveChanges}
+            className="rounded-3xl bg-white p-6 shadow-sm"
+          >
             <div className="mb-6">
               <h2 className="text-2xl font-bold text-slate-800">
                 Editar datos generales
@@ -592,42 +736,54 @@ export const AdminQuoteEditorPage = () => {
             <div className="grid gap-4 md:grid-cols-2">
               <input
                 value={form.customer_name}
-                onChange={(event) => handleChange("customer_name", event.target.value)}
+                onChange={(event) =>
+                  handleChange("customer_name", event.target.value)
+                }
                 className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
                 placeholder="Cliente"
               />
 
               <input
                 value={form.customer_phone}
-                onChange={(event) => handleChange("customer_phone", event.target.value)}
+                onChange={(event) =>
+                  handleChange("customer_phone", event.target.value)
+                }
                 className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
                 placeholder="Teléfono"
               />
 
               <input
                 value={form.customer_email}
-                onChange={(event) => handleChange("customer_email", event.target.value)}
+                onChange={(event) =>
+                  handleChange("customer_email", event.target.value)
+                }
                 className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
                 placeholder="Correo"
               />
 
               <input
                 value={form.customer_city}
-                onChange={(event) => handleChange("customer_city", event.target.value)}
+                onChange={(event) =>
+                  handleChange("customer_city", event.target.value)
+                }
                 className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
                 placeholder="Ciudad"
               />
 
               <input
                 value={form.project_address}
-                onChange={(event) => handleChange("project_address", event.target.value)}
+                onChange={(event) =>
+                  handleChange("project_address", event.target.value)
+                }
                 className="md:col-span-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
                 placeholder="Dirección del proyecto"
               />
 
               <textarea
                 value={form.technical_scope}
-                onChange={(event) => handleChange("technical_scope", event.target.value)}
+                onChange={(event) =>
+                  handleChange("technical_scope", event.target.value)
+                }
                 rows={4}
                 className="md:col-span-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
                 placeholder="Alcance del proyecto"
@@ -636,7 +792,9 @@ export const AdminQuoteEditorPage = () => {
               <input
                 type="date"
                 value={form.expiration_date}
-                onChange={(event) => handleChange("expiration_date", event.target.value)}
+                onChange={(event) =>
+                  handleChange("expiration_date", event.target.value)
+                }
                 className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
               />
             </div>
@@ -726,7 +884,8 @@ export const AdminQuoteEditorPage = () => {
                   Agregar ítem a la cotización
                 </h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  Agrega un ítem manual o selecciona un producto real desde el catálogo maestro.
+                  Agrega un ítem manual o selecciona un producto real desde el
+                  catálogo maestro.
                 </p>
               </div>
 
@@ -778,10 +937,15 @@ export const AdminQuoteEditorPage = () => {
             )}
 
             {itemModalMode === "manual" ? (
-              <form onSubmit={handleCreateManualItem} className="mt-6 grid gap-4 md:grid-cols-2">
+              <form
+                onSubmit={handleCreateManualItem}
+                className="mt-6 grid gap-4 md:grid-cols-2"
+              >
                 <input
                   value={itemForm.item_name}
-                  onChange={(event) => handleItemChange("item_name", event.target.value)}
+                  onChange={(event) =>
+                    handleItemChange("item_name", event.target.value)
+                  }
                   className="md:col-span-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
                   placeholder="Nombre del ítem"
                 />
@@ -798,35 +962,45 @@ export const AdminQuoteEditorPage = () => {
 
                 <input
                   value={itemForm.quantity}
-                  onChange={(event) => handleItemChange("quantity", event.target.value)}
+                  onChange={(event) =>
+                    handleItemChange("quantity", event.target.value)
+                  }
                   className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
                   placeholder="Cantidad"
                 />
 
                 <input
                   value={itemForm.unit_cost}
-                  onChange={(event) => handleItemChange("unit_cost", event.target.value)}
+                  onChange={(event) =>
+                    handleItemChange("unit_cost", event.target.value)
+                  }
                   className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
                   placeholder="Costo unitario"
                 />
 
                 <input
                   value={itemForm.unit_price}
-                  onChange={(event) => handleItemChange("unit_price", event.target.value)}
+                  onChange={(event) =>
+                    handleItemChange("unit_price", event.target.value)
+                  }
                   className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
                   placeholder="Precio unitario"
                 />
 
                 <input
                   value={itemForm.discount}
-                  onChange={(event) => handleItemChange("discount", event.target.value)}
+                  onChange={(event) =>
+                    handleItemChange("discount", event.target.value)
+                  }
                   className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
                   placeholder="Descuento"
                 />
 
                 <textarea
                   value={itemForm.notes}
-                  onChange={(event) => handleItemChange("notes", event.target.value)}
+                  onChange={(event) =>
+                    handleItemChange("notes", event.target.value)
+                  }
                   rows={2}
                   className="md:col-span-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
                   placeholder="Notas internas"
@@ -858,7 +1032,8 @@ export const AdminQuoteEditorPage = () => {
                     Buscar en catálogo maestro
                   </h3>
                   <p className="mt-1 text-sm text-slate-500">
-                    Busca por nombre, SKU o categoría. No se filtra por visibilidad pública.
+                    Busca por nombre, SKU o categoría. No se filtra por
+                    visibilidad pública.
                   </p>
 
                   <div className="mt-4 flex flex-col gap-3 sm:flex-row">
@@ -887,7 +1062,8 @@ export const AdminQuoteEditorPage = () => {
 
                   <div className="mt-4 flex max-h-80 flex-col gap-3 overflow-y-auto pr-1">
                     {catalogProducts.map((product) => {
-                      const isSelected = selectedCatalogProduct?.id === product.id;
+                      const isSelected =
+                        selectedCatalogProduct?.id === product.id;
 
                       return (
                         <button
@@ -902,9 +1078,12 @@ export const AdminQuoteEditorPage = () => {
                         >
                           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                             <div>
-                              <p className="font-bold text-slate-800">{product.name}</p>
+                              <p className="font-bold text-slate-800">
+                                {product.name}
+                              </p>
                               <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                                {product.sku ?? "Sin SKU"} · {product.category ?? "Sin categoría"}
+                                {product.sku ?? "Sin SKU"} ·{" "}
+                                {product.category ?? "Sin categoría"}
                               </p>
                             </div>
 
@@ -914,9 +1093,50 @@ export const AdminQuoteEditorPage = () => {
                           </div>
 
                           <div className="mt-3 grid gap-2 text-sm text-slate-600 sm:grid-cols-2">
-                            <span>Costo: {moneyFormatter.format(Number(product.cost_price ?? 0))}</span>
-                            <span>Precio: {moneyFormatter.format(Number(product.price ?? 0))}</span>
+                            <span>
+                              Costo:{" "}
+                              {moneyFormatter.format(
+                                Number(product.cost_price ?? 0),
+                              )}
+                            </span>
+                            <span>
+                              Precio:{" "}
+                              {moneyFormatter.format(
+                                Number(product.price ?? 0),
+                              )}
+                            </span>
                           </div>
+
+                          {Boolean(
+                            (product as UnitAwareCatalogProduct).quote_by_unit,
+                          ) ? (
+                            <div className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
+                              Proporcional: compra por{" "}
+                              {(product as UnitAwareCatalogProduct)
+                                .purchase_unit ?? "unidad"}{" "}
+                              x{" "}
+                              {(product as UnitAwareCatalogProduct)
+                                .unit_content ?? 1}
+                              ; cotiza por{" "}
+                              {(product as UnitAwareCatalogProduct)
+                                .quote_unit ??
+                                (product as UnitAwareCatalogProduct)
+                                  .sale_unit ??
+                                "unidad"}
+                            </div>
+                          ) : (
+                            <div className="mt-3 rounded-xl bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-600">
+                              Producto unitario: la cantidad se toma como{" "}
+                              {(product as UnitAwareCatalogProduct)
+                                .quote_unit ??
+                                (product as UnitAwareCatalogProduct)
+                                  .public_sale_unit ??
+                                (product as UnitAwareCatalogProduct)
+                                  .sale_unit ??
+                                "unidad"}
+                              .
+                            </div>
+                          )}
                         </button>
                       );
                     })}
@@ -934,12 +1154,15 @@ export const AdminQuoteEditorPage = () => {
                         {selectedCatalogProduct.name}
                       </p>
                       <p className="mt-1 text-sm text-slate-500">
-                        {selectedCatalogProduct.description ?? "Sin descripción registrada."}
+                        {selectedCatalogProduct.description ??
+                          "Sin descripción registrada."}
                       </p>
 
                       <div className="mt-4 grid gap-3 text-sm">
                         <div className="rounded-2xl bg-slate-50 p-3">
-                          <span className="font-semibold text-slate-500">SKU</span>
+                          <span className="font-semibold text-slate-500">
+                            SKU
+                          </span>
                           <p className="font-bold text-slate-800">
                             {selectedCatalogProduct.sku ?? "No registrado"}
                           </p>
@@ -947,39 +1170,180 @@ export const AdminQuoteEditorPage = () => {
 
                         <div className="grid gap-3 sm:grid-cols-2">
                           <div className="rounded-2xl bg-slate-50 p-3">
-                            <span className="font-semibold text-slate-500">Costo</span>
+                            <span className="font-semibold text-slate-500">
+                              Costo base
+                            </span>
                             <p className="font-bold text-slate-800">
-                              {moneyFormatter.format(Number(selectedCatalogProduct.cost_price ?? 0))}
+                              {moneyFormatter.format(
+                                Number(selectedCatalogProduct.cost_price ?? 0),
+                              )}
                             </p>
                           </div>
 
                           <div className="rounded-2xl bg-slate-50 p-3">
-                            <span className="font-semibold text-slate-500">Precio</span>
+                            <span className="font-semibold text-slate-500">
+                              Precio base
+                            </span>
                             <p className="font-bold text-slate-800">
-                              {moneyFormatter.format(Number(selectedCatalogProduct.price ?? 0))}
+                              {moneyFormatter.format(
+                                Number(selectedCatalogProduct.price ?? 0),
+                              )}
                             </p>
                           </div>
                         </div>
+
+                        {selectedCatalogPricing && (
+                          <div
+                            className={`mt-3 rounded-2xl border p-4 ${
+                              selectedCatalogPricing.isProportional
+                                ? "border-emerald-200 bg-emerald-50"
+                                : "border-slate-200 bg-slate-50"
+                            }`}
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span
+                                className={`text-xs font-bold uppercase tracking-wide ${
+                                  selectedCatalogPricing.isProportional
+                                    ? "text-emerald-700"
+                                    : "text-slate-600"
+                                }`}
+                              >
+                                {selectedCatalogPricing.isProportional
+                                  ? "Consumo proporcional activo"
+                                  : "Producto unitario"}
+                              </span>
+
+                              <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-700 shadow-sm">
+                                Cantidad en{" "}
+                                {getUnitDisplayName(
+                                  selectedCatalogPricing.quoteUnit,
+                                )}
+                              </span>
+                            </div>
+
+                            <div className="mt-3 rounded-2xl bg-white p-3 text-sm font-semibold text-slate-700">
+                              {selectedCatalogPricing.isProportional ? (
+                                <p>
+                                  Vas a cotizar{" "}
+                                  {selectedCatalogPricing.quantity}{" "}
+                                  {getUnitDisplayName(
+                                    selectedCatalogPricing.quoteUnit,
+                                  )}
+                                  , no{" "}
+                                  {getUnitDisplayName(
+                                    selectedCatalogPricing.purchaseUnit,
+                                  )}{" "}
+                                  completos.
+                                </p>
+                              ) : (
+                                <p>
+                                  Este producto está configurado como unitario.
+                                  La cantidad representa{" "}
+                                  {getUnitDisplayName(
+                                    selectedCatalogPricing.quoteUnit,
+                                  )}
+                                  .
+                                </p>
+                              )}
+                            </div>
+
+                            <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+                              <span>
+                                Costo por {selectedCatalogPricing.quoteUnit}:{" "}
+                                {moneyFormatter.format(
+                                  selectedCatalogPricing.unitCost,
+                                )}
+                              </span>
+                              <span>
+                                Precio por {selectedCatalogPricing.quoteUnit}:{" "}
+                                {moneyFormatter.format(
+                                  selectedCatalogPricing.unitPrice,
+                                )}
+                              </span>
+                              <span>
+                                Subtotal: {selectedCatalogPricing.quantity}{" "}
+                                {selectedCatalogPricing.quoteUnit} ×{" "}
+                                {moneyFormatter.format(
+                                  selectedCatalogPricing.unitPrice,
+                                )}{" "}
+                                ={" "}
+                                {moneyFormatter.format(
+                                  selectedCatalogPricing.subtotal,
+                                )}
+                              </span>
+                              <span>
+                                Utilidad:{" "}
+                                {moneyFormatter.format(
+                                  selectedCatalogPricing.profit,
+                                )}
+                              </span>
+                            </div>
+
+                            {selectedCatalogPricing.isProportional ? (
+                              <p className="mt-2 text-xs font-medium text-slate-600">
+                                Compra por {selectedCatalogPricing.purchaseUnit}{" "}
+                                x {selectedCatalogPricing.unitContent};
+                                ecommerce por{" "}
+                                {selectedCatalogPricing.publicSaleUnit};
+                                cotización por{" "}
+                                {selectedCatalogPricing.quoteUnit}.
+                              </p>
+                            ) : (
+                              <p className="mt-2 text-xs font-medium text-slate-600">
+                                Si este material debe cotizarse por metro,
+                                unidad suelta o tramo, primero actívale
+                                "Cotización proporcional" en Productos.
+                              </p>
+                            )}
+                          </div>
+                        )}
                       </div>
 
                       <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                        <input
-                          value={catalogItemForm.quantity}
-                          onChange={(event) =>
-                            handleCatalogItemChange("quantity", event.target.value)
-                          }
-                          className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
-                          placeholder="Cantidad"
-                        />
+                        <div>
+                          <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                            {getQuantityLabel(selectedCatalogPricing)}
+                          </label>
+                          <input
+                            value={catalogItemForm.quantity}
+                            onChange={(event) =>
+                              handleCatalogItemChange(
+                                "quantity",
+                                event.target.value,
+                              )
+                            }
+                            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
+                            placeholder={
+                              selectedCatalogPricing
+                                ? `Ej: 20 ${getUnitDisplayName(selectedCatalogPricing.quoteUnit)}`
+                                : "Cantidad"
+                            }
+                          />
+                          {selectedCatalogPricing?.isProportional && (
+                            <p className="mt-1 text-xs font-medium text-emerald-700">
+                              Esta cantidad se tomará como{" "}
+                              {selectedCatalogPricing.quoteUnit}, no como{" "}
+                              {selectedCatalogPricing.purchaseUnit} completo.
+                            </p>
+                          )}
+                        </div>
 
-                        <input
-                          value={catalogItemForm.discount}
-                          onChange={(event) =>
-                            handleCatalogItemChange("discount", event.target.value)
-                          }
-                          className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
-                          placeholder="Descuento"
-                        />
+                        <div>
+                          <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                            Descuento
+                          </label>
+                          <input
+                            value={catalogItemForm.discount}
+                            onChange={(event) =>
+                              handleCatalogItemChange(
+                                "discount",
+                                event.target.value,
+                              )
+                            }
+                            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
+                            placeholder="Descuento"
+                          />
+                        </div>
                       </div>
 
                       <textarea
@@ -1014,7 +1378,8 @@ export const AdminQuoteEditorPage = () => {
                     </div>
                   ) : (
                     <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm font-semibold text-slate-500">
-                      Selecciona un producto del listado para agregarlo a la cotización.
+                      Selecciona un producto del listado para agregarlo a la
+                      cotización.
                     </div>
                   )}
                 </div>
