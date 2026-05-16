@@ -66,6 +66,10 @@ export const AdminLayout = () => {
             <NavLink to="/admin/templates" className={navLinkClass}>
               Plantillas
             </NavLink>
+            
+            <NavLink to="/admin/issuer-profiles" className={navLinkClass}>
+              Perfiles emisores
+            </NavLink>
 
             <NavLink to="/admin/multimedia-migration" className={navLinkClass}>
               Multimedia cloud
@@ -86,7 +90,7 @@ export const AdminLayout = () => {
             <NavLink to="/admin/settings" className={navLinkClass}>
               Configuración
             </NavLink>
-            
+
             <NavLink to="/admin/quotes" className={navLinkClass}>
               Cotizaciones
             </NavLink>

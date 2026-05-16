@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { supabase } from "../lib/supabase";
 import { QuoteItemsTable } from "../modules/quotes/components/QuoteItemsTable.tsx";
 import { QuoteTotalsCards } from "../modules/quotes/components/QuoteTotalsCards.tsx";
 import { useQuoteFinancials } from "../modules/quotes/hooks/useQuoteFinancials.ts";
@@ -12,6 +13,7 @@ import {
   getQuoteItems,
   searchQuoteCatalogProducts,
   updateQuoteHeader,
+  updateQuoteItemSnapshot,
   type CatalogProduct,
   type QuoteDetail,
   type QuoteItem,
@@ -19,6 +21,7 @@ import {
 } from "../modules/quotes/services/quoteService.ts";
 
 type EditForm = {
+  issuer_profile_id: string;
   customer_name: string;
   customer_phone: string;
   customer_email: string;
@@ -44,6 +47,32 @@ type CatalogItemForm = {
   notes: string;
 };
 
+type EditItemForm = {
+  quantity: string;
+  discount: string;
+  notes: string;
+};
+
+type IssuerProfile = {
+  id: string;
+  profile_name: string;
+  issuer_type: string;
+  legal_name: string;
+  commercial_name: string | null;
+  document_type: string | null;
+  document_number: string | null;
+  tax_responsibility: string | null;
+  city: string | null;
+  email: string | null;
+  phone: string | null;
+  bank_name: string | null;
+  bank_account_type: string | null;
+  bank_account_number: string | null;
+  footer_notes: string | null;
+  is_default: boolean;
+  is_active: boolean;
+};
+
 const initialItemForm: ItemForm = {
   item_name: "",
   item_description: "",
@@ -55,6 +84,12 @@ const initialItemForm: ItemForm = {
 };
 
 const initialCatalogItemForm: CatalogItemForm = {
+  quantity: "1",
+  discount: "0",
+  notes: "",
+};
+
+const initialEditItemForm: EditItemForm = {
   quantity: "1",
   discount: "0",
   notes: "",
@@ -83,6 +118,7 @@ const parseNumber = (value: string) => {
 };
 
 const buildEditFormFromQuote = (quote: QuoteDetail): EditForm => ({
+  issuer_profile_id: quote.issuer_profile_id ?? "",
   customer_name: quote.customer_name ?? "",
   customer_phone: quote.customer_phone ?? "",
   customer_email: quote.customer_email ?? "",
@@ -199,6 +235,7 @@ export const AdminQuoteEditorPage = () => {
   const [quote, setQuote] = useState<QuoteDetail | null>(null);
   const [items, setItems] = useState<QuoteItem[]>([]);
   const [form, setForm] = useState<EditForm | null>(null);
+  const [issuerProfiles, setIssuerProfiles] = useState<IssuerProfile[]>([]);
   const [itemForm, setItemForm] = useState<ItemForm>(initialItemForm);
   const [itemModalMode, setItemModalMode] = useState<"manual" | "catalog">(
     "manual",
@@ -210,19 +247,25 @@ export const AdminQuoteEditorPage = () => {
   const [catalogItemForm, setCatalogItemForm] = useState<CatalogItemForm>(
     initialCatalogItemForm,
   );
+  const [editingItem, setEditingItem] = useState<QuoteItem | null>(null);
+  const [editItemForm, setEditItemForm] =
+    useState<EditItemForm>(initialEditItemForm);
 
   const [loading, setLoading] = useState(true);
   const [itemsLoading, setItemsLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savingItem, setSavingItem] = useState(false);
   const [catalogLoading, setCatalogLoading] = useState(false);
+  const [savingEditItem, setSavingEditItem] = useState(false);
 
   const [isEditing, setIsEditing] = useState(false);
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
+  const [isEditItemModalOpen, setIsEditItemModalOpen] = useState(false);
 
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [itemError, setItemError] = useState("");
+  const [editItemError, setEditItemError] = useState("");
 
   const canEdit = quote?.status === "draft";
 
@@ -287,11 +330,32 @@ export const AdminQuoteEditorPage = () => {
     }
   };
 
+  const loadIssuerProfiles = async () => {
+    const { data, error } = await supabase
+      .from("quote_issuer_profiles")
+      .select(
+        "id, profile_name, issuer_type, legal_name, commercial_name, document_type, document_number, tax_responsibility, city, email, phone, bank_name, bank_account_type, bank_account_number, footer_notes, is_default, is_active",
+      )
+      .eq("is_active", true)
+      .order("is_default", { ascending: false })
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      setErrorMessage(
+        `No fue posible cargar los perfiles emisores: ${error.message}`,
+      );
+      setIssuerProfiles([]);
+      return;
+    }
+
+    setIssuerProfiles((data ?? []) as IssuerProfile[]);
+  };
+
   const refreshAll = async () => {
     setLoading(true);
     setErrorMessage("");
 
-    await Promise.all([loadQuote(), loadItems()]);
+    await Promise.all([loadQuote(), loadItems(), loadIssuerProfiles()]);
 
     setLoading(false);
   };
@@ -324,6 +388,13 @@ export const AdminQuoteEditorPage = () => {
     value: string,
   ) => {
     setCatalogItemForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  };
+
+  const handleEditItemChange = (field: keyof EditItemForm, value: string) => {
+    setEditItemForm((current) => ({
       ...current,
       [field]: value,
     }));
@@ -393,12 +464,19 @@ export const AdminQuoteEditorPage = () => {
       return;
     }
 
+    const selectedIssuerProfile = issuerProfiles.find(
+      (profile) => profile.id === form.issuer_profile_id,
+    );
+
     setSaving(true);
     setErrorMessage("");
     setSuccessMessage("");
 
     try {
       await updateQuoteHeader(quote.id, {
+        issuer_profile_id: form.issuer_profile_id || null,
+        issuer_profile_name: selectedIssuerProfile?.profile_name ?? null,
+        issuer_snapshot: selectedIssuerProfile ?? null,
         customer_name: form.customer_name.trim(),
         customer_phone: form.customer_phone.trim() || null,
         customer_email: form.customer_email.trim() || null,
@@ -561,6 +639,11 @@ export const AdminQuoteEditorPage = () => {
         quantity: pricingSnapshot.quantity,
         unit_cost: pricingSnapshot.unitCost,
         unit_price: pricingSnapshot.unitPrice,
+        unit_type: pricingSnapshot.quoteUnit,
+        quote_unit: pricingSnapshot.quoteUnit,
+        purchase_unit: pricingSnapshot.purchaseUnit,
+        unit_content: pricingSnapshot.unitContent,
+        proportional_enabled: pricingSnapshot.isProportional,
         discount: pricingSnapshot.discount,
         subtotal: pricingSnapshot.subtotal,
         total_cost: pricingSnapshot.totalCost,
@@ -594,6 +677,100 @@ export const AdminQuoteEditorPage = () => {
         catalogItemForm.discount,
       )
     : null;
+
+  const handleOpenEditItemModal = (item: QuoteItem) => {
+    if (!canEdit) {
+      setErrorMessage(
+        "Solo se pueden editar ítems cuando la cotización está en borrador.",
+      );
+      return;
+    }
+
+    setEditingItem(item);
+    setEditItemForm({
+      quantity: String(item.quantity ?? 1),
+      discount: String(item.discount ?? 0),
+      notes: item.notes ?? "",
+    });
+    setEditItemError("");
+    setErrorMessage("");
+    setSuccessMessage("");
+    setIsEditItemModalOpen(true);
+  };
+
+  const handleCloseEditItemModal = () => {
+    if (savingEditItem) return;
+
+    setIsEditItemModalOpen(false);
+    setEditingItem(null);
+    setEditItemForm(initialEditItemForm);
+    setEditItemError("");
+  };
+
+  const handleSaveEditedItem = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!quote || !editingItem) return;
+
+    if (!canEdit) {
+      setEditItemError(
+        "Solo se pueden editar ítems cuando la cotización está en borrador.",
+      );
+      return;
+    }
+
+    const quantity = parseNumber(editItemForm.quantity);
+    const discount = parseNumber(editItemForm.discount);
+    const unitCost = Number(editingItem.unit_cost ?? 0);
+    const unitPrice = Number(editingItem.unit_price ?? 0);
+
+    if (quantity <= 0) {
+      setEditItemError("La cantidad debe ser mayor a cero.");
+      return;
+    }
+
+    if (discount < 0) {
+      setEditItemError("El descuento no puede ser negativo.");
+      return;
+    }
+
+    const subtotal = Math.max(Math.round(quantity * unitPrice) - discount, 0);
+    const totalCost = Math.round(quantity * unitCost);
+    const profit = subtotal - totalCost;
+    const marginPercentage = subtotal > 0 ? (profit / subtotal) * 100 : 0;
+
+    setSavingEditItem(true);
+    setEditItemError("");
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+      await updateQuoteItemSnapshot(quote.id, editingItem.id, {
+        quantity,
+        discount,
+        subtotal,
+        total_cost: totalCost,
+        profit,
+        margin_percentage: marginPercentage,
+        notes: editItemForm.notes.trim() || null,
+      });
+
+      setSuccessMessage(
+        "Ítem actualizado correctamente sin modificar su snapshot de precio/costo.",
+      );
+      setIsEditItemModalOpen(false);
+      setEditingItem(null);
+      setEditItemForm(initialEditItemForm);
+      await refreshAll();
+    } catch (error) {
+      const currentError = error as Error;
+      setEditItemError(
+        `No fue posible actualizar el ítem: ${currentError.message}`,
+      );
+    } finally {
+      setSavingEditItem(false);
+    }
+  };
 
   const handleDeleteItem = async (item: QuoteItem) => {
     if (!quote || !canEdit) {
@@ -734,6 +911,33 @@ export const AdminQuoteEditorPage = () => {
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
+              <div className="md:col-span-2">
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                  Perfil emisor
+                </label>
+
+                <select
+                  value={form.issuer_profile_id}
+                  onChange={(event) =>
+                    handleChange("issuer_profile_id", event.target.value)
+                  }
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
+                >
+                  <option value="">Seleccionar perfil emisor</option>
+
+                  {issuerProfiles.map((profile) => (
+                    <option key={profile.id} value={profile.id}>
+                      {profile.profile_name}
+                    </option>
+                  ))}
+                </select>
+
+                <p className="mt-2 text-xs font-medium text-slate-500">
+                  Este perfil define la razón social, datos fiscales y datos
+                  bancarios que quedarán asociados a la cotización.
+                </p>
+              </div>
+
               <input
                 value={form.customer_name}
                 onChange={(event) =>
@@ -819,7 +1023,7 @@ export const AdminQuoteEditorPage = () => {
             </div>
           </form>
         ) : (
-          <div className="grid gap-4 lg:grid-cols-3">
+          <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-3xl bg-white p-5 shadow-sm">
               <p className="text-sm font-semibold text-slate-500">Cliente</p>
               <h2 className="mt-2 text-xl font-bold text-slate-800">
@@ -857,6 +1061,20 @@ export const AdminQuoteEditorPage = () => {
                 Fecha de emisión: {quote.issue_date ?? "No registrada"}
               </p>
             </div>
+
+            <div className="rounded-3xl bg-white p-5 shadow-sm">
+              <p className="text-sm font-semibold text-slate-500">
+                Perfil emisor
+              </p>
+              <h2 className="mt-2 text-lg font-bold text-slate-800">
+                {quote.issuer_profile_name ?? "Sin perfil asignado"}
+              </h2>
+              <p className="mt-2 text-sm text-slate-500">
+                {quote.issuer_profile_id
+                  ? "Datos fiscales asociados a la cotización."
+                  : "Edita los datos para seleccionar Adela, Luis Darío o futura S.A.S."}
+              </p>
+            </div>
           </div>
         )}
 
@@ -871,9 +1089,121 @@ export const AdminQuoteEditorPage = () => {
           canEdit={canEdit}
           moneyFormatter={moneyFormatter}
           onOpenItemModal={handleOpenItemModal}
+          onEditItem={handleOpenEditItemModal}
           onDeleteItem={handleDeleteItem}
         />
       </div>
+
+      {isEditItemModalOpen && editingItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4">
+          <div className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-bold text-slate-800">
+                  Editar ítem de la cotización
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Solo se actualizan cantidad, descuento y notas. El precio y
+                  costo unitario quedan congelados para proteger el snapshot.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleCloseEditItemModal}
+                className="rounded-xl bg-slate-100 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-200"
+              >
+                ✕
+              </button>
+            </div>
+
+            {editItemError && (
+              <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                {editItemError}
+              </div>
+            )}
+
+            <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+                Snapshot protegido
+              </p>
+              <h3 className="mt-2 text-lg font-bold text-slate-900">
+                {editingItem.item_name}
+              </h3>
+              <p className="mt-1 text-sm text-slate-500">
+                Precio unitario:{" "}
+                {moneyFormatter.format(Number(editingItem.unit_price ?? 0))} ·
+                Costo unitario:{" "}
+                {moneyFormatter.format(Number(editingItem.unit_cost ?? 0))}
+              </p>
+            </div>
+
+            <form
+              onSubmit={handleSaveEditedItem}
+              className="mt-5 grid gap-4 md:grid-cols-2"
+            >
+              <div>
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                  Cantidad
+                </label>
+                <input
+                  value={editItemForm.quantity}
+                  onChange={(event) =>
+                    handleEditItemChange("quantity", event.target.value)
+                  }
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                  Descuento
+                </label>
+                <input
+                  value={editItemForm.discount}
+                  onChange={(event) =>
+                    handleEditItemChange("discount", event.target.value)
+                  }
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                  Notas internas
+                </label>
+                <textarea
+                  value={editItemForm.notes}
+                  onChange={(event) =>
+                    handleEditItemChange("notes", event.target.value)
+                  }
+                  rows={3}
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 md:col-span-2">
+                <button
+                  type="button"
+                  onClick={handleCloseEditItemModal}
+                  disabled={savingEditItem}
+                  className="rounded-2xl bg-slate-100 px-5 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-200 disabled:opacity-60"
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={savingEditItem}
+                  className="rounded-2xl bg-[#2D5398] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#234684] disabled:opacity-60"
+                >
+                  {savingEditItem ? "Actualizando..." : "Actualizar ítem"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {isItemModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4">

@@ -31,6 +31,9 @@ export type QuoteDetail = {
   version_number?: number | null;
   version_label?: string | null;
   version_notes?: string | null;
+  issuer_profile_id?: string | null;
+  issuer_profile_name?: string | null;
+  issuer_snapshot?: Record<string, unknown> | null;
 };
 
 export type QuoteItem = {
@@ -49,6 +52,11 @@ export type QuoteItem = {
   profit: number;
   margin_percentage: number;
   notes: string | null;
+  unit_type?: string | null;
+  quote_unit?: string | null;
+  purchase_unit?: string | null;
+  unit_content?: number | string | null;
+  proportional_enabled?: boolean | null;
   created_at: string;
 };
 
@@ -68,12 +76,6 @@ export type CatalogProduct = {
   price: number | string | null;
   stock: number | string | null;
   active: boolean | null;
-
-  quote_by_unit?: boolean | null;
-  quote_unit?: string | null;
-  unit_content?: number | string | null;
-  purchase_unit?: string | null;
-  public_sale_unit?: string | null;
 };
 
 export type QuoteHeaderUpdatePayload = {
@@ -84,6 +86,9 @@ export type QuoteHeaderUpdatePayload = {
   project_address: string | null;
   technical_scope: string | null;
   expiration_date: string | null;
+  issuer_profile_id?: string | null;
+  issuer_profile_name?: string | null;
+  issuer_snapshot?: Record<string, unknown> | null;
 };
 
 export type ManualQuoteItemPayload = {
@@ -100,6 +105,7 @@ export type ManualQuoteItemPayload = {
   profit: number;
   margin_percentage: number;
   notes: string | null;
+  unit_type?: string | null;
 };
 
 export type CatalogQuoteItemPayload = {
@@ -111,6 +117,21 @@ export type CatalogQuoteItemPayload = {
   quantity: number;
   unit_cost: number;
   unit_price: number;
+  discount: number;
+  subtotal: number;
+  total_cost: number;
+  profit: number;
+  margin_percentage: number;
+  notes: string | null;
+  unit_type?: string | null;
+  quote_unit?: string | null;
+  purchase_unit?: string | null;
+  unit_content?: number | null;
+  proportional_enabled?: boolean;
+};
+
+export type QuoteItemSnapshotUpdatePayload = {
+  quantity: number;
   discount: number;
   subtotal: number;
   total_cost: number;
@@ -135,7 +156,7 @@ export const getQuoteById = async (quoteId: string) => {
   const { data, error } = await supabase
     .from("quotes")
     .select(
-      "id, quote_number, customer_name, customer_phone, customer_email, customer_city, project_address, technical_scope, status, subtotal, tax_amount, total, issue_date, expiration_date, commercial_terms, warranty_terms, exclusions, parent_quote_id, version_number, version_label, version_notes",
+      "id, quote_number, customer_name, customer_phone, customer_email, customer_city, project_address, technical_scope, status, subtotal, tax_amount, total, issue_date, expiration_date, commercial_terms, warranty_terms, exclusions, parent_quote_id, version_number, version_label, version_notes, issuer_profile_id, issuer_profile_name, issuer_snapshot",
     )
     .eq("id", quoteId)
     .single();
@@ -149,7 +170,7 @@ export const getQuoteItems = async (quoteId: string) => {
   const { data, error } = await supabase
     .from("quote_items")
     .select(
-      "id, quote_id, item_type, item_name, item_description, sku, quantity, unit_cost, unit_price, discount, subtotal, total_cost, profit, margin_percentage, notes, created_at",
+      "id, quote_id, item_type, item_name, item_description, sku, quantity, unit_type, unit_cost, unit_price, discount, subtotal, total_cost, profit, margin_percentage, notes, quote_unit, purchase_unit, unit_content, proportional_enabled, created_at",
     )
     .eq("quote_id", quoteId)
     .order("created_at", { ascending: true });
@@ -210,11 +231,12 @@ export const searchQuoteCatalogProducts = async (searchTerm: string) => {
   price,
   stock,
   active,
-  quote_by_unit,
+  sale_unit,
+  public_sale_unit,
   quote_unit,
-  unit_content,
   purchase_unit,
-  public_sale_unit
+  unit_content,
+  quote_by_unit
 `,
     )
     .eq("active", true)
@@ -229,20 +251,46 @@ export const searchQuoteCatalogProducts = async (searchTerm: string) => {
   return (data ?? []) as CatalogProduct[];
 };
 
-export const createCatalogQuoteItem = async (payload: CatalogQuoteItemPayload) => {
+export const createCatalogQuoteItem = async (
+  payload: CatalogQuoteItemPayload,
+) => {
   const { error } = await supabase.from("quote_items").insert({
     ...payload,
     name_internal: payload.item_name,
+    unit_type: payload.unit_type ?? payload.quote_unit ?? "unidad",
+    quote_unit: payload.quote_unit ?? "unidad",
+    purchase_unit: payload.purchase_unit ?? null,
+    unit_content: payload.unit_content ?? null,
+    proportional_enabled: payload.proportional_enabled ?? false,
   });
 
   if (error) throw error;
 };
 
-export const createManualQuoteItem = async (payload: ManualQuoteItemPayload) => {
+export const createManualQuoteItem = async (
+  payload: ManualQuoteItemPayload,
+) => {
   const { error } = await supabase.from("quote_items").insert({
     ...payload,
     name_internal: payload.item_name,
+    unit_type: payload.unit_type ?? "unidad",
+    quote_unit: payload.unit_type ?? "unidad",
+    proportional_enabled: false,
   });
+
+  if (error) throw error;
+};
+
+export const updateQuoteItemSnapshot = async (
+  quoteId: string,
+  itemId: string,
+  payload: QuoteItemSnapshotUpdatePayload,
+) => {
+  const { error } = await supabase
+    .from("quote_items")
+    .update(payload)
+    .eq("id", itemId)
+    .eq("quote_id", quoteId);
 
   if (error) throw error;
 };
@@ -304,6 +352,9 @@ const duplicateQuote = async (quoteId: string) => {
       version_notes: null,
       issue_date: today.toISOString().split("T")[0],
       expiration_date: expirationDate.toISOString().split("T")[0],
+      issuer_profile_id: originalQuote.issuer_profile_id ?? null,
+      issuer_profile_name: originalQuote.issuer_profile_name ?? null,
+      issuer_snapshot: originalQuote.issuer_snapshot ?? null,
     })
     .select("id, quote_number")
     .single();
@@ -326,6 +377,12 @@ const duplicateQuote = async (quoteId: string) => {
       profit: item.profit,
       margin_percentage: item.margin_percentage,
       notes: item.notes,
+      unit_type: item.unit_type,
+      quote_unit: item.quote_unit,
+      purchase_unit: item.purchase_unit,
+      unit_content: item.unit_content,
+      proportional_enabled: item.proportional_enabled,
+      name_internal: item.name_internal ?? item.item_name,
     }));
 
     const { error: cloneItemsError } = await supabase
@@ -417,6 +474,9 @@ const createQuoteVersion = async (quoteId: string) => {
       version_notes: `Versión creada a partir de ${originalQuote.quote_number}.`,
       issue_date: today.toISOString().split("T")[0],
       expiration_date: expirationDate.toISOString().split("T")[0],
+      issuer_profile_id: originalQuote.issuer_profile_id ?? null,
+      issuer_profile_name: originalQuote.issuer_profile_name ?? null,
+      issuer_snapshot: originalQuote.issuer_snapshot ?? null,
     })
     .select("id, quote_number, version_number, version_label")
     .single();
@@ -439,6 +499,12 @@ const createQuoteVersion = async (quoteId: string) => {
       profit: item.profit,
       margin_percentage: item.margin_percentage,
       notes: item.notes,
+      unit_type: item.unit_type,
+      quote_unit: item.quote_unit,
+      purchase_unit: item.purchase_unit,
+      unit_content: item.unit_content,
+      proportional_enabled: item.proportional_enabled,
+      name_internal: item.name_internal ?? item.item_name,
     }));
 
     const { error: cloneItemsError } = await supabase
