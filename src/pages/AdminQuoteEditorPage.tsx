@@ -4,6 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { QuoteItemsTable } from "../modules/quotes/components/QuoteItemsTable.tsx";
 import { QuoteTotalsCards } from "../modules/quotes/components/QuoteTotalsCards.tsx";
+import { QuotePdfTemplate } from "../modules/quotes/components/QuotePdfTemplate.tsx";
 import { useQuoteFinancials } from "../modules/quotes/hooks/useQuoteFinancials.ts";
 import {
   createCatalogQuoteItem,
@@ -29,6 +30,10 @@ type EditForm = {
   project_address: string;
   technical_scope: string;
   expiration_date: string;
+  warranty_text: string;
+  conditions_text: string;
+  important_notes_text: string;
+  exclusions_text: string;
 };
 
 type ItemForm = {
@@ -63,15 +68,19 @@ type IssuerProfile = {
   document_number: string | null;
   tax_responsibility: string | null;
   city: string | null;
+  address: string | null;
   email: string | null;
   phone: string | null;
   bank_name: string | null;
   bank_account_type: string | null;
   bank_account_number: string | null;
   footer_notes: string | null;
+  logo_url: string | null;
   is_default: boolean;
   is_active: boolean;
 };
+
+type IssuerSnapshot = Partial<IssuerProfile> & Record<string, unknown>;
 
 const initialItemForm: ItemForm = {
   item_name: "",
@@ -110,6 +119,25 @@ const statusLabels: Record<QuoteStatus, string> = {
   expired: "Vencida",
 };
 
+const defaultWarrantyText =
+  "Se otorga una garantía de 2 meses sobre la instalación realizada.";
+
+const defaultConditionsText = `• No aplica garantía sobre equipos suministrados por el cliente.
+• No cubre daños ocasionados por:
+✓ Fluctuaciones o picos de energía.
+✓ Manipulación indebida por terceros.
+✓ Cambios posteriores en ubicación o configuración del sistema.`;
+
+const defaultImportantNotesText = `Cotización válida por 7 días calendario.
+Sujetos a disponibilidad de inventario y variación de precios.`;
+
+const defaultExclusionsText = `Esta cotización NO incluye:
+• Video balunes
+• Fuentes de poder
+• Caja de paso (10x10)
+• Multitomas
+• Elementos adicionales no especificados.`;
+
 const parseNumber = (value: string) => {
   const cleanValue = value.replace(/\./g, "").replace(",", ".");
   const numberValue = Number(cleanValue);
@@ -126,6 +154,11 @@ const buildEditFormFromQuote = (quote: QuoteDetail): EditForm => ({
   project_address: quote.project_address ?? "",
   technical_scope: quote.technical_scope ?? "",
   expiration_date: quote.expiration_date ?? "",
+  warranty_text: quote.warranty_text ?? defaultWarrantyText,
+  conditions_text: quote.conditions_text ?? defaultConditionsText,
+  important_notes_text:
+    quote.important_notes_text ?? defaultImportantNotesText,
+  exclusions_text: quote.exclusions_text ?? defaultExclusionsText,
 });
 
 type UnitAwareCatalogProduct = CatalogProduct & {
@@ -228,6 +261,23 @@ const getCatalogPricingSnapshot = (
   };
 };
 
+const getTextValue = (value: unknown, fallback = "No registrado") => {
+  if (typeof value !== "string") return fallback;
+
+  const trimmedValue = value.trim();
+  return trimmedValue.length > 0 ? trimmedValue : fallback;
+};
+
+const getIssuerSnapshot = (quote: QuoteDetail): IssuerSnapshot | null => {
+  const snapshot = quote.issuer_snapshot;
+
+  if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) {
+    return null;
+  }
+
+  return snapshot as IssuerSnapshot;
+};
+
 export const AdminQuoteEditorPage = () => {
   const { quoteId } = useParams();
   const navigate = useNavigate();
@@ -268,6 +318,10 @@ export const AdminQuoteEditorPage = () => {
   const [editItemError, setEditItemError] = useState("");
 
   const canEdit = quote?.status === "draft";
+
+  const handlePrintQuote = () => {
+    window.print();
+  };
 
   const { quoteTotals, settingsLoading } = useQuoteFinancials({
     quote,
@@ -334,7 +388,7 @@ export const AdminQuoteEditorPage = () => {
     const { data, error } = await supabase
       .from("quote_issuer_profiles")
       .select(
-        "id, profile_name, issuer_type, legal_name, commercial_name, document_type, document_number, tax_responsibility, city, email, phone, bank_name, bank_account_type, bank_account_number, footer_notes, is_default, is_active",
+        "id, profile_name, issuer_type, legal_name, commercial_name, document_type, document_number, tax_responsibility, city, address, email, phone, bank_name, bank_account_type, bank_account_number, footer_notes, logo_url, is_default, is_active",
       )
       .eq("is_active", true)
       .order("is_default", { ascending: false })
@@ -484,6 +538,10 @@ export const AdminQuoteEditorPage = () => {
         project_address: form.project_address.trim() || null,
         technical_scope: form.technical_scope.trim() || null,
         expiration_date: form.expiration_date || null,
+        warranty_text: form.warranty_text.trim() || null,
+        conditions_text: form.conditions_text.trim() || null,
+        important_notes_text: form.important_notes_text.trim() || null,
+        exclusions_text: form.exclusions_text.trim() || null,
       });
 
       setSuccessMessage("Datos de la cotización actualizados correctamente.");
@@ -830,8 +888,52 @@ export const AdminQuoteEditorPage = () => {
     );
   }
 
+  const issuerSnapshot = getIssuerSnapshot(quote);
+
   return (
-    <section className="min-h-screen bg-slate-100 px-4 py-6">
+    <>
+      <style>{`
+        @media screen {
+          .quote-print-area {
+            display: none;
+          }
+        }
+
+        @media print {
+          @page {
+            size: A4;
+            margin: 0;
+          }
+
+          body {
+            background: white !important;
+          }
+
+          body * {
+            visibility: hidden;
+          }
+
+          .quote-print-area,
+          .quote-print-area * {
+            visibility: visible;
+          }
+
+          .quote-print-area {
+            display: block !important;
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            min-height: 100vh;
+            background: white;
+          }
+
+          .no-print {
+            display: none !important;
+          }
+        }
+      `}</style>
+
+      <section className="no-print min-h-screen bg-slate-100 px-4 py-6">
       <div className="mx-auto flex max-w-7xl flex-col gap-6">
         <div className="flex flex-col gap-4 rounded-3xl bg-white p-6 shadow-sm lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -867,6 +969,14 @@ export const AdminQuoteEditorPage = () => {
             <span className="w-fit rounded-full bg-[#2D5398]/10 px-4 py-2 text-sm font-bold text-[#2D5398]">
               {statusLabels[quote.status]}
             </span>
+
+            <button
+              type="button"
+              onClick={handlePrintQuote}
+              className="rounded-2xl border border-[#2D5398]/20 bg-white px-5 py-3 text-sm font-semibold text-[#2D5398] transition hover:bg-[#2D5398]/10"
+            >
+              Generar PDF
+            </button>
 
             {canEdit && !isEditing && (
               <button
@@ -993,6 +1103,83 @@ export const AdminQuoteEditorPage = () => {
                 placeholder="Alcance del proyecto"
               />
 
+              <div className="md:col-span-2 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="mb-5">
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#2D5398]">
+                    Términos comerciales
+                  </p>
+                  <h3 className="mt-1 text-xl font-bold text-slate-800">
+                    Garantía, condiciones, notas y exclusiones
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Estos textos quedan guardados en esta cotización y serán usados
+                    para el PDF comercial. Puedes ajustarlos según el proyecto.
+                  </p>
+                </div>
+
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <div>
+                    <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                      Garantía
+                    </label>
+                    <textarea
+                      value={form.warranty_text}
+                      onChange={(event) =>
+                        handleChange("warranty_text", event.target.value)
+                      }
+                      rows={5}
+                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-relaxed outline-none focus:border-[#2D5398] focus:bg-white"
+                      placeholder="Texto de garantía"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                      Condiciones
+                    </label>
+                    <textarea
+                      value={form.conditions_text}
+                      onChange={(event) =>
+                        handleChange("conditions_text", event.target.value)
+                      }
+                      rows={5}
+                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-relaxed outline-none focus:border-[#2D5398] focus:bg-white"
+                      placeholder="Condiciones comerciales"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                      Notas importantes
+                    </label>
+                    <textarea
+                      value={form.important_notes_text}
+                      onChange={(event) =>
+                        handleChange("important_notes_text", event.target.value)
+                      }
+                      rows={5}
+                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-relaxed outline-none focus:border-[#2D5398] focus:bg-white"
+                      placeholder="Notas importantes"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                      Exclusiones importantes
+                    </label>
+                    <textarea
+                      value={form.exclusions_text}
+                      onChange={(event) =>
+                        handleChange("exclusions_text", event.target.value)
+                      }
+                      rows={5}
+                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-relaxed outline-none focus:border-[#2D5398] focus:bg-white"
+                      placeholder="Exclusiones importantes"
+                    />
+                  </div>
+                </div>
+              </div>
+
               <input
                 type="date"
                 value={form.expiration_date}
@@ -1063,17 +1250,80 @@ export const AdminQuoteEditorPage = () => {
             </div>
 
             <div className="rounded-3xl bg-white p-5 shadow-sm">
-              <p className="text-sm font-semibold text-slate-500">
-                Perfil emisor
-              </p>
-              <h2 className="mt-2 text-lg font-bold text-slate-800">
-                {quote.issuer_profile_name ?? "Sin perfil asignado"}
-              </h2>
-              <p className="mt-2 text-sm text-slate-500">
-                {quote.issuer_profile_id
-                  ? "Datos fiscales asociados a la cotización."
-                  : "Edita los datos para seleccionar Adela, Luis Darío o futura S.A.S."}
-              </p>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-500">
+                    Perfil emisor
+                  </p>
+
+                  <h2 className="mt-2 text-lg font-bold text-slate-800">
+                    {quote.issuer_profile_name ?? "Sin perfil asignado"}
+                  </h2>
+                </div>
+
+                {issuerSnapshot && (
+                  <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">
+                    Snapshot
+                  </span>
+                )}
+              </div>
+
+              {issuerSnapshot ? (
+                <div className="mt-4 space-y-3">
+                  <div className="rounded-2xl bg-slate-50 p-3">
+                    <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+                      Razón social
+                    </p>
+                    <p className="mt-1 text-sm font-bold text-slate-800">
+                      {getTextValue(issuerSnapshot.legal_name)}
+                    </p>
+                    <p className="text-xs font-semibold text-slate-500">
+                      {getTextValue(issuerSnapshot.document_type, "Doc.")} ·{" "}
+                      {getTextValue(issuerSnapshot.document_number)}
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl bg-slate-50 p-3">
+                    <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+                      Responsabilidad fiscal
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-slate-700">
+                      {getTextValue(issuerSnapshot.tax_responsibility)}
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl bg-slate-50 p-3">
+                    <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+                      Datos bancarios
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-slate-700">
+                      {getTextValue(issuerSnapshot.bank_name)}
+                    </p>
+                    <p className="text-xs font-semibold text-slate-500">
+                      {getTextValue(issuerSnapshot.bank_account_type, "Cuenta")} ·{" "}
+                      {getTextValue(issuerSnapshot.bank_account_number)}
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl bg-slate-50 p-3">
+                    <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+                      Contacto comercial
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-slate-700">
+                      {getTextValue(issuerSnapshot.phone)}
+                    </p>
+                    <p className="text-xs font-semibold text-slate-500">
+                      {getTextValue(issuerSnapshot.email)}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <p className="mt-2 text-sm text-slate-500">
+                  Edita los datos para seleccionar Adela, Luis Darío o futura
+                  S.A.S. Esta información quedará congelada al guardar la
+                  cotización.
+                </p>
+              )}
             </div>
           </div>
         )}
@@ -1718,6 +1968,16 @@ export const AdminQuoteEditorPage = () => {
           </div>
         </div>
       )}
-    </section>
+      </section>
+
+      <div className="quote-print-area">
+        <QuotePdfTemplate
+          quote={quote}
+          items={items}
+          quoteTotals={quoteTotals}
+          moneyFormatter={moneyFormatter}
+        />
+      </div>
+    </>
   );
 };

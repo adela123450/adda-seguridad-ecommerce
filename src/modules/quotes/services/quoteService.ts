@@ -34,6 +34,10 @@ export type QuoteDetail = {
   issuer_profile_id?: string | null;
   issuer_profile_name?: string | null;
   issuer_snapshot?: Record<string, unknown> | null;
+  warranty_text?: string | null;
+  conditions_text?: string | null;
+  important_notes_text?: string | null;
+  exclusions_text?: string | null;
 };
 
 export type QuoteItem = {
@@ -89,6 +93,10 @@ export type QuoteHeaderUpdatePayload = {
   issuer_profile_id?: string | null;
   issuer_profile_name?: string | null;
   issuer_snapshot?: Record<string, unknown> | null;
+  warranty_text?: string | null;
+  conditions_text?: string | null;
+  important_notes_text?: string | null;
+  exclusions_text?: string | null;
 };
 
 export type ManualQuoteItemPayload = {
@@ -156,7 +164,7 @@ export const getQuoteById = async (quoteId: string) => {
   const { data, error } = await supabase
     .from("quotes")
     .select(
-      "id, quote_number, customer_name, customer_phone, customer_email, customer_city, project_address, technical_scope, status, subtotal, tax_amount, total, issue_date, expiration_date, commercial_terms, warranty_terms, exclusions, parent_quote_id, version_number, version_label, version_notes, issuer_profile_id, issuer_profile_name, issuer_snapshot",
+      "id, quote_number, customer_name, customer_phone, customer_email, customer_city, project_address, technical_scope, status, subtotal, tax_amount, total, issue_date, expiration_date, commercial_terms, warranty_terms, exclusions, parent_quote_id, version_number, version_label, version_notes, issuer_profile_id, issuer_profile_name, issuer_snapshot, warranty_text, conditions_text, important_notes_text, exclusions_text",
     )
     .eq("id", quoteId)
     .single();
@@ -355,6 +363,10 @@ const duplicateQuote = async (quoteId: string) => {
       issuer_profile_id: originalQuote.issuer_profile_id ?? null,
       issuer_profile_name: originalQuote.issuer_profile_name ?? null,
       issuer_snapshot: originalQuote.issuer_snapshot ?? null,
+      warranty_text: originalQuote.warranty_text ?? null,
+      conditions_text: originalQuote.conditions_text ?? null,
+      important_notes_text: originalQuote.important_notes_text ?? null,
+      exclusions_text: originalQuote.exclusions_text ?? null,
     })
     .select("id, quote_number")
     .single();
@@ -477,6 +489,10 @@ const createQuoteVersion = async (quoteId: string) => {
       issuer_profile_id: originalQuote.issuer_profile_id ?? null,
       issuer_profile_name: originalQuote.issuer_profile_name ?? null,
       issuer_snapshot: originalQuote.issuer_snapshot ?? null,
+      warranty_text: originalQuote.warranty_text ?? null,
+      conditions_text: originalQuote.conditions_text ?? null,
+      important_notes_text: originalQuote.important_notes_text ?? null,
+      exclusions_text: originalQuote.exclusions_text ?? null,
     })
     .select("id, quote_number, version_number, version_label")
     .single();
