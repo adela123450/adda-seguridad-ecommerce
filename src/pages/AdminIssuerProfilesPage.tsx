@@ -302,29 +302,29 @@ export const AdminIssuerProfilesPage = () => {
   return (
     <section className="min-h-screen bg-slate-100 p-6">
       <div className="mx-auto max-w-7xl space-y-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-[#2D5398]">
-              Cotizaciones PRO
-            </p>
+        <div className="mb-8 overflow-hidden rounded-3xl bg-gradient-to-r from-[#101935] via-[#243C78] to-[#3F61B3] p-6 text-white shadow-xl">
+          <p className="text-sm font-semibold uppercase tracking-[0.25em] text-blue-100">
+            Centro de emisores
+          </p>
 
-            <h1 className="mt-2 text-3xl font-bold text-slate-800">
-              Perfiles emisores
-            </h1>
+          <h2 className="mt-2 text-3xl font-bold">
+            Perfiles emisores ADDA
+          </h2>
 
-            <p className="mt-2 max-w-3xl text-sm text-slate-500">
-              Administra las razones sociales, perfiles comerciales y
-              configuraciones fiscales utilizadas en las cotizaciones.
-            </p>
+          <p className="mt-2 max-w-3xl text-blue-100">
+            Administra las razones sociales, perfiles comerciales y
+            configuraciones fiscales utilizadas en las cotizaciones.
+          </p>
+
+          <div className="mt-5">
+            <button
+              type="button"
+              onClick={handleOpenCreateModal}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white/15 px-5 py-3 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-white/25"
+            >
+              + Nuevo emisor
+            </button>
           </div>
-
-          <button
-            type="button"
-            onClick={handleOpenCreateModal}
-            className="w-fit rounded-2xl bg-[#2D5398] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#234684]"
-          >
-            + Nuevo emisor
-          </button>
         </div>
 
         {errorMessage && (

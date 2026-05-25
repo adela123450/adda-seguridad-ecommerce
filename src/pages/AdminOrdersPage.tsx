@@ -1,6 +1,10 @@
 // src/pages/AdminOrdersPage.tsx
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
+import { EnterpriseTable } from "../components/admin/EnterpriseTable";
+import { MetricCard } from "../components/admin/MetricCard";
+import { PageHero } from "../components/admin/PageHero";
+import { StatusBadge } from "../components/admin/StatusBadge";
 
 type OrderStatus =
   | "pendiente"
@@ -54,29 +58,29 @@ const managementStatuses: OrderStatus[] = ["pendiente", "confirmado"];
 const paidStatuses: OrderStatus[] = ["pagado", "entregado"];
 const stockDiscountStatuses: OrderStatus[] = ["pagado", "enviado", "entregado"];
 
-const formatPrice = (value: number) => {
-  return new Intl.NumberFormat("es-CO", {
+const formatPrice = (value: number) =>
+  new Intl.NumberFormat("es-CO", {
     style: "currency",
     currency: "COP",
     minimumFractionDigits: 0,
   }).format(value);
-};
 
-const formatDate = (value: string) => {
-  return new Date(value).toLocaleString("es-CO");
-};
+const formatDate = (value: string) => new Date(value).toLocaleString("es-CO");
 
-const getStatusClass = (status: OrderStatus) => {
-  const styles: Record<OrderStatus, string> = {
-    pendiente: "bg-amber-100 text-amber-700",
-    confirmado: "bg-blue-100 text-blue-700",
-    pagado: "bg-green-100 text-green-700",
-    enviado: "bg-purple-100 text-purple-700",
-    entregado: "bg-slate-900 text-white",
-    cancelado: "bg-red-100 text-red-700",
+const getStatusTone = (status: OrderStatus) => {
+  const tones: Record<
+    OrderStatus,
+    "amber" | "blue" | "green" | "purple" | "dark" | "red"
+  > = {
+    pendiente: "amber",
+    confirmado: "blue",
+    pagado: "green",
+    enviado: "purple",
+    entregado: "dark",
+    cancelado: "red",
   };
 
-  return styles[status] ?? styles.pendiente;
+  return tones[status];
 };
 
 export const AdminOrdersPage = () => {
@@ -156,9 +160,7 @@ export const AdminOrdersPage = () => {
       .select("id, order_id, product_id, product_name, price, quantity, subtotal")
       .eq("order_id", orderId);
 
-    if (error) {
-      throw new Error(error.message);
-    }
+    if (error) throw new Error(error.message);
 
     const items = (data ?? []) as OrderItem[];
 
@@ -183,9 +185,7 @@ export const AdminOrdersPage = () => {
         );
       }
 
-      if (data) {
-        return data as ProductStock;
-      }
+      if (data) return data as ProductStock;
     }
 
     const { data: productByName, error: productByNameError } = await supabase
@@ -239,12 +239,12 @@ export const AdminOrdersPage = () => {
         );
       }
 
-      const { error: updateProductError } = await supabase
+      const { error } = await supabase
         .from("products")
         .update({ stock: newStock })
         .eq("id", product.id);
 
-      if (updateProductError) {
+      if (error) {
         throw new Error(`No fue posible descontar stock de "${product.name}".`);
       }
     }
@@ -259,12 +259,12 @@ export const AdminOrdersPage = () => {
       const quantity = Number(item.quantity ?? 0);
       const newStock = currentStock + quantity;
 
-      const { error: updateProductError } = await supabase
+      const { error } = await supabase
         .from("products")
         .update({ stock: newStock })
         .eq("id", product.id);
 
-      if (updateProductError) {
+      if (error) {
         throw new Error(`No fue posible devolver stock de "${product.name}".`);
       }
     }
@@ -275,25 +275,20 @@ export const AdminOrdersPage = () => {
     newStatus: OrderStatus
   ) => {
     const currentOrder = orders.find((order) => order.id === orderId);
-
     if (!currentOrder) return;
 
     setUpdatingOrderId(orderId);
 
     try {
       const mustDiscountStock =
-        stockDiscountStatuses.includes(newStatus) && !currentOrder.stock_discounted;
+        stockDiscountStatuses.includes(newStatus) &&
+        !currentOrder.stock_discounted;
 
       const mustRestoreStock =
         newStatus === "cancelado" && currentOrder.stock_discounted;
 
-      if (mustDiscountStock) {
-        await discountStockForOrder(orderId);
-      }
-
-      if (mustRestoreStock) {
-        await restoreStockForOrder(orderId);
-      }
+      if (mustDiscountStock) await discountStockForOrder(orderId);
+      if (mustRestoreStock) await restoreStockForOrder(orderId);
 
       const nextStockDiscounted = mustRestoreStock
         ? false
@@ -307,9 +302,7 @@ export const AdminOrdersPage = () => {
         })
         .eq("id", orderId);
 
-      if (error) {
-        throw new Error(error.message);
-      }
+      if (error) throw new Error(error.message);
 
       setOrders((currentOrders) =>
         currentOrders.map((order) =>
@@ -323,14 +316,14 @@ export const AdminOrdersPage = () => {
         )
       );
 
-      setSelectedOrder((currentSelectedOrder) =>
-        currentSelectedOrder && currentSelectedOrder.id === orderId
+      setSelectedOrder((current) =>
+        current && current.id === orderId
           ? {
-              ...currentSelectedOrder,
+              ...current,
               status: newStatus,
               stock_discounted: nextStockDiscounted,
             }
-          : currentSelectedOrder
+          : current
       );
     } catch (error) {
       console.error("Error actualizando estado:", error);
@@ -371,84 +364,72 @@ export const AdminOrdersPage = () => {
   };
 
   return (
-    <section className="mx-auto max-w-7xl px-4 py-8">
-      <div className="mb-8 overflow-hidden rounded-3xl bg-gradient-to-r from-[#101935] via-[#243C78] to-[#3F61B3] p-6 text-white shadow-xl">
-        <p className="text-sm font-semibold uppercase tracking-[0.25em] text-blue-100">
-          Panel Administrador
-        </p>
+    <section className="space-y-8">
+      <PageHero
+        eyebrow="Panel Administrador"
+        title="Gestión de pedidos"
+        description="Consulta, filtra, revisa detalles y actualiza el estado de los pedidos con una experiencia más clara, moderna y profesional."
+      />
 
-        <h1 className="mt-3 text-3xl md:text-4xl font-bold leading-tight">
-          Gestión de pedidos
-        </h1>
+      <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
+          title="Por gestionar"
+          value={ordersToManage}
+          description="Pendientes y confirmados"
+          tone="blue"
+        />
 
-        <p className="mt-3 max-w-2xl text-sm md:text-base text-white/80">
-          Consulta, filtra, revisa detalles y actualiza el estado de los pedidos.
-        </p>
+        <MetricCard
+          title="Ventas pagadas"
+          value={formatPrice(paidSales)}
+          description="Pagados y entregados"
+          tone="green"
+        />
+
+        <MetricCard
+          title="Enviados"
+          value={shippedOrders}
+          description="En proceso de entrega"
+          tone="purple"
+        />
+
+        <MetricCard
+          title="Cancelados"
+          value={canceledOrders}
+          description="No suman como venta"
+          tone="red"
+        />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-4">
-        <article className="rounded-2xl border border-blue-200 bg-white p-5 shadow-sm">
-          <p className="text-sm font-semibold text-slate-500">Por gestionar</p>
-          <h2 className="mt-2 text-3xl font-bold text-[#2D5398]">
-            {ordersToManage}
-          </h2>
-          <p className="mt-1 text-xs text-slate-500">
-            Pendientes y confirmados
-          </p>
-        </article>
-
-        <article className="rounded-2xl border border-green-200 bg-white p-5 shadow-sm">
-          <p className="text-sm font-semibold text-slate-500">
-            Ventas pagadas
-          </p>
-          <h2 className="mt-2 text-2xl font-bold text-green-700">
-            {formatPrice(paidSales)}
-          </h2>
-          <p className="mt-1 text-xs text-slate-500">Pagados y entregados</p>
-        </article>
-
-        <article className="rounded-2xl border border-purple-200 bg-white p-5 shadow-sm">
-          <p className="text-sm font-semibold text-slate-500">Enviados</p>
-          <h2 className="mt-2 text-3xl font-bold text-purple-700">
-            {shippedOrders}
-          </h2>
-          <p className="mt-1 text-xs text-slate-500">En proceso de entrega</p>
-        </article>
-
-        <article className="rounded-2xl border border-red-200 bg-white p-5 shadow-sm">
-          <p className="text-sm font-semibold text-slate-500">Cancelados</p>
-          <h2 className="mt-2 text-3xl font-bold text-red-700">
-            {canceledOrders}
-          </h2>
-          <p className="mt-1 text-xs text-slate-500">No suman como venta</p>
-        </article>
-      </div>
-
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="grid gap-4 md:grid-cols-[1fr_240px]">
+      <section className="rounded-3xl border border-slate-200 bg-white/95 p-6 shadow-lg shadow-slate-200/70 backdrop-blur">
+        <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <label className="mb-2 block text-sm font-semibold text-slate-700">
-              Buscar pedido
-            </label>
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-[#2D5398]">
+              Operación comercial
+            </p>
+            <h2 className="mt-2 text-2xl font-black text-slate-900">
+              Listado de pedidos
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              {filteredOrders.length} pedidos encontrados
+            </p>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-[1fr_220px] lg:w-[720px]">
             <input
               type="text"
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
               placeholder="Buscar por pedido, cliente, celular, correo o ciudad..."
-              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398] focus:ring-2 focus:ring-[#2D5398]/20"
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398] focus:bg-white focus:ring-4 focus:ring-[#2D5398]/10"
             />
-          </div>
 
-          <div>
-            <label className="mb-2 block text-sm font-semibold text-slate-700">
-              Filtrar por estado
-            </label>
             <select
               value={statusFilter}
               onChange={(event) =>
                 setStatusFilter(event.target.value as "todos" | OrderStatus)
               }
-              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398] focus:ring-2 focus:ring-[#2D5398]/20"
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm capitalize outline-none transition focus:border-[#2D5398] focus:bg-white focus:ring-4 focus:ring-[#2D5398]/10"
             >
               <option value="todos">Todos</option>
               {statusOptions.map((status) => (
@@ -460,78 +441,84 @@ export const AdminOrdersPage = () => {
           </div>
         </div>
 
-        <div className="mt-6">
-          {loading ? (
-            <p className="text-sm text-slate-500">Cargando pedidos...</p>
-          ) : filteredOrders.length === 0 ? (
-            <p className="rounded-2xl bg-slate-50 p-5 text-sm text-slate-500">
-              No hay pedidos que coincidan con la búsqueda o el filtro aplicado.
-            </p>
-          ) : (
-            <>
-              <div className="hidden overflow-x-auto lg:block">
+        {loading ? (
+          <p className="rounded-2xl bg-slate-50 p-6 text-sm text-slate-500">
+            Cargando pedidos...
+          </p>
+        ) : filteredOrders.length === 0 ? (
+          <p className="rounded-2xl bg-slate-50 p-6 text-sm text-slate-500">
+            No hay pedidos que coincidan con la búsqueda o el filtro aplicado.
+          </p>
+        ) : (
+          <>
+            <div className="hidden lg:block">
+              <EnterpriseTable>
                 <table className="min-w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-200 text-left text-slate-500">
-                      <th className="px-3 py-3">Pedido</th>
-                      <th className="px-3 py-3">Cliente</th>
-                      <th className="px-3 py-3">Celular</th>
-                      <th className="px-3 py-3">Ciudad</th>
-                      <th className="px-3 py-3">Total</th>
-                      <th className="px-3 py-3">Estado</th>
-                      <th className="px-3 py-3">Stock</th>
-                      <th className="px-3 py-3">Cambiar estado</th>
-                      <th className="px-3 py-3">Fecha</th>
-                      <th className="px-3 py-3">Detalle</th>
+                  <thead className="sticky top-0 z-10 bg-slate-50">
+                    <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-[0.14em] text-slate-500">
+                      <th className="px-4 py-4">Pedido</th>
+                      <th className="px-4 py-4">Cliente</th>
+                      <th className="px-4 py-4">Ciudad</th>
+                      <th className="px-4 py-4">Total</th>
+                      <th className="px-4 py-4">Estado</th>
+                      <th className="px-4 py-4">Stock</th>
+                      <th className="px-4 py-4">Cambiar estado</th>
+                      <th className="px-4 py-4">Fecha</th>
+                      <th className="px-4 py-4 text-right">Acción</th>
                     </tr>
                   </thead>
 
-                  <tbody>
+                  <tbody className="divide-y divide-slate-100">
                     {filteredOrders.map((order) => (
-                      <tr key={order.id} className="border-b border-slate-100">
-                        <td className="px-3 py-3 font-semibold text-slate-800">
-                          {order.order_number}
+                      <tr
+                        key={order.id}
+                        className="bg-white transition hover:bg-blue-50/40"
+                      >
+                        <td className="px-4 py-4">
+                          <p className="font-black text-slate-900">
+                            {order.order_number}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {order.phone}
+                          </p>
                         </td>
 
-                        <td className="px-3 py-3 text-slate-700">
-                          {order.customer_name}
+                        <td className="px-4 py-4">
+                          <p className="font-semibold text-slate-800">
+                            {order.customer_name}
+                          </p>
+                          <p className="mt-1 max-w-[220px] truncate text-xs text-slate-500">
+                            {order.email ?? "Sin correo"}
+                          </p>
                         </td>
 
-                        <td className="px-3 py-3 text-slate-700">
-                          {order.phone}
-                        </td>
-
-                        <td className="px-3 py-3 text-slate-700">
+                        <td className="px-4 py-4 text-slate-700">
                           {order.city}
                         </td>
 
-                        <td className="px-3 py-3 font-medium text-slate-800">
+                        <td className="px-4 py-4 font-black text-slate-900">
                           {formatPrice(Number(order.total_price ?? 0))}
                         </td>
 
-                        <td className="px-3 py-3">
-                          <span
-                            className={`rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(
-                              order.status
-                            )}`}
-                          >
-                            {order.status}
-                          </span>
+                        <td className="px-4 py-4">
+                          <StatusBadge
+                            label={order.status}
+                            tone={getStatusTone(order.status)}
+                          />
                         </td>
 
-                        <td className="px-3 py-3">
-                          <span
-                            className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                        <td className="px-4 py-4">
+                          <StatusBadge
+                            label={
                               order.stock_discounted
-                                ? "bg-green-100 text-green-700"
-                                : "bg-slate-100 text-slate-600"
-                            }`}
-                          >
-                            {order.stock_discounted ? "descontado" : "pendiente"}
-                          </span>
+                                ? "descontado"
+                                : "pendiente"
+                            }
+                            tone={order.stock_discounted ? "green" : "slate"}
+                          />
                         </td>
 
-                        <td className="px-3 py-3">
+                        <td className="px-4 py-4">
                           <select
                             value={order.status}
                             disabled={updatingOrderId === order.id}
@@ -541,7 +528,7 @@ export const AdminOrdersPage = () => {
                                 event.target.value as OrderStatus
                               )
                             }
-                            className="rounded-xl border border-slate-300 px-3 py-2 text-xs outline-none transition focus:border-[#2D5398]"
+                            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs capitalize outline-none transition focus:border-[#2D5398] focus:ring-2 focus:ring-[#2D5398]/10 disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             {statusOptions.map((status) => (
                               <option key={status} value={status}>
@@ -551,15 +538,15 @@ export const AdminOrdersPage = () => {
                           </select>
                         </td>
 
-                        <td className="px-3 py-3 text-slate-500">
+                        <td className="px-4 py-4 text-xs text-slate-500">
                           {formatDate(order.created_at)}
                         </td>
 
-                        <td className="px-3 py-3">
+                        <td className="px-4 py-4 text-right">
                           <button
                             type="button"
                             onClick={() => handleOpenDetail(order)}
-                            className="rounded-xl bg-[#2D5398] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#234684]"
+                            className="rounded-xl bg-[#2D5398] px-4 py-2 text-xs font-bold text-white shadow-md shadow-blue-200 transition hover:-translate-y-0.5 hover:bg-[#234684]"
                           >
                             Ver detalle
                           </button>
@@ -568,105 +555,97 @@ export const AdminOrdersPage = () => {
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </EnterpriseTable>
+            </div>
 
-              <div className="space-y-4 lg:hidden">
-                {filteredOrders.map((order) => (
-                  <article
-                    key={order.id}
-                    className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-bold text-slate-900">
-                          {order.order_number}
-                        </p>
-                        <p className="mt-1 text-sm text-slate-600">
-                          {order.customer_name}
-                        </p>
-                      </div>
-
-                      <span
-                        className={`rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(
-                          order.status
-                        )}`}
-                      >
-                        {order.status}
-                      </span>
-                    </div>
-
-                    <div className="mt-4 grid gap-2 text-sm text-slate-700">
-                      <p>
-                        <span className="font-semibold">Celular:</span>{" "}
-                        {order.phone}
+            <div className="space-y-4 lg:hidden">
+              {filteredOrders.map((order) => (
+                <article
+                  key={order.id}
+                  className="rounded-3xl border border-slate-200 bg-slate-50 p-5 shadow-sm"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-black text-slate-900">
+                        {order.order_number}
                       </p>
-                      <p>
-                        <span className="font-semibold">Ciudad:</span>{" "}
-                        {order.city}
-                      </p>
-                      <p>
-                        <span className="font-semibold">Total:</span>{" "}
-                        {formatPrice(Number(order.total_price ?? 0))}
-                      </p>
-                      <p>
-                        <span className="font-semibold">Stock:</span>{" "}
-                        {order.stock_discounted ? "descontado" : "pendiente"}
-                      </p>
-                      <p>
-                        <span className="font-semibold">Fecha:</span>{" "}
-                        {formatDate(order.created_at)}
+                      <p className="mt-1 text-sm text-slate-600">
+                        {order.customer_name}
                       </p>
                     </div>
 
-                    <div className="mt-4 grid gap-3">
-                      <div>
-                        <label className="mb-2 block text-xs font-semibold text-slate-600">
-                          Cambiar estado
-                        </label>
-                        <select
-                          value={order.status}
-                          disabled={updatingOrderId === order.id}
-                          onChange={(event) =>
-                            handleStatusChange(
-                              order.id,
-                              event.target.value as OrderStatus
-                            )
-                          }
-                          className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-[#2D5398]"
-                        >
-                          {statusOptions.map((status) => (
-                            <option key={status} value={status}>
-                              {status}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                    <StatusBadge
+                      label={order.status}
+                      tone={getStatusTone(order.status)}
+                    />
+                  </div>
 
-                      <button
-                        type="button"
-                        onClick={() => handleOpenDetail(order)}
-                        className="w-full rounded-xl bg-[#2D5398] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#234684]"
-                      >
-                        Ver detalle
-                      </button>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-      </div>
+                  <div className="mt-4 grid gap-2 text-sm text-slate-700">
+                    <p>
+                      <span className="font-semibold">Celular:</span>{" "}
+                      {order.phone}
+                    </p>
+                    <p>
+                      <span className="font-semibold">Ciudad:</span>{" "}
+                      {order.city}
+                    </p>
+                    <p>
+                      <span className="font-semibold">Total:</span>{" "}
+                      {formatPrice(Number(order.total_price ?? 0))}
+                    </p>
+                    <p>
+                      <span className="font-semibold">Stock:</span>{" "}
+                      {order.stock_discounted ? "descontado" : "pendiente"}
+                    </p>
+                    <p>
+                      <span className="font-semibold">Fecha:</span>{" "}
+                      {formatDate(order.created_at)}
+                    </p>
+                  </div>
+
+                  <div className="mt-4 grid gap-3">
+                    <select
+                      value={order.status}
+                      disabled={updatingOrderId === order.id}
+                      onChange={(event) =>
+                        handleStatusChange(
+                          order.id,
+                          event.target.value as OrderStatus
+                        )
+                      }
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm capitalize outline-none transition focus:border-[#2D5398]"
+                    >
+                      {statusOptions.map((status) => (
+                        <option key={status} value={status}>
+                          {status}
+                        </option>
+                      ))}
+                    </select>
+
+                    <button
+                      type="button"
+                      onClick={() => handleOpenDetail(order)}
+                      className="w-full rounded-xl bg-[#2D5398] px-4 py-3 text-sm font-bold text-white transition hover:bg-[#234684]"
+                    >
+                      Ver detalle
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </>
+        )}
+      </section>
 
       {selectedOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4 py-6">
-          <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-6 backdrop-blur-sm">
+          <div className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-[2rem] bg-white p-6 shadow-2xl">
             <div className="flex flex-col gap-4 border-b border-slate-200 pb-5 md:flex-row md:items-start md:justify-between">
               <div>
                 <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[#2D5398]">
                   Detalle del pedido
                 </p>
-                <h2 className="mt-2 text-2xl font-bold text-slate-900">
+                <h2 className="mt-2 text-3xl font-black text-slate-900">
                   {selectedOrder.order_number}
                 </h2>
                 <p className="mt-1 text-sm text-slate-500">
@@ -677,15 +656,15 @@ export const AdminOrdersPage = () => {
               <button
                 type="button"
                 onClick={handleCloseDetail}
-                className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
               >
                 Cerrar
               </button>
             </div>
 
             <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_0.8fr]">
-              <article className="rounded-2xl bg-slate-50 p-5">
-                <h3 className="text-lg font-bold text-slate-900">
+              <article className="rounded-3xl bg-slate-50 p-5">
+                <h3 className="text-lg font-black text-slate-900">
                   Datos del cliente
                 </h3>
 
@@ -717,32 +696,25 @@ export const AdminOrdersPage = () => {
                 </div>
               </article>
 
-              <article className="rounded-2xl bg-slate-50 p-5">
-                <h3 className="text-lg font-bold text-slate-900">
+              <article className="rounded-3xl bg-slate-50 p-5">
+                <h3 className="text-lg font-black text-slate-900">
                   Estado del pedido
                 </h3>
 
                 <div className="mt-4 flex flex-wrap gap-2">
-                  <span
-                    className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(
-                      selectedOrder.status
-                    )}`}
-                  >
-                    {selectedOrder.status}
-                  </span>
+                  <StatusBadge
+                    label={selectedOrder.status}
+                    tone={getStatusTone(selectedOrder.status)}
+                  />
 
-                  <span
-                    className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                  <StatusBadge
+                    label={
                       selectedOrder.stock_discounted
-                        ? "bg-green-100 text-green-700"
-                        : "bg-slate-100 text-slate-600"
-                    }`}
-                  >
-                    stock{" "}
-                    {selectedOrder.stock_discounted
-                      ? "descontado"
-                      : "pendiente"}
-                  </span>
+                        ? "stock descontado"
+                        : "stock pendiente"
+                    }
+                    tone={selectedOrder.stock_discounted ? "green" : "slate"}
+                  />
                 </div>
 
                 <label className="mt-5 mb-2 block text-sm font-semibold text-slate-700">
@@ -758,7 +730,7 @@ export const AdminOrdersPage = () => {
                       event.target.value as OrderStatus
                     )
                   }
-                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm capitalize outline-none transition focus:border-[#2D5398]"
                 >
                   {statusOptions.map((status) => (
                     <option key={status} value={status}>
@@ -769,15 +741,15 @@ export const AdminOrdersPage = () => {
 
                 <div className="mt-5 border-t border-slate-200 pt-4">
                   <p className="text-sm text-slate-500">Total pedido</p>
-                  <p className="mt-1 text-2xl font-bold text-slate-900">
+                  <p className="mt-1 text-3xl font-black text-slate-900">
                     {formatPrice(Number(selectedOrder.total_price ?? 0))}
                   </p>
                 </div>
               </article>
             </div>
 
-            <article className="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
-              <h3 className="text-lg font-bold text-slate-900">
+            <article className="mt-6 rounded-3xl border border-slate-200 bg-white p-5">
+              <h3 className="text-lg font-black text-slate-900">
                 Productos comprados
               </h3>
 
@@ -793,7 +765,7 @@ export const AdminOrdersPage = () => {
                 <div className="mt-4 overflow-x-auto">
                   <table className="min-w-full text-sm">
                     <thead>
-                      <tr className="border-b border-slate-200 text-left text-slate-500">
+                      <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-[0.14em] text-slate-500">
                         <th className="px-3 py-3">Producto</th>
                         <th className="px-3 py-3">Precio</th>
                         <th className="px-3 py-3">Cantidad</th>
@@ -801,9 +773,9 @@ export const AdminOrdersPage = () => {
                       </tr>
                     </thead>
 
-                    <tbody>
+                    <tbody className="divide-y divide-slate-100">
                       {orderItems.map((item) => (
-                        <tr key={item.id} className="border-b border-slate-100">
+                        <tr key={item.id}>
                           <td className="px-3 py-3 font-semibold text-slate-800">
                             {item.product_name}
                           </td>
@@ -813,7 +785,7 @@ export const AdminOrdersPage = () => {
                           <td className="px-3 py-3 text-slate-700">
                             {item.quantity}
                           </td>
-                          <td className="px-3 py-3 font-semibold text-slate-800">
+                          <td className="px-3 py-3 font-black text-slate-900">
                             {formatPrice(Number(item.subtotal ?? 0))}
                           </td>
                         </tr>

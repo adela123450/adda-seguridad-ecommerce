@@ -163,9 +163,6 @@ export const AdminTemplatesPage = () => {
     });
   }, [templates, search, serviceFilter, statusFilter]);
 
-  const activeTemplates = templates.filter(
-    (template) => template.active,
-  ).length;
 
   const resetForm = () => {
     setForm(initialForm);
@@ -331,32 +328,20 @@ export const AdminTemplatesPage = () => {
 
   return (
     <section className="mx-auto max-w-7xl px-4 py-8">
-      <div className="mb-8 overflow-hidden rounded-3xl bg-[#2D5398] shadow-xl">
-        <div className="grid gap-6 p-6 text-white md:grid-cols-[1.5fr_1fr] md:p-8">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.25em] text-white/70">
-              Cotizaciones PRO
-            </p>
+      <div className="mb-8 overflow-hidden rounded-3xl bg-gradient-to-r from-[#101935] via-[#243C78] to-[#3F61B3] p-6 text-white shadow-xl">
+        <p className="text-sm font-semibold uppercase tracking-[0.25em] text-blue-100">
+          Centro de plantillas
+        </p>
 
-            <h1 className="mt-2 text-4xl font-extrabold tracking-tight">
-              Plantillas reutilizables
-            </h1>
+        <h2 className="mt-2 text-3xl font-bold">
+          Plantillas reutilizables ADDA
+        </h2>
 
-            <p className="mt-4 max-w-3xl text-sm leading-6 text-white/85">
-              Administra plantillas técnicas para instalaciones, mantenimientos,
-              diagnósticos y soporte. Estas estructuras permiten estandarizar
-              cotizaciones, acelerar la operación y reducir errores comerciales.
-            </p>
-          </div>
-
-          <div className="rounded-2xl bg-white/10 p-5 backdrop-blur">
-            <p className="text-sm text-white/70">Plantillas registradas</p>
-            <p className="mt-2 text-4xl font-black">{templates.length}</p>
-            <p className="mt-2 text-sm text-white/70">
-              Activas: {activeTemplates}
-            </p>
-          </div>
-        </div>
+        <p className="mt-2 max-w-3xl text-blue-100">
+          Administra plantillas técnicas para instalaciones, mantenimientos,
+          diagnósticos y soporte, estandarizando cotizaciones y reduciendo
+          errores comerciales.
+        </p>
       </div>
 
       {message && (

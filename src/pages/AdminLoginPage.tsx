@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "../lib/supabase";
+import { supabaseAdmin } from "../lib/supabase";
 
 export const AdminLoginPage = () => {
   const navigate = useNavigate();
@@ -15,7 +15,7 @@ export const AdminLoginPage = () => {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
+    supabaseAdmin.auth.getUser().then(({ data }) => {
       setLoggedEmail(data.user?.email ?? "");
     });
   }, []);
@@ -26,7 +26,7 @@ export const AdminLoginPage = () => {
     setError("");
     setMessage("");
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { error } = await supabaseAdmin.auth.signInWithPassword({
       email,
       password,
     });
@@ -46,7 +46,7 @@ export const AdminLoginPage = () => {
     setError("");
     setMessage("");
 
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    const { error } = await supabaseAdmin.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/admin/reset-password`,
     });
 
@@ -61,7 +61,7 @@ export const AdminLoginPage = () => {
   };
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    await supabaseAdmin.auth.signOut();
     setLoggedEmail("");
     setEmail("");
     setPassword("");
@@ -87,12 +87,14 @@ export const AdminLoginPage = () => {
             <p className="text-sm font-medium text-slate-700">
               Sesión activa:
             </p>
+
             <p className="mt-1 text-sm font-semibold text-[#2D5398]">
               {loggedEmail}
             </p>
 
             <div className="mt-4 flex gap-2">
               <button
+                type="button"
                 onClick={() => navigate("/admin/products")}
                 className="rounded-xl bg-[#2D5398] px-4 py-2 text-sm font-semibold text-white"
               >
@@ -100,6 +102,7 @@ export const AdminLoginPage = () => {
               </button>
 
               <button
+                type="button"
                 onClick={handleLogout}
                 className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700"
               >
@@ -149,13 +152,13 @@ export const AdminLoginPage = () => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-xl bg-[#2D5398] py-3 text-sm font-semibold text-white transition hover:bg-[#234684]"
+              className="w-full rounded-xl bg-[#2D5398] py-3 text-sm font-semibold text-white transition hover:bg-[#234684] disabled:cursor-not-allowed disabled:opacity-70"
             >
               {loading
                 ? "Procesando..."
                 : isRecoveryMode
-                ? "Enviar recuperación"
-                : "Ingresar"}
+                  ? "Enviar recuperación"
+                  : "Ingresar"}
             </button>
 
             <button

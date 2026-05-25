@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
-import { supabase } from "../../lib/supabase";
+import { supabaseAdmin } from "../../lib/supabase";
 
 type ProtectedRouteProps = {
   allowedRoles?: string[];
@@ -11,13 +11,13 @@ export const ProtectedRoute = ({
   allowedRoles = ["super_admin", "admin", "editor"],
   children,
 }: ProtectedRouteProps) => {
-  const [status, setStatus] = useState<"loading" | "allowed" | "denied" | "no-session">(
-    "loading"
-  );
+  const [status, setStatus] = useState<
+    "loading" | "allowed" | "denied" | "no-session"
+  >("loading");
 
   useEffect(() => {
     const validateAccess = async () => {
-      const { data: sessionData } = await supabase.auth.getSession();
+      const { data: sessionData } = await supabaseAdmin.auth.getSession();
 
       if (!sessionData.session) {
         setStatus("no-session");
@@ -26,7 +26,7 @@ export const ProtectedRoute = ({
 
       const user = sessionData.session.user;
 
-      const { data: profile, error } = await supabase
+      const { data: profile, error } = await supabaseAdmin
         .from("profiles")
         .select("role, is_active")
         .eq("id", user.id)
@@ -67,6 +67,7 @@ export const ProtectedRoute = ({
           <h1 className="text-2xl font-bold text-slate-800">
             Acceso no autorizado
           </h1>
+
           <p className="mt-3 text-slate-600">
             Tu usuario no tiene permisos activos para ingresar al panel.
           </p>
