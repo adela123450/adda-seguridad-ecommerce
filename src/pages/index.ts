@@ -13,3 +13,4 @@ export * from "./AdminTemplatesPage";
 export * from "./AdminQuotesPage";
 export * from "./AdminQuoteEditorPage";
 export * from "./AdminIssuerProfilesPage";
+export * from "./AdminCustomersPage";

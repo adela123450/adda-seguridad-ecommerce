@@ -261,14 +261,19 @@ export const AccountPage = () => {
       return;
     }
 
-    const customerUpdate = await supabase
-      .from("customers")
-      .update({
-        full_name: fullName,
-        phone,
-        city,
-      })
-      .eq("auth_user_id", data.user.id);
+    const customerUpdate = await supabase.from("customers").upsert(
+      {
+        auth_user_id: data.user.id,
+        full_name: fullName.trim(),
+        email: email.trim().toLowerCase(),
+        phone: phone.trim() || null,
+        city: city.trim() || null,
+        is_active: true,
+      },
+      {
+        onConflict: "auth_user_id",
+      },
+    );
 
     if (customerUpdate.error) {
       setError(
@@ -320,16 +325,18 @@ export const AccountPage = () => {
             </p>
 
             <div className="mt-6 flex flex-wrap gap-3">
-              {["Seguridad empresarial", "Historial inteligente", "Soporte especializado"].map(
-                (item) => (
-                  <span
-                    key={item}
-                    className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-semibold text-blue-50"
-                  >
-                    {item}
-                  </span>
-                ),
-              )}
+              {[
+                "Seguridad empresarial",
+                "Historial inteligente",
+                "Soporte especializado",
+              ].map((item) => (
+                <span
+                  key={item}
+                  className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-semibold text-blue-50"
+                >
+                  {item}
+                </span>
+              ))}
             </div>
           </div>
         </div>
@@ -489,7 +496,9 @@ export const AccountPage = () => {
                   </div>
 
                   {error && <AuthMessage type="error">{error}</AuthMessage>}
-                  {message && <AuthMessage type="success">{message}</AuthMessage>}
+                  {message && (
+                    <AuthMessage type="success">{message}</AuthMessage>
+                  )}
 
                   <form
                     onSubmit={mode === "login" ? handleLogin : handleRegister}
@@ -510,7 +519,7 @@ export const AccountPage = () => {
                           <AuthInput
                             icon={<FiPhone />}
                             type="tel"
-                            placeholder="Teléfono"
+                            placeholder="Celular / WhatsApp"
                             value={phone}
                             onChange={setPhone}
                           />

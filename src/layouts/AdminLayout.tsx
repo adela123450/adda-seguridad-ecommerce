@@ -29,7 +29,12 @@ const navSections: NavSection[] = [
     title: "Operaciones",
     items: [
       { label: "Pedidos", to: "/admin/orders", icon: "□" },
-      { label: "Multimedia cloud", to: "/admin/multimedia-migration", icon: "▧" },
+      { label: "Clientes", to: "/admin/customers", icon: "◉" },
+      {
+        label: "Multimedia cloud",
+        to: "/admin/multimedia-migration",
+        icon: "▧",
+      },
     ],
   },
   {
@@ -174,7 +179,6 @@ export const AdminLayout = () => {
             </div>
 
             <div className="flex items-center gap-3">
-
               <div className="hidden text-right sm:block">
                 <p className="text-sm font-semibold text-slate-900">
                   Administrador

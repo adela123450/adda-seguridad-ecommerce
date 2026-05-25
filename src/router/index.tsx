@@ -16,6 +16,7 @@ import {
   AdminQuotesPage,
   AdminQuoteEditorPage,
   AdminIssuerProfilesPage,
+  AdminCustomersPage,
 } from "../pages";
 
 import { CheckoutPage } from "../pages/CheckoutPage";
@@ -111,6 +112,10 @@ export const router = createBrowserRouter([
           {
             path: "quotes/:quoteId",
             element: <AdminQuoteEditorPage />,
+          },
+          {
+            path: "customers",
+            element: <AdminCustomersPage />,
           },
         ],
       },

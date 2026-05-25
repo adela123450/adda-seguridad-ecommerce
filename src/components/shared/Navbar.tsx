@@ -16,6 +16,23 @@ import { HiOutlineMenuAlt3 } from "react-icons/hi";
 import { Logo } from "./Logo";
 import { useCart } from "../../hooks/useCart";
 import { useFavorites } from "../../hooks/useFavorites";
+import { supabasePublic } from "../../lib/supabase";
+
+type CustomerNavbarData = {
+  full_name: string | null;
+};
+
+const getFirstName = (fullName?: string | null) => {
+  if (
+    fullName &&
+    fullName.trim() &&
+    fullName.trim().toLowerCase() !== "null"
+  ) {
+    return fullName.trim().split(" ")[0];
+  }
+
+  return "";
+};
 
 export const Navbar = () => {
   const { totalItems } = useCart();
@@ -25,6 +42,7 @@ export const Navbar = () => {
 
   const [searchTerm, setSearchTerm] = useState("");
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [customerName, setCustomerName] = useState("");
 
   useEffect(() => {
     const isCatalogPage = location.pathname === "/Equipos de seguridad";
@@ -33,6 +51,44 @@ export const Navbar = () => {
       setSearchTerm("");
     }
   }, [location.pathname]);
+
+  useEffect(() => {
+    const loadCustomerName = async () => {
+      const { data: sessionData } = await supabasePublic.auth.getSession();
+      const user = sessionData.session?.user;
+
+      if (!user) {
+        setCustomerName("");
+        return;
+      }
+
+      const { data, error } = await supabasePublic
+        .from("customers")
+        .select("full_name")
+        .eq("auth_user_id", user.id)
+        .maybeSingle();
+
+      if (error || !data) {
+        setCustomerName("");
+        return;
+      }
+
+      const customer = data as CustomerNavbarData;
+
+      setCustomerName(getFirstName(customer.full_name));
+    };
+
+    loadCustomerName();
+
+    const { data: authListener } =
+      supabasePublic.auth.onAuthStateChange(() => {
+        loadCustomerName();
+      });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
 
   const handleSearch = () => {
     const query = searchTerm.trim();
@@ -115,15 +171,26 @@ export const Navbar = () => {
               <span className="absolute -bottom-2 -right-2 grid h-5 w-5 place-items-center rounded-full bg-[#2D5398] text-xs text-white">
                 {totalFavorites}
               </span>
+
               <HiOutlineHeart size={25} />
             </Link>
 
             <Link
               to="/account"
-              className="grid h-9 w-9 place-items-center rounded-full border-2 border-slate-700 text-slate-700 transition-all duration-300 hover:border-[#2D5398] hover:text-[#2D5398]"
+              className={`flex items-center gap-2 rounded-full border-2 px-3 py-2 text-sm font-semibold transition-all duration-300 ${
+                customerName
+                  ? "border-[#2D5398] bg-[#2D5398]/10 text-[#2D5398]"
+                  : "border-slate-700 text-slate-700 hover:border-[#2D5398] hover:text-[#2D5398]"
+              }`}
               aria-label="Mi cuenta"
             >
-              <HiOutlineUser size={22} />
+              <HiOutlineUser size={21} />
+
+              {customerName && (
+                <span className="max-w-[110px] truncate">
+                  Hola, {customerName}
+                </span>
+              )}
             </Link>
 
             <Link
@@ -134,12 +201,13 @@ export const Navbar = () => {
               <span className="absolute -bottom-2 -right-2 grid h-5 w-5 place-items-center rounded-full bg-[#2D5398] text-xs text-white">
                 {totalItems}
               </span>
+
               <HiOutlineShoppingBag size={25} />
             </Link>
           </div>
         </div>
 
-        {/* MOBILE - 3 BLOQUES */}
+        {/* MOBILE */}
         <div className="grid grid-cols-[88px_1fr_48px] items-center gap-2 px-4 py-3 md:hidden">
           <div className="flex items-center justify-start overflow-hidden">
             <Logo compact />
@@ -154,12 +222,17 @@ export const Navbar = () => {
               <span className="absolute -bottom-2 -right-2 grid h-5 w-5 place-items-center rounded-full bg-[#2D5398] text-xs text-white">
                 {totalFavorites}
               </span>
+
               <HiOutlineHeart size={24} />
             </Link>
 
             <Link
               to="/account"
-              className="grid h-9 w-9 place-items-center rounded-full border-2 border-slate-700 text-slate-700 transition-all duration-300 hover:border-[#2D5398] hover:text-[#2D5398]"
+              className={`grid h-9 w-9 place-items-center rounded-full border-2 transition-all duration-300 ${
+                customerName
+                  ? "border-[#2D5398] bg-[#2D5398]/10 text-[#2D5398]"
+                  : "border-slate-700 text-slate-700 hover:border-[#2D5398] hover:text-[#2D5398]"
+              }`}
               aria-label="Mi cuenta"
             >
               <HiOutlineUser size={21} />
@@ -173,6 +246,7 @@ export const Navbar = () => {
               <span className="absolute -bottom-2 -right-2 grid h-5 w-5 place-items-center rounded-full bg-[#2D5398] text-xs text-white">
                 {totalItems}
               </span>
+
               <HiOutlineShoppingBag size={24} />
             </Link>
           </div>
@@ -205,79 +279,33 @@ export const Navbar = () => {
                 type="button"
                 onClick={closeMenu}
                 className="grid h-9 w-9 place-items-center text-2xl text-slate-700 transition hover:text-[#2D5398]"
-                aria-label="Cerrar menú"
               >
                 ×
               </button>
             </div>
 
             <div className="flex flex-1 flex-col overflow-y-auto px-5 py-5">
-              <nav className="flex flex-col gap-4">
-                <NavLink
-                  to="/"
+              {customerName && (
+                <Link
+                  to="/account"
                   onClick={closeMenu}
-                  className="border-b border-slate-100 pb-3 text-base font-medium text-slate-700 hover:text-[#2D5398]"
+                  className="mb-5 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-bold text-[#2D5398]"
                 >
-                  Inicio
-                </NavLink>
-
-                <NavLink
-                  to="/Equipos de seguridad"
-                  onClick={closeMenu}
-                  className="border-b border-slate-100 pb-3 text-base font-medium text-slate-700 hover:text-[#2D5398]"
-                >
-                  Equipos
-                </NavLink>
-
-                <NavLink
-                  to="/favoritos"
-                  onClick={closeMenu}
-                  className="flex items-center justify-between border-b border-slate-100 pb-3 text-base font-medium text-slate-700 hover:text-[#2D5398]"
-                >
-                  <span>Favoritos</span>
-                  <span className="grid h-5 min-w-[20px] place-items-center rounded-full bg-[#2D5398] px-1 text-xs text-white">
-                    {totalFavorites}
-                  </span>
-                </NavLink>
-
-                <NavLink
-                  to="/carrito"
-                  onClick={closeMenu}
-                  className="flex items-center justify-between border-b border-slate-100 pb-3 text-base font-medium text-slate-700 hover:text-[#2D5398]"
-                >
-                  <span>Carrito</span>
-                  <span className="grid h-5 min-w-[20px] place-items-center rounded-full bg-[#2D5398] px-1 text-xs text-white">
-                    {totalItems}
-                  </span>
-                </NavLink>
-              </nav>
-
-              <div className="my-6 border-t border-slate-200" />
+                  Hola, {customerName}
+                </Link>
+              )}
 
               <nav className="flex flex-col gap-4">
-                <Link
-                  to="/Nosotros#instalacion"
-                  onClick={closeMenu}
-                  className="border-b border-slate-100 pb-3 text-base font-medium text-slate-700 hover:text-[#2D5398]"
-                >
-                  Instalación CCTV
-                </Link>
-
-                <Link
-                  to="/Nosotros#soporte"
-                  onClick={closeMenu}
-                  className="border-b border-slate-100 pb-3 text-base font-medium text-slate-700 hover:text-[#2D5398]"
-                >
-                  Soporte y mantenimiento
-                </Link>
-
-                <NavLink
-                  to="/Nosotros"
-                  onClick={closeMenu}
-                  className="border-b border-slate-100 pb-3 text-base font-medium text-slate-700 hover:text-[#2D5398]"
-                >
-                  Nosotros
-                </NavLink>
+                {navbarLinks.map((link) => (
+                  <NavLink
+                    key={link.id}
+                    to={link.href}
+                    onClick={closeMenu}
+                    className="border-b border-slate-100 pb-3 text-base font-medium text-slate-700 hover:text-[#2D5398]"
+                  >
+                    {link.title}
+                  </NavLink>
+                ))}
 
                 <NavLink
                   to="/account"

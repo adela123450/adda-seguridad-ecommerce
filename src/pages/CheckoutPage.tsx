@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useCart } from "../hooks/useCart";
-import { supabase } from "../lib/supabase";
+import { supabasePublic } from "../lib/supabase";
 
 const IVA_RATE = 0.19;
 const WOMPI_FEE_RATE = 0.032;
@@ -17,6 +17,14 @@ type BusinessSettings = {
   payment_mode?: PaymentMode | null;
 };
 
+type CustomerProfile = {
+  full_name: string | null;
+  email: string;
+  phone: string | null;
+  city: string | null;
+  address: string | null;
+};
+
 type CheckoutSummary = {
   subtotal: number;
   iva_amount: number;
@@ -28,14 +36,6 @@ type CheckoutSummary = {
   tax_rate: number;
 };
 
-const formatPrice = (value: number) => {
-  return new Intl.NumberFormat("es-CO", {
-    style: "currency",
-    currency: "COP",
-    minimumFractionDigits: 0,
-  }).format(value);
-};
-
 type CheckoutFormData = {
   fullName: string;
   phone: string;
@@ -43,6 +43,14 @@ type CheckoutFormData = {
   address: string;
   city: string;
   notes: string;
+};
+
+const formatPrice = (value: number) => {
+  return new Intl.NumberFormat("es-CO", {
+    style: "currency",
+    currency: "COP",
+    minimumFractionDigits: 0,
+  }).format(value);
 };
 
 export const CheckoutPage = () => {
@@ -54,6 +62,9 @@ export const CheckoutPage = () => {
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("hibrido");
   const [selectedPayment, setSelectedPayment] =
     useState<PaymentMethod>("transferencia");
+
+  const [customerLoaded, setCustomerLoaded] = useState(false);
+  const [hasCustomerSession, setHasCustomerSession] = useState(false);
 
   const subtotal = Math.round(totalPrice);
   const ivaAmount = taxMode === "con_iva" ? Math.round(subtotal * taxRate) : 0;
@@ -79,7 +90,7 @@ export const CheckoutPage = () => {
 
   useEffect(() => {
     const loadBusinessSettings = async () => {
-      const { data, error } = await supabase
+      const { data, error } = await supabasePublic
         .from("business_settings")
         .select("tax_mode, tax_rate, payment_mode")
         .limit(1)
@@ -122,8 +133,49 @@ export const CheckoutPage = () => {
     loadBusinessSettings();
   }, []);
 
+  useEffect(() => {
+    const loadCustomerProfile = async () => {
+      const { data: sessionData } = await supabasePublic.auth.getSession();
+      const user = sessionData.session?.user;
+
+      if (!user) {
+        setHasCustomerSession(false);
+        setCustomerLoaded(true);
+        return;
+      }
+
+      setHasCustomerSession(true);
+
+      const { data, error } = await supabasePublic
+        .from("customers")
+        .select("full_name, email, phone, city, address")
+        .eq("auth_user_id", user.id)
+        .maybeSingle();
+
+      if (error || !data) {
+        setCustomerLoaded(true);
+        return;
+      }
+
+      const customer = data as CustomerProfile;
+
+      setFormData((prev) => ({
+        ...prev,
+        fullName: customer.full_name ?? prev.fullName,
+        email: customer.email ?? user.email ?? prev.email,
+        phone: customer.phone ?? prev.phone,
+        city: customer.city ?? prev.city,
+        address: customer.address ?? prev.address,
+      }));
+
+      setCustomerLoaded(true);
+    };
+
+    loadCustomerProfile();
+  }, []);
+
   const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) => {
     const { name, value } = e.target;
 
@@ -199,7 +251,7 @@ export const CheckoutPage = () => {
 
   if (cart.length === 0) {
     return (
-      <section className="max-w-7xl mx-auto px-4 py-16">
+      <section className="mx-auto max-w-7xl px-4 py-16">
         <h1 className="text-3xl font-bold text-slate-800">
           No hay productos para procesar
         </h1>
@@ -219,14 +271,22 @@ export const CheckoutPage = () => {
   }
 
   return (
-    <section className="max-w-7xl mx-auto px-4 py-12">
+    <section className="mx-auto max-w-7xl px-4 py-12">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-slate-800">
           Finalizar pedido
         </h1>
+
         <p className="mt-2 text-slate-600">
           Completa tus datos para continuar con la confirmación del pedido.
         </p>
+
+        {customerLoaded && hasCustomerSession && (
+          <div className="mt-4 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-medium text-[#2D5398]">
+            Tus datos básicos fueron cargados desde tu cuenta de cliente.
+            Puedes ajustarlos antes de confirmar el pedido.
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
@@ -249,8 +309,8 @@ export const CheckoutPage = () => {
                   name="fullName"
                   value={formData.fullName}
                   onChange={handleChange}
-                  placeholder="Ej. Luis Eduardo Gaitán"
-                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-slate-500"
+                  placeholder="Ej. Luis Darío Ramírez"
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
                 />
                 {errors.fullName && (
                   <p className="mt-2 text-sm text-red-600">
@@ -261,7 +321,7 @@ export const CheckoutPage = () => {
 
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-700">
-                  Celular
+                  Celular / WhatsApp
                 </label>
                 <input
                   type="text"
@@ -269,7 +329,7 @@ export const CheckoutPage = () => {
                   value={formData.phone}
                   onChange={handleChange}
                   placeholder="Ej. 3001234567"
-                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-slate-500"
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
                 />
                 {errors.phone && (
                   <p className="mt-2 text-sm text-red-600">{errors.phone}</p>
@@ -286,7 +346,7 @@ export const CheckoutPage = () => {
                   value={formData.email}
                   onChange={handleChange}
                   placeholder="Ej. correo@dominio.com"
-                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-slate-500"
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
                 />
                 {errors.email && (
                   <p className="mt-2 text-sm text-red-600">{errors.email}</p>
@@ -303,7 +363,7 @@ export const CheckoutPage = () => {
                   value={formData.address}
                   onChange={handleChange}
                   placeholder="Ej. Calle 10 # 20 - 30"
-                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-slate-500"
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
                 />
                 {errors.address && (
                   <p className="mt-2 text-sm text-red-600">
@@ -322,7 +382,7 @@ export const CheckoutPage = () => {
                   value={formData.city}
                   onChange={handleChange}
                   placeholder="Ej. Bogotá"
-                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-slate-500"
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
                 />
                 {errors.city && (
                   <p className="mt-2 text-sm text-red-600">{errors.city}</p>
@@ -339,7 +399,7 @@ export const CheckoutPage = () => {
                   onChange={handleChange}
                   rows={4}
                   placeholder="Ej. Necesito asesoría para escoger DVR compatible."
-                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-slate-500"
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
                 />
               </div>
             </div>
@@ -387,9 +447,7 @@ export const CheckoutPage = () => {
                         : "border-slate-200 bg-white text-slate-700 hover:border-[#2D5398]/40"
                     }`}
                   >
-                    <p className="text-base font-bold">
-                      Pago online seguro
-                    </p>
+                    <p className="text-base font-bold">Pago online seguro</p>
                     <p className="mt-2 text-sm">
                       Opción para pago digital mediante pasarela. Incluye el
                       costo operativo de la transacción online.
@@ -398,7 +456,9 @@ export const CheckoutPage = () => {
                       Total pago online:{" "}
                       {formatPrice(
                         finalTotal +
-                          Math.round(finalTotal * WOMPI_FEE_RATE + WOMPI_FIXED_FEE)
+                          Math.round(
+                            finalTotal * WOMPI_FEE_RATE + WOMPI_FIXED_FEE,
+                          ),
                       )}
                     </p>
                   </button>
@@ -466,7 +526,7 @@ export const CheckoutPage = () => {
                 <span className="font-medium text-slate-800">{totalItems}</span>
               </div>
 
-              <div className="border-t border-slate-200 pt-4 space-y-3">
+              <div className="space-y-3 border-t border-slate-200 pt-4">
                 <div className="flex items-center justify-between text-sm text-slate-600">
                   <span>Subtotal</span>
                   <span className="font-semibold text-slate-800">
