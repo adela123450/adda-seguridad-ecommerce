@@ -15,6 +15,7 @@ import {
   searchQuoteCatalogProducts,
   updateQuoteHeader,
   updateQuoteItemSnapshot,
+  applyTemplateToQuote,
   type CatalogProduct,
   type QuoteDetail,
   type QuoteItem,
@@ -78,6 +79,23 @@ type IssuerProfile = {
   logo_url: string | null;
   is_default: boolean;
   is_active: boolean;
+};
+
+type QuoteTemplate = {
+  id: string;
+  name: string;
+  template_code: string | null;
+  description: string | null;
+  installation_type: string | null;
+  estimated_duration: string | null;
+  default_public_scope: string | null;
+  default_labor_notes: string | null;
+  default_logistics_notes: string | null;
+  warranty_text: string | null;
+  conditions_text: string | null;
+  important_notes_text: string | null;
+  exclusions_text: string | null;
+  active: boolean;
 };
 
 type IssuerSnapshot = Partial<IssuerProfile> & Record<string, unknown>;
@@ -286,6 +304,8 @@ export const AdminQuoteEditorPage = () => {
   const [items, setItems] = useState<QuoteItem[]>([]);
   const [form, setForm] = useState<EditForm | null>(null);
   const [issuerProfiles, setIssuerProfiles] = useState<IssuerProfile[]>([]);
+  const [templates, setTemplates] = useState<QuoteTemplate[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [itemForm, setItemForm] = useState<ItemForm>(initialItemForm);
   const [itemModalMode, setItemModalMode] = useState<"manual" | "catalog">(
     "manual",
@@ -405,11 +425,34 @@ export const AdminQuoteEditorPage = () => {
     setIssuerProfiles((data ?? []) as IssuerProfile[]);
   };
 
+  const loadTemplates = async () => {
+    const { data, error } = await supabase
+      .from("quote_templates")
+      .select(
+        "id, name, template_code, description, installation_type, estimated_duration, default_public_scope, default_labor_notes, default_logistics_notes, warranty_text, conditions_text, important_notes_text, exclusions_text, active",
+      )
+      .eq("active", true)
+      .order("name", { ascending: true });
+
+    if (error) {
+      setErrorMessage(`No fue posible cargar las plantillas: ${error.message}`);
+      setTemplates([]);
+      return;
+    }
+
+    setTemplates((data ?? []) as QuoteTemplate[]);
+  };
+
   const refreshAll = async () => {
     setLoading(true);
     setErrorMessage("");
 
-    await Promise.all([loadQuote(), loadItems(), loadIssuerProfiles()]);
+    await Promise.all([
+      loadQuote(),
+      loadItems(),
+      loadIssuerProfiles(),
+      loadTemplates(),
+    ]);
 
     setLoading(false);
   };
@@ -428,6 +471,67 @@ export const AdminQuoteEditorPage = () => {
         [field]: value,
       };
     });
+  };
+
+  const handleApplyTemplate = async () => {
+    if (!quote || !form) return;
+
+    if (!canEdit) {
+      setErrorMessage(
+        "Solo se pueden aplicar plantillas cuando la cotización está en borrador.",
+      );
+      return;
+    }
+
+    const template = templates.find(
+      (current) => current.id === selectedTemplateId,
+    );
+
+    if (!template) {
+      setErrorMessage("Selecciona una plantilla válida.");
+      return;
+    }
+
+    const hasExistingContent = Boolean(
+      quote.technical_scope ||
+        quote.warranty_text ||
+        quote.conditions_text ||
+        quote.important_notes_text ||
+        quote.exclusions_text,
+    );
+
+    const replaceTexts =
+      !hasExistingContent ||
+      window.confirm(
+        "Esta acción reemplazará los términos comerciales actuales por los definidos en la plantilla seleccionada. ¿Deseas continuar?",
+      );
+
+    if (!replaceTexts) {
+      return;
+    }
+
+    setSaving(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+      const result = await applyTemplateToQuote(quote.id, template.id, {
+        replaceTexts: true,
+      });
+
+      setSuccessMessage(
+        `Plantilla "${result.appliedTemplateName}" aplicada correctamente. Ítems insertados: ${result.insertedCount}. Duplicados omitidos: ${result.skippedCount}.`,
+      );
+
+      await refreshAll();
+    } catch (error) {
+      const currentError = error as Error;
+      setErrorMessage(
+        `No fue posible aplicar la plantilla: ${currentError.message}`,
+      );
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleItemChange = (field: keyof ItemForm, value: string) => {
@@ -1018,6 +1122,63 @@ export const AdminQuoteEditorPage = () => {
               <p className="mt-1 text-sm text-slate-500">
                 Actualiza la información principal de la cotización.
               </p>
+
+              <div className="mt-6 rounded-3xl border border-slate-200 bg-slate-50 p-5">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                  <div className="flex-1">
+                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#2D5398]">
+                      Plantillas comerciales ADDA
+                    </p>
+
+                    <h3 className="mt-1 text-lg font-bold text-slate-800">
+                      Aplicar plantilla base
+                    </h3>
+
+                    <p className="mt-1 text-sm text-slate-500">
+                      Precarga automáticamente alcance, condiciones y notas comerciales.
+                    </p>
+
+                    <select
+                      value={selectedTemplateId}
+                      onChange={(event) =>
+                        setSelectedTemplateId(event.target.value)
+                      }
+                      className="mt-4 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-[#2D5398]"
+                    >
+                      <option value="">Seleccionar plantilla</option>
+
+                      {templates.map((template) => (
+                        <option key={template.id} value={template.id}>
+                          {template.name}
+                        </option>
+                      ))}
+                    </select>
+
+                    {selectedTemplateId && (
+                      <div className="mt-3 rounded-2xl bg-white p-4 text-sm text-slate-600">
+                        <p className="font-semibold text-slate-800">
+                          {templates.find(
+                            (template) => template.id === selectedTemplateId,
+                          )?.description ?? "Sin descripción"}
+                        </p>
+                        <p className="mt-2 text-xs font-medium text-slate-500">
+                          Duración estimada: {templates.find(
+                            (template) => template.id === selectedTemplateId,
+                          )?.estimated_duration ?? "No definida"}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleApplyTemplate}
+                    className="rounded-2xl bg-[#2D5398] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#234684]"
+                  >
+                    Aplicar plantilla
+                  </button>
+                </div>
+              </div>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">

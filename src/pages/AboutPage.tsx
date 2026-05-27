@@ -22,27 +22,47 @@ export const AboutPage = () => {
   return (
     <section className="mx-auto max-w-7xl px-4 py-10 md:py-12">
       {/* HERO PREMIUM */}
-      <div className="overflow-hidden rounded-3xl bg-gradient-to-r from-[#101935] via-[#243C78] to-[#3F61B3] shadow-xl">
-        <div className="relative px-6 py-12 md:px-8 md:py-14">
-          <div className="absolute -right-16 top-8 h-40 w-40 rounded-full bg-white/10 blur-3xl" />
-          <div className="absolute left-8 bottom-0 h-32 w-32 rounded-full bg-blue-200/10 blur-3xl" />
+      <div
+        className="relative overflow-hidden rounded-3xl border border-blue-200/20 shadow-[0_18px_45px_rgba(37,99,235,0.18)]"
+        style={{
+          backgroundImage: `
+      linear-gradient(
+        90deg,
+        rgba(35, 66, 114, 0.96) 0%,
+        rgba(11, 61, 135, 0.96) 32%,
+        rgba(82, 121, 195, 0.3) 54%,
+        rgba(233, 235, 238, 0.06) 60%,
+        transparent 65%
+      ),
+      url('/images/heroes/about-hero.webp')
+    `,
+          backgroundSize: "cover",
+          backgroundPosition: "right center",
+          backgroundRepeat: "no-repeat",
+        }}
+      >
 
-          <div className="relative">
-            <span className="inline-flex rounded-full border border-white/15 bg-white/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-blue-50">
-              SOBRE ADDA SEGURIDAD
-            </span>
+        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-white/22" />
+        
+        <div className="absolute -right-10 top-8 h-44 w-44 rounded-full bg-white/5 blur-3xl" />
+        <div className="absolute bottom-0 left-8 h-36 w-36 rounded-full bg-cyan-300/5 blur-3xl" />
+        <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.02),transparent_35%,rgba(255,255,255,0.02)_100%)]" />
 
-            <h1 className="mt-4 max-w-4xl text-2xl font-bold text-white md:text-4xl">
-              Soluciones de seguridad con enfoque profesional
-            </h1>
+        <div className="relative px-6 py-8 md:px-8 md:py-10">
+          <span className="inline-flex rounded-full border border-white/15 bg-white/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-blue-50 backdrop-blur-sm">
+            SOBRE ADDA SEGURIDAD
+          </span>
 
-            <p className="mt-4 max-w-3xl text-base leading-7 text-blue-100 md:text-lg md:leading-8">
-              En ADDA Seguridad S.A.S. trabajamos para ofrecer equipos
-              confiables, asesoría técnica y soluciones integrales en
-              videovigilancia, almacenamiento, redes y tecnología aplicada a la
-              protección de hogares, negocios e instituciones.
-            </p>
-          </div>
+          <h1 className="mt-5 max-w-3xl text-3xl font-bold leading-tight text-white md:text-5xl">
+            Soluciones de seguridad con enfoque profesional
+          </h1>
+
+          <p className="mt-5 max-w-2xl text-base leading-7 text-white md:text-lg md:leading-8">
+            En ADDA Seguridad S.A.S. trabajamos para ofrecer equipos confiables,
+            asesoría técnica y soluciones integrales en videovigilancia,
+            almacenamiento, redes y tecnología aplicada a la protección de
+            hogares, negocios e instituciones.
+          </p>
         </div>
       </div>
 
@@ -138,9 +158,7 @@ export const AboutPage = () => {
             id="instalacion"
             className="rounded-xl border border-slate-200 bg-gradient-to-br from-white to-cyan-50 p-5 transition duration-300 hover:-translate-y-1 hover:shadow-lg"
           >
-            <h3 className="font-semibold text-slate-800">
-              Instalación CCTV
-            </h3>
+            <h3 className="font-semibold text-slate-800">Instalación CCTV</h3>
             <p className="mt-2 text-justify text-sm leading-6 text-slate-600">
               Montaje y puesta en marcha de soluciones adaptadas a hogares,
               comercios y espacios institucionales.
@@ -238,24 +256,37 @@ export const AboutPage = () => {
       </div>
 
       {/* CTA FINAL */}
-      <div className="mt-8 rounded-2xl bg-gradient-to-r from-slate-900 to-[#1e3a8a] px-8 py-10 text-center text-white shadow-md">
-        <h2 className="text-2xl font-bold md:text-3xl">
-          ¿Quieres cotizar una solución de seguridad?
-        </h2>
+      <div
+        className="mt-8 overflow-hidden rounded-3xl border border-blue-100 bg-cover bg-center shadow-xl"
+        style={{
+          backgroundImage: "url('/images/heroes/banner-inferior.webp')",
+        }}
+      >
+        <div className="bg-gradient-to-r from-white/70 via-white/35 to-transparent px-8 py-12 text-left md:px-12 md:py-14">
+          <div className="max-w-2xl">
+            <span className="inline-flex rounded-full border border-[#2D5398]/15 bg-white/85 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-[#2D5398] shadow-sm backdrop-blur">
+              ASESORÍA PROFESIONAL
+            </span>
 
-        <p className="mx-auto mt-3 max-w-2xl text-slate-300">
-          Te ayudamos a encontrar equipos y soluciones adecuadas para tu hogar,
-          negocio o proyecto institucional.
-        </p>
+            <h2 className="mt-5 text-2xl font-bold text-slate-950 md:text-3xl">
+              ¿Quieres cotizar una solución de seguridad?
+            </h2>
 
-        <a
-          href="https://wa.me/573015068866?text=Hola,%20quiero%20más%20información%20sobre%20ADDA%20Seguridad%20S.A.S."
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mt-6 inline-flex rounded-xl bg-[#2D5398] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#234684]"
-        >
-          Solicitar cotización por WhatsApp
-        </a>
+            <p className="mt-3 max-w-xl text-base leading-7 text-slate-700">
+              Te ayudamos a encontrar equipos y soluciones adecuadas para tu
+              hogar, negocio o proyecto institucional.
+            </p>
+
+            <a
+              href="https://wa.me/573015068866?text=Hola,%20quiero%20más%20información%20sobre%20ADDA%20Seguridad%20S.A.S."
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-6 inline-flex rounded-xl bg-[#2D5398] px-6 py-3 text-sm font-semibold text-white shadow-md transition hover:bg-[#234684]"
+            >
+              Solicitar cotización por WhatsApp
+            </a>
+          </div>
+        </div>
       </div>
     </section>
   );

@@ -253,13 +253,33 @@ export const EquiposPage = () => {
 
   return (
     <section className="mx-auto max-w-7xl px-4 py-12">
-      <div className="relative overflow-hidden rounded-3xl border border-blue-200/20 bg-gradient-to-r from-[#101935] via-[#243C78] to-[#3F61B3] shadow-[0_18px_45px_rgba(37,99,235,0.18)]">
-        <div className="absolute -right-10 top-8 h-44 w-44 rounded-full bg-white/10 blur-3xl" />
-        <div className="absolute left-8 bottom-0 h-36 w-36 rounded-full bg-cyan-300/10 blur-3xl" />
-        <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.04),transparent_35%,rgba(255,255,255,0.03)_100%)]" />
+      <div
+        className="relative overflow-hidden rounded-3xl border border-blue-200/20 shadow-[0_18px_45px_rgba(37,99,235,0.18)]"
+        style={{
+          backgroundImage: `
+  linear-gradient(
+    90deg,
+    rgba(35, 66, 114, 1) 0%,
+    rgb(11, 61, 135) 32%,
+    rgba(82, 121, 195, 0.3) 50%,
+    rgba(233, 235, 238, 0.06) 60%,
+    transparent 75%
+  ),
+  url('/images/heroes/hero-cctv-solar-adda.webp')
+`,
+          backgroundSize: "cover",
+          backgroundPosition: "right center",
+          backgroundRepeat: "no-repeat",
+        }}
+      >
+        <div className="absolute -right-10 top-8 h-44 w-44 rounded-full bg-white/5 blur-3xl" />
+
+        <div className="absolute left-8 bottom-0 h-36 w-36 rounded-full bg-cyan-300/5 blur-3xl" />
+
+        <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.02),transparent_35%,rgba(255,255,255,0.02)_100%)]" />
 
         <div className="relative px-6 py-12 md:px-8 md:py-14">
-          <span className="inline-flex rounded-full border border-white/15 bg-white/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-blue-50">
+          <span className="inline-flex rounded-full border border-white/15 bg-white/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-blue-50 backdrop-blur-sm">
             Catálogo ADDA Seguridad
           </span>
 
@@ -267,7 +287,7 @@ export const EquiposPage = () => {
             Equipos de seguridad
           </h1>
 
-          <p className="mt-4 max-w-3xl text-base leading-7 text-blue-100 md:text-lg md:leading-8">
+          <p className="mt-4 max-w-3xl text-base leading-7 text-white md:text-lg md:leading-8">
             Explora nuestro catálogo profesional de CCTV, almacenamiento,
             accesorios y soluciones inteligentes para proyectos residenciales,
             comerciales e institucionales.
