@@ -28,11 +28,11 @@ export const AboutPage = () => {
           backgroundImage: `
       linear-gradient(
         90deg,
-        rgba(35, 66, 114, 0.96) 0%,
-        rgba(11, 61, 135, 0.96) 32%,
-        rgba(82, 121, 195, 0.3) 54%,
-        rgba(233, 235, 238, 0.06) 60%,
-        transparent 65%
+          rgba(35, 66, 114, 1) 0%,
+          rgb(11, 61, 135) 32%,
+          rgba(82, 121, 195, 0.3) 50%,
+          rgba(233, 235, 238, 0.06) 60%,
+          transparent 75%
       ),
       url('/images/heroes/about-hero.webp')
     `,
@@ -41,9 +41,8 @@ export const AboutPage = () => {
           backgroundRepeat: "no-repeat",
         }}
       >
-
         <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-white/22" />
-        
+
         <div className="absolute -right-10 top-8 h-44 w-44 rounded-full bg-white/5 blur-3xl" />
         <div className="absolute bottom-0 left-8 h-36 w-36 rounded-full bg-cyan-300/5 blur-3xl" />
         <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.02),transparent_35%,rgba(255,255,255,0.02)_100%)]" />
@@ -60,77 +59,49 @@ export const AboutPage = () => {
           <p className="mt-5 max-w-2xl text-base leading-7 text-white md:text-lg md:leading-8">
             En ADDA Seguridad S.A.S. trabajamos para ofrecer equipos confiables,
             asesoría técnica y soluciones integrales en videovigilancia,
-            almacenamiento, redes y tecnología aplicada a la protección de
-            hogares, negocios e instituciones.
+            almacenamiento, redes.
           </p>
         </div>
       </div>
 
-      {/* BLOQUE 1 */}
-      <div className="mt-10 grid grid-cols-1 gap-8 lg:grid-cols-2">
-        <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-md transition duration-300 hover:-translate-y-1 hover:shadow-xl">
-          <h2 className="border-l-4 border-[#2D5398] pl-4 text-2xl font-bold text-slate-800">
-            Quiénes somos
-          </h2>
+      <div className="mt-12 grid gap-8 lg:grid-cols-[0.82fr_1.18fr]">
+        <div className="rounded-3xl border border-blue-100/70 bg-gradient-to-br from-white via-blue-50/30 to-slate-50 p-8 shadow-[0_18px_45px_rgba(45,83,152,0.08)]">
+          <div className="mb-6 flex items-center gap-3">
+            <div className="h-10 w-1 rounded-full bg-[#2D5398]" />
 
-          <p className="mt-4 text-justify leading-8 tracking-normal text-slate-600">
-            ADDA Seguridad S.A.S. es una empresa orientada al suministro,
-            instalación y acompañamiento técnico en soluciones de seguridad
-            electrónica. Nuestro enfoque combina tecnología, atención
-            personalizada y criterio profesional para ayudar a cada cliente a
-            elegir la opción más adecuada según su necesidad.
-          </p>
+            <h2 className="text-3xl font-bold text-[#0F172A]">Quiénes somos</h2>
+          </div>
 
-          <p className="mt-4 text-justify leading-8 tracking-normal text-slate-600">
-            Trabajamos con un portafolio enfocado en sistemas CCTV,
-            almacenamiento, accesorios, redes y soporte técnico, brindando una
-            experiencia más clara, confiable y útil tanto para proyectos
-            residenciales como comerciales e institucionales.
-          </p>
+          <div className="space-y-6 text-[15px] leading-8 text-slate-600">
+            <p>
+              ADDA Seguridad es una empresa orientada al suministro,
+              instalación y acompañamiento técnico en soluciones de seguridad
+              electrónica.
+            </p>
+
+            <p>
+              Nuestro enfoque combina tecnología, atención personalizada y
+              criterio profesional para ayudar a cada cliente a elegir la opción
+              más adecuada según su necesidad.
+            </p>
+
+            <p>
+              Trabajamos con un portafolio enfocado en sistemas CCTV,
+              almacenamiento, accesorios, redes y soporte técnico, brindando una
+              experiencia más clara, confiable y útil tanto para proyectos
+              residenciales como comerciales e institucionales.
+            </p>
+          </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-md transition duration-300 hover:-translate-y-1 hover:shadow-xl">
-          <h2 className="border-l-4 border-[#2D5398] pl-4 text-2xl font-bold text-slate-800">
-            Nuestra propuesta de valor
-          </h2>
+        <div className="relative min-h-[420px] overflow-hidden rounded-3xl border border-blue-100/70 shadow-[0_18px_45px_rgba(45,83,152,0.12)]">
+          <img
+            src="/images/heroes/img-card.jpg"
+            alt="Equipo técnico ADDA Seguridad"
+            className="h-full w-full object-cover"
+          />
 
-          <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="rounded-xl border border-blue-100 bg-gradient-to-br from-blue-50 to-white p-4 transition duration-300 hover:shadow-md">
-              <h3 className="font-semibold text-slate-800">
-                Atención personalizada
-              </h3>
-              <p className="mt-2 text-sm leading-6 text-slate-600">
-                Recomendaciones orientadas a cada proyecto, sin soluciones
-                genéricas.
-              </p>
-            </div>
-
-            <div className="rounded-xl border border-blue-100 bg-gradient-to-br from-blue-50 to-white p-4 transition duration-300 hover:shadow-md">
-              <h3 className="font-semibold text-slate-800">
-                Equipos confiables
-              </h3>
-              <p className="mt-2 text-sm leading-6 text-slate-600">
-                Portafolio pensado para brindar desempeño, durabilidad y buena
-                relación costo-beneficio.
-              </p>
-            </div>
-
-            <div className="rounded-xl border border-blue-100 bg-gradient-to-br from-blue-50 to-white p-4 transition duration-300 hover:shadow-md">
-              <h3 className="font-semibold text-slate-800">Soporte técnico</h3>
-              <p className="mt-2 text-sm leading-6 text-slate-600">
-                Acompañamiento en selección, instalación y uso de los equipos.
-              </p>
-            </div>
-
-            <div className="rounded-xl border border-blue-100 bg-gradient-to-br from-blue-50 to-white p-4 transition duration-300 hover:shadow-md">
-              <h3 className="font-semibold text-slate-800">
-                Soluciones integrales
-              </h3>
-              <p className="mt-2 text-sm leading-6 text-slate-600">
-                CCTV, almacenamiento, accesorios y redes en una sola propuesta.
-              </p>
-            </div>
-          </div>
+          <div className="absolute inset-0 bg-gradient-to-t from-[#0F172A]/10 via-transparent to-transparent" />
         </div>
       </div>
 

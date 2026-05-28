@@ -21,7 +21,7 @@ const formatPrice = (value: number) => {
 
 const isValidUuid = (value: string) => {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(
-    value
+    value,
   );
 };
 
@@ -98,8 +98,7 @@ export const OrderConfirmationPage = () => {
   const storedCheckoutSummary = localStorage.getItem("checkoutSummary");
 
   const customer = safeJsonParse<CheckoutCustomer>(storedCustomer);
-  const checkoutSummary =
-    safeJsonParse<CheckoutSummary>(storedCheckoutSummary);
+  const checkoutSummary = safeJsonParse<CheckoutSummary>(storedCheckoutSummary);
 
   const fallbackSubtotal = Math.round(totalPrice);
   const fallbackIvaAmount =
@@ -185,7 +184,7 @@ export const OrderConfirmationPage = () => {
 
       if (error) {
         throw new Error(
-          `No fue posible validar el producto "${item.name}" en Supabase.`
+          `No fue posible validar el producto "${item.name}" en Supabase.`,
         );
       }
 
@@ -203,7 +202,7 @@ export const OrderConfirmationPage = () => {
 
       if (error) {
         throw new Error(
-          `No fue posible buscar el producto "${item.name}" por slug.`
+          `No fue posible buscar el producto "${item.name}" por slug.`,
         );
       }
 
@@ -220,13 +219,13 @@ export const OrderConfirmationPage = () => {
 
     if (error) {
       throw new Error(
-        `No fue posible buscar el producto "${item.name}" por nombre.`
+        `No fue posible buscar el producto "${item.name}" por nombre.`,
       );
     }
 
     if (!data) {
       throw new Error(
-        `El producto "${item.name}" no existe en Supabase. Elimínalo del carrito y agrégalo nuevamente desde el catálogo real.`
+        `El producto "${item.name}" no existe en Supabase. Elimínalo del carrito y agrégalo nuevamente desde el catálogo real.`,
       );
     }
 
@@ -242,7 +241,7 @@ export const OrderConfirmationPage = () => {
 
       if (currentStock < item.quantity) {
         throw new Error(
-          `Stock insuficiente para "${product.name}". Stock actual: ${currentStock}, solicitado: ${item.quantity}.`
+          `Stock insuficiente para "${product.name}". Stock actual: ${currentStock}, solicitado: ${item.quantity}.`,
         );
       }
 
@@ -279,7 +278,7 @@ export const OrderConfirmationPage = () => {
 
     if (!isPaymentMethodAllowed()) {
       alert(
-        "El método de pago seleccionado ya no está disponible. Regresa al checkout y selecciona un método válido."
+        "El método de pago seleccionado ya no está disponible. Regresa al checkout y selecciona un método válido.",
       );
       return;
     }
@@ -291,11 +290,60 @@ export const OrderConfirmationPage = () => {
 
       const orderNumber = generateOrderNumber();
 
+      const { data: sessionData } = await supabase.auth.getSession();
+
+      const user = sessionData.session?.user;
+
+      let customerId: string | null = null;
+
+      if (user) {
+        const { data: existingCustomer, error: customerSearchError } =
+          await supabase
+            .from("customers")
+            .select("id")
+            .eq("auth_user_id", user.id)
+            .maybeSingle();
+
+        if (customerSearchError) {
+          throw customerSearchError;
+        }
+
+        
+        if (existingCustomer) {
+          customerId = existingCustomer.id;
+        } else {
+
+          const { data: newCustomer, error: createCustomerError } =
+            await supabase
+              .from("customers")
+              .insert([
+                {
+                  auth_user_id: user.id,
+                  full_name: customer.fullName,
+                  email: customer.email,
+                  phone: customer.phone || null,
+                  city: customer.city || null,
+                  address: customer.address || null,
+                  is_active: true,
+                },
+              ])
+              .select("id")
+              .single();
+
+          if (createCustomerError) {
+            throw createCustomerError;
+          }
+
+          customerId = newCustomer.id;
+        }
+      }
+
       const { data: orderData, error: orderError } = await supabase
         .from("orders")
         .insert([
           {
             order_number: orderNumber,
+            customer_id: customerId,
             customer_name: customer.fullName,
             phone: customer.phone,
             email: customer.email,
@@ -330,7 +378,7 @@ export const OrderConfirmationPage = () => {
         ((productsCostData ?? []) as ProductCost[]).map((product) => [
           product.id,
           Number(product.cost_price ?? 0),
-        ])
+        ]),
       );
 
       const itemsToInsert = cartWithRealProductIds.map((item) => {
@@ -388,7 +436,7 @@ export const OrderConfirmationPage = () => {
           taxMode: snapshotTaxMode,
           taxRate: snapshotTaxRate,
           createdAt: new Date().toISOString(),
-        })
+        }),
       );
 
       clearCart();
@@ -403,7 +451,7 @@ export const OrderConfirmationPage = () => {
       alert(
         error instanceof Error
           ? error.message
-          : "No fue posible registrar el pedido. Intenta nuevamente."
+          : "No fue posible registrar el pedido. Intenta nuevamente.",
       );
     } finally {
       setLoading(false);
@@ -563,9 +611,7 @@ export const OrderConfirmationPage = () => {
 
         <aside className="lg:col-span-5">
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm lg:sticky lg:top-24">
-            <h2 className="text-2xl font-bold text-slate-800">
-              Resumen final
-            </h2>
+            <h2 className="text-2xl font-bold text-slate-800">Resumen final</h2>
 
             <div className="mt-6 space-y-4">
               <div className="flex items-center justify-between text-sm text-slate-600">
@@ -577,9 +623,7 @@ export const OrderConfirmationPage = () => {
 
               <div className="flex items-center justify-between text-sm text-slate-600">
                 <span>Unidades</span>
-                <span className="font-medium text-slate-800">
-                  {totalItems}
-                </span>
+                <span className="font-medium text-slate-800">{totalItems}</span>
               </div>
 
               <div className="space-y-3 border-t border-slate-200 pt-4">
@@ -591,7 +635,9 @@ export const OrderConfirmationPage = () => {
                 </div>
 
                 <div className="flex items-center justify-between text-sm text-slate-600">
-                  <span>IVA {snapshotTaxMode === "con_iva" ? "19%" : "0%"}</span>
+                  <span>
+                    IVA {snapshotTaxMode === "con_iva" ? "19%" : "0%"}
+                  </span>
                   <span className="font-semibold text-slate-800">
                     {formatPrice(ivaAmount)}
                   </span>
@@ -628,8 +674,8 @@ export const OrderConfirmationPage = () => {
                 {loading
                   ? "Registrando pedido..."
                   : loadingSettings
-                  ? "Cargando configuración..."
-                  : "Confirmar pedido"}
+                    ? "Cargando configuración..."
+                    : "Confirmar pedido"}
               </button>
 
               <Link
