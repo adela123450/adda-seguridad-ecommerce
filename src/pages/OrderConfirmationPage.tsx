@@ -11,6 +11,17 @@ type TaxMode = "sin_iva" | "con_iva";
 type PaymentMode = "solo_transferencia" | "solo_wompi" | "hibrido";
 type PaymentMethod = "transferencia" | "wompi";
 
+type WompiFunctionResponse = {
+  publicKey: string;
+  reference: string;
+  amountInCents: number;
+  currency: string;
+  integritySignature: string;
+  redirectUrl: string;
+  customerEmail: string;
+  customerName: string;
+};
+
 const formatPrice = (value: number) => {
   return new Intl.NumberFormat("es-CO", {
     style: "currency",
@@ -273,6 +284,12 @@ export const OrderConfirmationPage = () => {
     return true;
   };
 
+  const clearCheckoutStorage = () => {
+    localStorage.removeItem("checkoutCustomer");
+    localStorage.removeItem("paymentMethod");
+    localStorage.removeItem("checkoutSummary");
+  };
+
   const handleConfirmOrder = async () => {
     if (!customer || cart.length === 0) return;
 
@@ -287,11 +304,9 @@ export const OrderConfirmationPage = () => {
       setLoading(true);
 
       const cartWithRealProductIds = await getCartWithRealProductIds();
-
       const orderNumber = generateOrderNumber();
 
       const { data: sessionData } = await supabase.auth.getSession();
-
       const user = sessionData.session?.user;
 
       let customerId: string | null = null;
@@ -308,11 +323,9 @@ export const OrderConfirmationPage = () => {
           throw customerSearchError;
         }
 
-        
         if (existingCustomer) {
           customerId = existingCustomer.id;
         } else {
-
           const { data: newCustomer, error: createCustomerError } =
             await supabase
               .from("customers")
@@ -357,7 +370,9 @@ export const OrderConfirmationPage = () => {
             tax_mode: snapshotTaxMode,
             payment_method: paymentMethod,
             payment_fee: paymentFee,
-            status: "pendiente",
+            payment_status: "pending",
+            payment_provider: paymentMethod === "wompi" ? "wompi" : null,
+            status: paymentMethod === "wompi" ? "payment_pending" : "pendiente",
           },
         ])
         .select()
@@ -439,12 +454,47 @@ export const OrderConfirmationPage = () => {
         }),
       );
 
-      clearCart();
-      localStorage.removeItem("checkoutCustomer");
-      localStorage.removeItem("paymentMethod");
-      localStorage.removeItem("checkoutSummary");
+      if (paymentMethod === "transferencia") {
+        clearCart();
+        clearCheckoutStorage();
+        navigate("/pedido-finalizado");
+        return;
+      }
 
-      navigate("/pedido-finalizado");
+      const { data, error } =
+        await supabase.functions.invoke<WompiFunctionResponse>(
+          "create-wompi-transaction",
+          {
+            body: {
+              order_id: orderData.id,
+            },
+          },
+        );
+
+      if (error) {
+        throw new Error(
+          error.message || "No fue posible inicializar el pago con Wompi.",
+        );
+      }
+
+      if (!data) {
+        throw new Error("La Edge Function de Wompi no devolvió información.");
+      }
+
+      const checkoutUrl =
+        `https://checkout.wompi.co/p/?` +
+        `public-key=${encodeURIComponent(data.publicKey)}` +
+        `&currency=${encodeURIComponent(data.currency)}` +
+        `&amount-in-cents=${encodeURIComponent(String(data.amountInCents))}` +
+        `&reference=${encodeURIComponent(data.reference)}` +
+        `&signature:integrity=${encodeURIComponent(data.integritySignature)}` +
+        `&redirect-url=${encodeURIComponent(data.redirectUrl)}` +
+        `&customer-data:email=${encodeURIComponent(data.customerEmail)}`;
+
+      clearCart();
+      clearCheckoutStorage();
+
+      window.location.href = checkoutUrl;
     } catch (error) {
       console.error("Error creando pedido:", error);
 
@@ -597,13 +647,13 @@ export const OrderConfirmationPage = () => {
               <p className="font-semibold text-slate-800">
                 {paymentMethod === "transferencia"
                   ? "Transferencia bancaria / Nequi"
-                  : "Pago online seguro"}
+                  : "Pago online seguro con Wompi"}
               </p>
 
               <p className="mt-2 text-sm text-slate-600">
                 {paymentMethod === "transferencia"
                   ? "Al finalizar, recibirás instrucciones para enviar el soporte de pago por WhatsApp."
-                  : "El pedido quedará registrado con método de pago online. La integración directa con Wompi se realizará en el siguiente sprint."}
+                  : "Al confirmar, serás redirigido al checkout seguro de Wompi para completar el pago online."}
               </p>
             </div>
           </div>
@@ -672,10 +722,14 @@ export const OrderConfirmationPage = () => {
                 className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {loading
-                  ? "Registrando pedido..."
+                  ? paymentMethod === "wompi"
+                    ? "Preparando pago seguro..."
+                    : "Registrando pedido..."
                   : loadingSettings
                     ? "Cargando configuración..."
-                    : "Confirmar pedido"}
+                    : paymentMethod === "wompi"
+                      ? "Pagar con Wompi"
+                      : "Confirmar pedido"}
               </button>
 
               <Link

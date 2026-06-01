@@ -5,4 +5,10 @@ export default defineConfig({
   plugins: [
     tailwindcss(),
   ],
+
+  server: {
+    allowedHosts: [
+      'unfrosted-boneless-various.ngrok-free.dev',
+    ],
+  },
 })
