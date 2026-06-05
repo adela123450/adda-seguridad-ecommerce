@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
-import { supabase } from "../lib/supabase";
+import { supabaseAdmin } from "../lib/supabase";
 
 type BusinessExpense = {
   id: string;
@@ -73,7 +73,7 @@ export const AdminExpensesPage = () => {
     const loadExpenses = async () => {
       setLoading(true);
 
-      const { data, error } = await supabase
+      const { data, error } = await supabaseAdmin
         .from("business_expenses")
         .select("id, expense_date, category, description, amount, created_at")
         .order("expense_date", { ascending: false })
@@ -158,7 +158,7 @@ export const AdminExpensesPage = () => {
       setExpenseError(null);
       setExpenseMessage(null);
 
-      const { data, error } = await supabase
+      const { data, error } = await supabaseAdmin
         .from("business_expenses")
         .insert([
           {
