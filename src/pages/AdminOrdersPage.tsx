@@ -1,6 +1,6 @@
 // src/pages/AdminOrdersPage.tsx
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "../lib/supabase";
+import { supabaseAdmin } from "../lib/supabase";
 import { EnterpriseTable } from "../components/admin/EnterpriseTable";
 import { MetricCard } from "../components/admin/MetricCard";
 import { PageHero } from "../components/admin/PageHero";
