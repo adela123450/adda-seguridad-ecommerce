@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { supabase } from "../lib/supabase";
+import { supabaseAdmin as supabase } from "../lib/supabase";
 
 type TaxMode = "sin_iva" | "con_iva";
 type PaymentMode = "solo_transferencia" | "solo_wompi" | "hibrido";
