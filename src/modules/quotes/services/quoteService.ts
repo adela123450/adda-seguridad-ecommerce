@@ -1,4 +1,4 @@
-import { supabase } from "../../../lib/supabase";
+import { supabaseAdmin as supabase } from "../../../lib/supabase";
 import type { QuoteTotals } from "../helpers/calculateQuoteTotals";
 
 export type QuoteStatus =

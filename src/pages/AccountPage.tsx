@@ -17,7 +17,7 @@ import {
   FiTool,
   FiUser,
 } from "react-icons/fi";
-import { supabase } from "../lib/supabase";
+import { supabaseAdmin } from "../lib/supabase";
 
 type Customer = {
   id: string;
@@ -194,7 +194,7 @@ export const AccountPage = () => {
   const loadOrders = async (customerId: string) => {
     setLoadingOrders(true);
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from("orders")
       .select(
         "id, order_number, status, created_at, total_price, payment_method, payment_status",
@@ -216,7 +216,7 @@ export const AccountPage = () => {
   const loadCustomer = async () => {
     setLoadingSession(true);
 
-    const { data: sessionData } = await supabase.auth.getSession();
+    const { data: sessionData } = await supabaseAdmin.auth.getSession();
     const user = sessionData.session?.user;
 
     if (!user) {
@@ -226,7 +226,7 @@ export const AccountPage = () => {
       return;
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from("customers")
       .select("*")
       .eq("auth_user_id", user.id)
@@ -265,7 +265,7 @@ export const AccountPage = () => {
     setLoadingForm(true);
     resetMessages();
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { error } = await supabaseAdmin.auth.signInWithPassword({
       email,
       password,
     });
@@ -295,7 +295,7 @@ export const AccountPage = () => {
       return;
     }
 
-    const { data, error } = await supabase.auth.signUp({
+    const { data, error } = await supabaseAdmin.auth.signUp({
       email,
       password,
     });
@@ -314,7 +314,7 @@ export const AccountPage = () => {
       return;
     }
 
-    const customerUpdate = await supabase.from("customers").upsert(
+    const customerUpdate = await supabaseAdmin.from("customers").upsert(
       {
         auth_user_id: data.user.id,
         full_name: fullName.trim(),
@@ -345,7 +345,7 @@ export const AccountPage = () => {
   };
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    await supabaseAdmin.auth.signOut();
 
     setCustomer(null);
     setOrders([]);

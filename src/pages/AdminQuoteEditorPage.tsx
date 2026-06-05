@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { supabase } from "../lib/supabase";
+import { supabaseAdmin as supabase } from "../lib/supabase";
 import { QuoteItemsTable } from "../modules/quotes/components/QuoteItemsTable.tsx";
 import { QuoteTotalsCards } from "../modules/quotes/components/QuoteTotalsCards.tsx";
 import { QuotePdfTemplate } from "../modules/quotes/components/QuotePdfTemplate.tsx";
