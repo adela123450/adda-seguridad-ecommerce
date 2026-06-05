@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
-import { supabase } from "../lib/supabase";
+import { supabaseAdmin } from "../lib/supabase";
 
 type ProductRow = {
   id: string;
@@ -506,7 +506,7 @@ export const AdminProductsPage = () => {
 
   useEffect(() => {
     const loadBusinessSettings = async () => {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseAdmin
         .from("business_settings")
         .select("tax_mode, tax_rate")
         .limit(1)
@@ -545,7 +545,7 @@ export const AdminProductsPage = () => {
     setIsLoading(true);
     setLoadError(null);
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from("products")
       .select(
         "id, name, slug, sku, brand, category, subcategory, price, cost_price, description, image_url, stock, sale_unit, public_sale_unit, quote_unit, purchase_unit, unit_content, quote_by_unit, has_offer, offer_price, offer_label, created_at"
@@ -655,7 +655,7 @@ export const AdminProductsPage = () => {
   };
 
   const loadTechnicalSheet = async (productId: string) => {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from("product_media")
       .select("id, product_id, media_type, media_role, file_url, file_path, sort_order")
       .eq("product_id", productId)
@@ -683,7 +683,7 @@ export const AdminProductsPage = () => {
     fileUrl: string;
     filePath: string;
   }) => {
-    const { data: existingMedia, error: existingError } = await supabase
+    const { data: existingMedia, error: existingError } = await supabaseAdmin
       .from("product_media")
       .select("id")
       .eq("product_id", productId)
@@ -697,7 +697,7 @@ export const AdminProductsPage = () => {
     }
 
     if (existingMedia?.id) {
-      const { error } = await supabase
+      const { error } = await supabaseAdmin
         .from("product_media")
         .update({
           file_url: fileUrl,
@@ -713,7 +713,7 @@ export const AdminProductsPage = () => {
       return existingMedia.id as string;
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from("product_media")
       .insert({
         product_id: productId,
@@ -761,7 +761,7 @@ export const AdminProductsPage = () => {
       const safeSlug = form.slug.trim() || slugify(form.name || "producto");
       const filePath = `productos/${safeSlug}/ficha-tecnica.pdf`;
 
-      const { error: uploadError } = await supabase.storage
+      const { error: uploadError } = await supabaseAdmin.storage
         .from("technical-sheets")
         .upload(filePath, file, {
           cacheControl: "3600",
@@ -772,7 +772,7 @@ export const AdminProductsPage = () => {
         throw uploadError;
       }
 
-      const { data } = supabase.storage
+      const { data } = supabaseAdmin.storage
         .from("technical-sheets")
         .getPublicUrl(filePath);
 
@@ -819,7 +819,7 @@ export const AdminProductsPage = () => {
       const safeSlug = form.slug.trim() || slugify(form.name || "producto");
       const fileName = `${safeSlug}-${Date.now()}.${fileExt}`;
 
-      const { error: uploadError } = await supabase.storage
+      const { error: uploadError } = await supabaseAdmin.storage
         .from("product-images")
         .upload(fileName, file, {
           cacheControl: "3600",
@@ -830,7 +830,7 @@ export const AdminProductsPage = () => {
         throw uploadError;
       }
 
-      const { data } = supabase.storage
+      const { data } = supabaseAdmin.storage
         .from("product-images")
         .getPublicUrl(fileName);
 
@@ -873,10 +873,10 @@ export const AdminProductsPage = () => {
       const filePath = getProductImagePathFromUrl(form.image_url);
 
       if (filePath) {
-        await supabase.storage.from("product-images").remove([filePath]);
+        await supabaseAdmin.storage.from("product-images").remove([filePath]);
       }
 
-      const { error } = await supabase
+      const { error } = await supabaseAdmin
         .from("products")
         .update({ image_url: null })
         .eq("id", editingId);
@@ -909,12 +909,12 @@ export const AdminProductsPage = () => {
       setIsRemovingTechnicalSheet(true);
 
       if (currentTechnicalSheet.file_path) {
-        await supabase.storage
+        await supabaseAdmin.storage
           .from("technical-sheets")
           .remove([currentTechnicalSheet.file_path]);
       }
 
-      const { error } = await supabase
+      const { error } = await supabaseAdmin
         .from("product_media")
         .delete()
         .eq("id", currentTechnicalSheet.id);
@@ -1013,7 +1013,7 @@ export const AdminProductsPage = () => {
     };
 
     if (isEditing && editingId) {
-      const { error } = await supabase
+      const { error } = await supabaseAdmin
         .from("products")
         .update(payload)
         .eq("id", editingId);
@@ -1028,7 +1028,7 @@ export const AdminProductsPage = () => {
 
       showToast("success", "Producto actualizado correctamente.");
     } else {
-      const { data: insertedProduct, error } = await supabase
+      const { data: insertedProduct, error } = await supabaseAdmin
         .from("products")
         .insert(payload)
         .select(
@@ -1122,7 +1122,7 @@ export const AdminProductsPage = () => {
     setIsDeleting(true);
     setFormError(null);
 
-    const { error } = await supabase
+    const { error } = await supabaseAdmin
       .from("products")
       .delete()
       .eq("id", productToDelete.id);

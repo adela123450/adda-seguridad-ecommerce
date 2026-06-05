@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "../lib/supabase";
+import { supabaseAdmin } from "../lib/supabase";
 
 export const AdminResetPasswordPage = () => {
   const navigate = useNavigate();
@@ -30,7 +30,7 @@ export const AdminResetPasswordPage = () => {
 
     setLoading(true);
 
-    const { error } = await supabase.auth.updateUser({
+    const { error } = await supabaseAdmin.auth.updateUser({
       password,
     });
 

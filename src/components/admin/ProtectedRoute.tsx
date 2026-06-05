@@ -12,12 +12,16 @@ export const ProtectedRoute = ({
   children,
 }: ProtectedRouteProps) => {
   const [status, setStatus] = useState<
-    "loading" | "allowed" | "denied" | "no-session"
+    "loading" | "allowed" | "no-session"
   >("loading");
 
   useEffect(() => {
+    let isMounted = true;
+
     const validateAccess = async () => {
       const { data: sessionData } = await supabaseAdmin.auth.getSession();
+
+      if (!isMounted) return;
 
       if (!sessionData.session) {
         setStatus("no-session");
@@ -30,15 +34,18 @@ export const ProtectedRoute = ({
         .from("profiles")
         .select("role, is_active")
         .eq("id", user.id)
-        .single();
+        .maybeSingle();
+
+      if (!isMounted) return;
 
       if (error || !profile || !profile.is_active) {
-        setStatus("denied");
+       
+        setStatus("no-session");
         return;
       }
 
       if (!allowedRoles.includes(profile.role)) {
-        setStatus("denied");
+        setStatus("no-session");
         return;
       }
 
@@ -46,6 +53,10 @@ export const ProtectedRoute = ({
     };
 
     validateAccess();
+
+    return () => {
+      isMounted = false;
+    };
   }, [allowedRoles]);
 
   if (status === "loading") {
@@ -58,22 +69,6 @@ export const ProtectedRoute = ({
 
   if (status === "no-session") {
     return <Navigate to="/admin/login" replace />;
-  }
-
-  if (status === "denied") {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
-        <div className="max-w-md rounded-2xl bg-white p-8 text-center shadow-lg">
-          <h1 className="text-2xl font-bold text-slate-800">
-            Acceso no autorizado
-          </h1>
-
-          <p className="mt-3 text-slate-600">
-            Tu usuario no tiene permisos activos para ingresar al panel.
-          </p>
-        </div>
-      </div>
-    );
   }
 
   return children;

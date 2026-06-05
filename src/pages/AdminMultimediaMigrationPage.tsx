@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "../lib/supabase";
+import { supabaseAdmin } from "../lib/supabase";
 
 type ProductRow = {
   id: string;
@@ -118,7 +118,7 @@ export const AdminMultimediaMigrationPage = () => {
     setIsLoading(true);
     setLoadError(null);
 
-    const { data: productsData, error: productsError } = await supabase
+    const { data: productsData, error: productsError } = await supabaseAdmin
       .from("products")
       .select("id, name, slug, sku, image_url")
       .order("name", { ascending: true });
@@ -131,7 +131,7 @@ export const AdminMultimediaMigrationPage = () => {
       return;
     }
 
-    const { data: mediaData, error: mediaError } = await supabase
+    const { data: mediaData, error: mediaError } = await supabaseAdmin
       .from("product_media")
       .select("id, product_id, media_type, media_role, file_url, file_path, sort_order")
       .order("sort_order", { ascending: true });
@@ -234,7 +234,7 @@ export const AdminMultimediaMigrationPage = () => {
     );
 
     if (existingMedia) {
-      const { error } = await supabase
+      const { error } = await supabaseAdmin
         .from("product_media")
         .update({
           file_url: fileUrl,
@@ -247,7 +247,7 @@ export const AdminMultimediaMigrationPage = () => {
       return;
     }
 
-    const { error } = await supabase.from("product_media").insert({
+    const { error } = await supabaseAdmin.from("product_media").insert({
       product_id: product.id,
       media_type: "image",
       media_role: role,
@@ -285,7 +285,7 @@ export const AdminMultimediaMigrationPage = () => {
 
         const storagePath = getStoragePath(product.slug, imageRole.targetFileName);
 
-        const { error: uploadError } = await supabase.storage
+        const { error: uploadError } = await supabaseAdmin.storage
           .from(STORAGE_BUCKET)
           .upload(storagePath, localFile, {
             cacheControl: "3600",
@@ -294,7 +294,7 @@ export const AdminMultimediaMigrationPage = () => {
 
         if (uploadError) throw uploadError;
 
-        const { data } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(storagePath);
+        const { data } = supabaseAdmin.storage.from(STORAGE_BUCKET).getPublicUrl(storagePath);
 
         await registerMedia({
           product,
@@ -305,7 +305,7 @@ export const AdminMultimediaMigrationPage = () => {
         });
 
         if (imageRole.role === "principal") {
-          const { error: updateProductError } = await supabase
+          const { error: updateProductError } = await supabaseAdmin
             .from("products")
             .update({ image_url: data.publicUrl })
             .eq("id", product.id);

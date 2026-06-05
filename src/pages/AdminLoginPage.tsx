@@ -15,9 +15,35 @@ export const AdminLoginPage = () => {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    supabaseAdmin.auth.getUser().then(({ data }) => {
-      setLoggedEmail(data.user?.email ?? "");
-    });
+    const validateAdminSession = async () => {
+      const { data } = await supabaseAdmin.auth.getUser();
+      const user = data.user;
+
+      if (!user) {
+        setLoggedEmail("");
+        return;
+      }
+
+      const { data: profile, error } = await supabaseAdmin
+        .from("profiles")
+        .select("role, is_active")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (
+        error ||
+        !profile ||
+        !profile.is_active ||
+        !["super_admin", "admin", "editor"].includes(profile.role)
+      ) {
+        setLoggedEmail("");
+        return;
+      }
+
+      setLoggedEmail(user.email ?? "");
+    };
+
+    validateAdminSession();
   }, []);
 
   const handleLogin = async (e: FormEvent<HTMLFormElement>) => {
@@ -84,9 +110,7 @@ export const AdminLoginPage = () => {
 
         {loggedEmail && (
           <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 p-4">
-            <p className="text-sm font-medium text-slate-700">
-              Sesión activa:
-            </p>
+            <p className="text-sm font-medium text-slate-700">Sesión activa:</p>
 
             <p className="mt-1 text-sm font-semibold text-[#2D5398]">
               {loggedEmail}
