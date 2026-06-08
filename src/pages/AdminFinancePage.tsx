@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "../lib/supabase";
+import { supabaseAdmin } from "../lib/supabase";
 
 type OrderStatus =
   | "pendiente"
@@ -203,7 +203,7 @@ export const AdminFinancePage = () => {
       setLoading(true);
       setProfitabilityWarning(null);
 
-      const { data: settingsData, error: settingsError } = await supabase
+      const { data: settingsData, error: settingsError } = await supabaseAdmin
         .from("business_settings")
         .select("tax_mode, tax_rate")
         .limit(1)
@@ -227,7 +227,7 @@ export const AdminFinancePage = () => {
         );
       }
 
-      const { data: ordersData, error: ordersError } = await supabase
+      const { data: ordersData, error: ordersError } = await supabaseAdmin
         .from("orders")
         .select(
           "id, order_number, customer_name, city, total_price, status, created_at"
@@ -241,7 +241,7 @@ export const AdminFinancePage = () => {
         setOrders((ordersData ?? []) as Order[]);
       }
 
-      const { data: itemsData, error: itemsError } = await supabase
+      const { data: itemsData, error: itemsError } = await supabaseAdmin
         .from("order_items")
         .select(
           "id, order_id, product_id, product_name, price, quantity, subtotal, unit_cost, base_price, tax_amount, gross_profit, profit_margin"
@@ -257,7 +257,7 @@ export const AdminFinancePage = () => {
         setOrderItems((itemsData ?? []) as OrderItem[]);
       }
 
-      const { data: productsData, error: productsError } = await supabase
+      const { data: productsData, error: productsError } = await supabaseAdmin
         .from("products")
         .select("id, name, sku, brand, category, cost_price");
 
@@ -271,7 +271,7 @@ export const AdminFinancePage = () => {
         setProducts((productsData ?? []) as ProductCost[]);
       }
 
-      const { data: expensesData, error: expensesError } = await supabase
+      const { data: expensesData, error: expensesError } = await supabaseAdmin
         .from("business_expenses")
         .select("id, expense_date, category, description, amount, created_at")
         .order("expense_date", { ascending: false })
@@ -793,6 +793,12 @@ export const AdminFinancePage = () => {
             <option value="year">Año actual</option>
             <option value="all">Todo el historial</option>
           </select>
+
+          <p className="mt-3 max-w-xl rounded-2xl bg-blue-50 px-4 py-3 text-sm font-medium text-[#2D5398] ring-1 ring-blue-100">
+            Mostrando indicadores financieros del periodo seleccionado. Si no ves
+            gastos operativos, cambia el filtro a "Todo el historial" para
+            revisar registros de meses anteriores.
+          </p>
         </div>
 
         <button
@@ -1095,7 +1101,9 @@ export const AdminFinancePage = () => {
               <div className="mt-5 space-y-3">
                 {expenseCategoryRows.length === 0 ? (
                   <p className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">
-                    No hay gastos operativos registrados en este periodo.
+                    No hay gastos operativos registrados para el periodo seleccionado.
+                    Prueba cambiando el filtro a "Todo el historial" si deseas
+                    revisar gastos de meses anteriores.
                   </p>
                 ) : (
                   expenseCategoryRows.map((expense) => (
@@ -1143,7 +1151,8 @@ export const AdminFinancePage = () => {
               <div className="mt-5 space-y-3">
                 {filteredExpenses.length === 0 ? (
                   <p className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">
-                    Aún no hay gastos para mostrar.
+                    Aún no hay gastos para mostrar en este periodo. Cambia el
+                    filtro a "Todo el historial" para verificar registros anteriores.
                   </p>
                 ) : (
                   filteredExpenses.slice(0, 6).map((expense) => (
