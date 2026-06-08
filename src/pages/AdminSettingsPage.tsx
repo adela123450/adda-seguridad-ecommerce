@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { supabaseAdmin as supabase } from "../lib/supabase";
+import { supabaseAdmin } from "../lib/supabase";
 
 type TaxMode = "sin_iva" | "con_iva";
 type PaymentMode = "solo_transferencia" | "solo_wompi" | "hibrido";
@@ -23,7 +23,7 @@ export const AdminSettingsPage = () => {
   const loadSettings = async () => {
     setLoading(true);
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from("business_settings")
       .select("id, company_name, tax_mode, tax_rate, payment_mode")
       .limit(1)
@@ -63,7 +63,7 @@ export const AdminSettingsPage = () => {
     setMessage("");
 
     if (settings?.id) {
-      const { error } = await supabase
+      const { error } = await supabaseAdmin
         .from("business_settings")
         .update({
           tax_mode: taxMode,
@@ -80,7 +80,7 @@ export const AdminSettingsPage = () => {
         return;
       }
     } else {
-      const { error } = await supabase.from("business_settings").insert({
+      const { error } = await supabaseAdmin.from("business_settings").insert({
         company_name: "ADDA Seguridad",
         tax_mode: taxMode,
         tax_rate: 19,

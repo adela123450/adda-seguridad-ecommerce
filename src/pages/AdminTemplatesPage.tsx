@@ -1,5 +1,5 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
-import { supabaseAdmin as supabase } from "../lib/supabase";
+import { supabaseAdmin } from "../lib/supabase";
 import {
   createQuoteTemplateItem,
   deleteQuoteTemplateItem,
@@ -334,7 +334,7 @@ export const AdminTemplatesPage = () => {
     setLoading(true);
     setError("");
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from("quote_templates")
       .select("*")
       .order("created_at", { ascending: false });
@@ -496,11 +496,11 @@ export const AdminTemplatesPage = () => {
     };
 
     const response = editingId
-      ? await supabase
+      ? await supabaseAdmin
           .from("quote_templates")
           .update(payload)
           .eq("id", editingId)
-      : await supabase.from("quote_templates").insert(payload).select("id").single();
+      : await supabaseAdmin.from("quote_templates").insert(payload).select("id").single();
 
     if (response.error) {
       setError(
@@ -563,7 +563,7 @@ export const AdminTemplatesPage = () => {
     setMessage("");
     setError("");
 
-    const { error } = await supabase
+    const { error } = await supabaseAdmin
       .from("quote_templates")
       .update({
         active: !template.active,
@@ -594,7 +594,7 @@ export const AdminTemplatesPage = () => {
     setMessage("");
     setError("");
 
-    const { error } = await supabase
+    const { error } = await supabaseAdmin
       .from("quote_templates")
       .delete()
       .eq("id", template.id);

@@ -98,7 +98,7 @@ export const AdminOrdersPage = () => {
   const getOrders = async () => {
     setLoading(true);
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from("orders")
       .select(
         "id, order_number, customer_name, phone, email, address, city, notes, total_price, status, stock_discounted, created_at"
@@ -155,7 +155,7 @@ export const AdminOrdersPage = () => {
   ).length;
 
   const getOrderItems = async (orderId: string) => {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from("order_items")
       .select("id, order_id, product_id, product_name, price, quantity, subtotal")
       .eq("order_id", orderId);
@@ -173,7 +173,7 @@ export const AdminOrdersPage = () => {
 
   const resolveProductForStock = async (item: OrderItem) => {
     if (item.product_id) {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseAdmin
         .from("products")
         .select("id, name, stock")
         .eq("id", item.product_id)
@@ -188,7 +188,7 @@ export const AdminOrdersPage = () => {
       if (data) return data as ProductStock;
     }
 
-    const { data: productByName, error: productByNameError } = await supabase
+    const { data: productByName, error: productByNameError } = await supabaseAdmin
       .from("products")
       .select("id, name, stock")
       .eq("name", item.product_name)
@@ -209,7 +209,7 @@ export const AdminOrdersPage = () => {
     const product = productByName as ProductStock;
 
     if (item.product_id !== product.id) {
-      const { error: updateItemError } = await supabase
+      const { error: updateItemError } = await supabaseAdmin
         .from("order_items")
         .update({ product_id: product.id })
         .eq("id", item.id);
@@ -239,7 +239,7 @@ export const AdminOrdersPage = () => {
         );
       }
 
-      const { error } = await supabase
+      const { error } = await supabaseAdmin
         .from("products")
         .update({ stock: newStock })
         .eq("id", product.id);
@@ -259,7 +259,7 @@ export const AdminOrdersPage = () => {
       const quantity = Number(item.quantity ?? 0);
       const newStock = currentStock + quantity;
 
-      const { error } = await supabase
+      const { error } = await supabaseAdmin
         .from("products")
         .update({ stock: newStock })
         .eq("id", product.id);
@@ -294,7 +294,7 @@ export const AdminOrdersPage = () => {
         ? false
         : currentOrder.stock_discounted || mustDiscountStock;
 
-      const { error } = await supabase
+      const { error } = await supabaseAdmin
         .from("orders")
         .update({
           status: newStatus,
@@ -342,7 +342,7 @@ export const AdminOrdersPage = () => {
     setOrderItems([]);
     setLoadingDetail(true);
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from("order_items")
       .select("id, order_id, product_id, product_name, price, quantity, subtotal")
       .eq("order_id", order.id)
