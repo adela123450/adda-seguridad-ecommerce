@@ -65,6 +65,10 @@ type IssuerProfile = {
   issuer_type: string;
   legal_name: string;
   commercial_name: string | null;
+  position_title: string | null;
+  professional_title: string | null;
+  specialty: string | null;
+  signature_url: string | null;
   document_type: string | null;
   document_number: string | null;
   tax_responsibility: string | null;
@@ -296,6 +300,39 @@ const getIssuerSnapshot = (quote: QuoteDetail): IssuerSnapshot | null => {
   return snapshot as IssuerSnapshot;
 };
 
+const buildIssuerSnapshot = (
+  profile: IssuerProfile | undefined,
+): IssuerSnapshot | null => {
+  if (!profile) return null;
+
+  return {
+    id: profile.id,
+    profile_name: profile.profile_name,
+    issuer_type: profile.issuer_type,
+    legal_name: profile.legal_name,
+    commercial_name: profile.commercial_name,
+    position_title: profile.position_title,
+    professional_title: profile.professional_title,
+    specialty: profile.specialty,
+    signature_url: profile.signature_url,
+    document_type: profile.document_type,
+    document_number: profile.document_number,
+    tax_responsibility: profile.tax_responsibility,
+    city: profile.city,
+    address: profile.address,
+    email: profile.email,
+    phone: profile.phone,
+    bank_name: profile.bank_name,
+    bank_account_type: profile.bank_account_type,
+    bank_account_number: profile.bank_account_number,
+    footer_notes: profile.footer_notes,
+    logo_url: profile.logo_url,
+    is_default: profile.is_default,
+    is_active: profile.is_active,
+  };
+};
+
+
 export const AdminQuoteEditorPage = () => {
   const { quoteId } = useParams();
   const navigate = useNavigate();
@@ -408,7 +445,7 @@ export const AdminQuoteEditorPage = () => {
     const { data, error } = await supabase
       .from("quote_issuer_profiles")
       .select(
-        "id, profile_name, issuer_type, legal_name, commercial_name, document_type, document_number, tax_responsibility, city, address, email, phone, bank_name, bank_account_type, bank_account_number, footer_notes, logo_url, is_default, is_active",
+        "id, profile_name, issuer_type, legal_name, commercial_name, position_title, professional_title, specialty, signature_url, document_type, document_number, tax_responsibility, city, address, email, phone, bank_name, bank_account_type, bank_account_number, footer_notes, logo_url, is_default, is_active",
       )
       .eq("is_active", true)
       .order("is_default", { ascending: false })
@@ -634,7 +671,7 @@ export const AdminQuoteEditorPage = () => {
       await updateQuoteHeader(quote.id, {
         issuer_profile_id: form.issuer_profile_id || null,
         issuer_profile_name: selectedIssuerProfile?.profile_name ?? null,
-        issuer_snapshot: selectedIssuerProfile ?? null,
+        issuer_snapshot: buildIssuerSnapshot(selectedIssuerProfile),
         customer_name: form.customer_name.trim(),
         customer_phone: form.customer_phone.trim() || null,
         customer_email: form.customer_email.trim() || null,

@@ -82,7 +82,7 @@ export const ProductPage = () => {
   const [showToast, setShowToast] = useState(false);
   const [galleryImages, setGalleryImages] = useState<string[]>([]);
   const [selectedImage, setSelectedImage] = useState<string>("");
-  const [productMedia, setProductMedia] = useState<ProductMediaRow[]>([]);
+  const [, setProductMedia] = useState<ProductMediaRow[]>([]);
   const [technicalSheetUrl, setTechnicalSheetUrl] = useState<string | null>(
     null
   );

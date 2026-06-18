@@ -17,6 +17,9 @@ import {
   AdminQuoteEditorPage,
   AdminIssuerProfilesPage,
   AdminCustomersPage,
+  AdminRolesPage,
+  AdminUsersPage,
+  AdminPermissionsPage,
 } from "../pages";
 
 import { CheckoutPage } from "../pages/CheckoutPage";
@@ -27,6 +30,7 @@ import { PrivacyPage } from "../pages/PrivacyPage";
 import { TermsPage } from "../pages/TermsPage";
 import { ReturnsPage } from "../pages/ReturnsPage";
 import { AccountPage } from "../pages/AccountPage";
+import { ResetPasswordPage } from "../pages/ResetPasswordPage";
 import { AdminLoginPage } from "../pages/AdminLoginPage";
 import { AdminResetPasswordPage } from "../pages/AdminResetPasswordPage";
 import { AdminLayout } from "../layouts/AdminLayout";
@@ -52,6 +56,7 @@ export const router = createBrowserRouter([
       { path: "terminos", element: <TermsPage /> },
       { path: "devoluciones", element: <ReturnsPage /> },
       { path: "account", element: <AccountPage /> },
+      { path: "reset-password", element: <ResetPasswordPage /> },
 
       {
         path: "admin/login",
@@ -116,6 +121,18 @@ export const router = createBrowserRouter([
           {
             path: "customers",
             element: <AdminCustomersPage />,
+          },
+          {
+            path: "security/roles",
+            element: <AdminRolesPage />,
+          },
+          {
+            path: "security/users",
+            element: <AdminUsersPage />,
+          },
+          {
+            path: "security/permissions",
+            element: <AdminPermissionsPage />,
           },
         ],
       },

@@ -45,6 +45,14 @@ const navSections: NavSection[] = [
     ],
   },
   {
+  title: "Seguridad",
+  items: [
+    { label: "Roles", to: "/admin/security/roles", icon: "◬" },
+    { label: "Usuarios y roles", to: "/admin/security/users", icon: "◉" },
+    { label: "Permisos", to: "/admin/security/permissions", icon: "▦" },
+  ],
+},
+  {
     title: "Configuración",
     items: [{ label: "Configuración", to: "/admin/settings", icon: "⚙" }],
   },

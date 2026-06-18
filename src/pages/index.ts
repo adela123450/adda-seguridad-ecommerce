@@ -14,3 +14,7 @@ export * from "./AdminQuotesPage";
 export * from "./AdminQuoteEditorPage";
 export * from "./AdminIssuerProfilesPage";
 export * from "./AdminCustomersPage";
+export * from "./AdminResetPasswordPage";
+export * from "./AdminRolesPage";
+export * from "./AdminUsersPage";
+export * from "./AdminPermissionsPage";

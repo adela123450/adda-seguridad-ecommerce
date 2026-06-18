@@ -14,6 +14,10 @@ type IssuerSnapshot = {
   issuer_type?: string | null;
   legal_name?: string | null;
   commercial_name?: string | null;
+  position_title?: string | null;
+  professional_title?: string | null;
+  specialty?: string | null;
+  signature_url?: string | null;
   document_type?: string | null;
   document_number?: string | null;
   tax_responsibility?: string | null;
@@ -142,6 +146,14 @@ export const QuotePdfTemplate = ({
   const issuerName =
     issuer.legal_name ?? quote.issuer_profile_name ?? "Emisor no asignado";
   const commercialName = issuer.commercial_name ?? "ADDA Seguridad";
+  const issuerSignatureDetails = [
+    commercialName,
+    issuer.position_title,
+    issuer.professional_title,
+    issuer.specialty,
+  ].filter((value): value is string => {
+    return typeof value === "string" && value.trim().length > 0;
+  });
   const documentLabel = [issuer.document_type, issuer.document_number]
     .filter(Boolean)
     .join(" ");
@@ -763,14 +775,57 @@ export const QuotePdfTemplate = ({
           padding: 0 7mm;
         }
 
+        .pdf-signatures-lower {
+          margin-top: 34mm;
+          align-items: start;
+        }
+
         .pdf-signature-line {
+          position: relative;
           border-top: 1px solid var(--adda-blue);
-          padding-top: 1.5mm;
+          padding-top: 2mm;
           text-align: center;
           color: var(--adda-blue);
           font-size: 8px;
           font-weight: 950;
           text-transform: uppercase;
+        }
+
+        .pdf-signature-image {
+          position: absolute;
+          top: -18mm;
+          left: 50%;
+          transform: translateX(-50%);
+          display: block;
+          max-height: 17mm;
+          max-width: 48mm;
+          object-fit: contain;
+          z-index: 2;
+        }
+
+        .pdf-signature-name {
+          display: block;
+          font-weight: 950;
+        }
+
+        .pdf-signature-details {
+          display: block;
+          margin-top: 1mm;
+          color: var(--adda-ink);
+          font-size: 7px;
+          font-weight: 700;
+          line-height: 1.25;
+          text-transform: none;
+        }
+
+        .pdf-signature-details span {
+          display: block;
+        }
+
+        .pdf-acceptance-note {
+          display: block;
+          margin-top: 0.8mm;
+          line-height: 1.25;
         }
 
         .pdf-contact-strip {
@@ -1282,17 +1337,38 @@ export const QuotePdfTemplate = ({
                   </div>
                 </section>
 
-                <footer className="pdf-signatures pdf-page-break-safe">
-                  <div className="pdf-signature-line">{issuerName}</div>
+                <footer className="pdf-signatures pdf-page-break-safe pdf-signatures-lower">
+                  <div className="pdf-signature-line">
+                    {issuer.signature_url && (
+                      <img
+                        src={issuer.signature_url}
+                        alt={`Firma de ${issuerName}`}
+                        className="pdf-signature-image"
+                      />
+                    )}
+
+                    <span className="pdf-signature-name">{issuerName}</span>
+
+                    {issuerSignatureDetails.length > 0 && (
+                      <span className="pdf-signature-details">
+                        {issuerSignatureDetails.map((detail) => (
+                          <span key={detail}>{detail}</span>
+                        ))}
+                      </span>
+                    )}
+                  </div>
 
                   <div className="pdf-signature-line">
-                    Aceptación del cliente
+                    <span className="pdf-signature-name">
+                      Aceptación del cliente
+                    </span>
                     <br />
                     <span
-                      className="pdf-muted"
+                      className="pdf-muted pdf-acceptance-note"
                       style={{ fontWeight: 600, textTransform: "none" }}
                     >
-                      Nombre / Firma / Fecha
+                      Aceptación por firma, WhatsApp, correo electrónico, orden
+                      de servicio o pago de anticipo.
                     </span>
                   </div>
                 </footer>

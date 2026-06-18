@@ -5,7 +5,8 @@ import {
   FiAlertTriangle,
   FiCamera,
   FiCheckCircle,
-  FiClock,
+  FiEye,
+  FiEyeOff,
   FiHeart,
   FiLock,
   FiLogOut,
@@ -17,7 +18,7 @@ import {
   FiTool,
   FiUser,
 } from "react-icons/fi";
-import { supabase, } from "../lib/supabase";
+import { supabase } from "../lib/supabase";
 
 type Customer = {
   id: string;
@@ -47,6 +48,8 @@ type AuthInputProps = {
   placeholder: string;
   value: string;
   onChange: (value: string) => void;
+  showPassword?: boolean;
+  togglePassword?: () => void;
 };
 
 const AuthInput = ({
@@ -56,6 +59,8 @@ const AuthInput = ({
   placeholder,
   value,
   onChange,
+  showPassword,
+  togglePassword,
 }: AuthInputProps) => {
   return (
     <div className="group relative">
@@ -69,8 +74,19 @@ const AuthInput = ({
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-2xl border border-slate-200 bg-white/90 px-11 py-3.5 text-sm font-medium text-slate-700 shadow-sm outline-none transition duration-300 placeholder:text-slate-400 hover:border-slate-300 focus:border-[#2D5398] focus:bg-white focus:shadow-[0_0_0_4px_rgba(45,83,152,0.12)]"
+        className="w-full rounded-2xl border border-slate-200 bg-white/90 px-11 py-3.5 pr-12 text-sm font-medium text-slate-700 shadow-sm outline-none transition duration-300 placeholder:text-slate-400 hover:border-slate-300 focus:border-[#2D5398] focus:bg-white focus:shadow-[0_0_0_4px_rgba(45,83,152,0.12)]"
       />
+
+      {togglePassword && (
+        <button
+          type="button"
+          onClick={togglePassword}
+          aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+          className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-[#2D5398]"
+        >
+          {showPassword ? <FiEyeOff /> : <FiEye />}
+        </button>
+      )}
     </div>
   );
 };
@@ -179,12 +195,14 @@ export const AccountPage = () => {
   const [phone, setPhone] = useState("");
   const [city, setCity] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   const [loadingSession, setLoadingSession] = useState(true);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [loadingForm, setLoadingForm] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [recoveringPassword, setRecoveringPassword] = useState(false);
 
   const resetMessages = () => {
     setError("");
@@ -342,6 +360,40 @@ export const AccountPage = () => {
     );
     setLoadingForm(false);
     await loadCustomer();
+  };
+
+  
+  const handleForgotPassword = async () => {
+    resetMessages();
+
+    if (!email.trim()) {
+      setError("Ingresa tu correo electrónico para recuperar tu contraseña.");
+      return;
+    }
+
+    try {
+      setRecoveringPassword(true);
+
+      const { error } = await supabase.auth.resetPasswordForEmail(
+        email.trim().toLowerCase(),
+        {
+          redirectTo: `${window.location.origin}/reset-password`,
+        },
+      );
+
+      if (error) {
+        setError(
+          "No fue posible iniciar el proceso de recuperación. Intenta nuevamente.",
+        );
+        return;
+      }
+
+      setMessage(
+        "Te enviamos un enlace seguro de recuperación a tu correo electrónico.",
+      );
+    } finally {
+      setRecoveringPassword(false);
+    }
   };
 
   const handleLogout = async () => {
@@ -516,7 +568,8 @@ export const AccountPage = () => {
                   Validando sesión...
                 </div>
               ) : customer ? (
-                <div className="mt-7 rounded-3xl border border-blue-100/80 bg-white/90 p-6 shadow-[0_18px_45px_rgba(45,83,152,0.10)] backdrop-blur">
+                <>
+                  <div className="mt-7 rounded-3xl border border-blue-100/80 bg-white/90 p-6 shadow-[0_18px_45px_rgba(45,83,152,0.10)] backdrop-blur">
                   <div className="inline-flex rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
                     Sesión activa
                   </div>
@@ -554,79 +607,10 @@ export const AccountPage = () => {
                     Cerrar sesión
                   </button>
 
-                  <div className="mt-8 border-t border-slate-200 pt-6">
-                    <div className="flex items-center justify-between gap-3">
-                      <h3 className="text-lg font-bold text-slate-900">
-                        Mis pedidos recientes
-                      </h3>
-
-                      <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-[#2D5398]">
-                        {orders.length} pedidos
-                      </span>
-                    </div>
-
-                    {loadingOrders ? (
-                      <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-medium text-slate-600">
-                        Cargando historial...
-                      </div>
-                    ) : orders.length === 0 ? (
-                      <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-500">
-                        Aún no tienes pedidos asociados a esta cuenta.
-                      </div>
-                    ) : (
-                      <div className="mt-5 space-y-4">
-                        {orders.map((order) => (
-                          <div
-                            key={order.id}
-                            className="rounded-2xl border border-slate-200 bg-slate-50 p-4 transition hover:border-blue-200 hover:bg-white"
-                          >
-                            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                              <div>
-                                <p className="text-sm text-slate-500">Pedido</p>
-
-                                <h4 className="mt-1 text-base font-bold text-slate-900">
-                                  {order.order_number}
-                                </h4>
-
-                                <p className="mt-2 text-sm text-slate-500">
-                                  {formatDate(order.created_at)}
-                                </p>
-                              </div>
-
-                              <div className="flex flex-wrap items-center gap-3">
-                                <span
-                                  className={`rounded-full px-3 py-1 text-xs font-bold ${
-                                    order.status === "pagado"
-                                      ? "bg-emerald-100 text-emerald-700"
-                                      : order.status === "cancelado"
-                                        ? "bg-red-100 text-red-700"
-                                        : "bg-amber-100 text-amber-700"
-                                  }`}
-                                >
-                                  {order.status}
-                                </span>
-
-                                <span className="rounded-full bg-slate-200 px-3 py-1 text-xs font-semibold text-slate-700">
-                                  {order.payment_method || "sin método"}
-                                </span>
-
-                                <div className="text-right">
-                                  <p className="text-xs text-slate-500">
-                                    Total
-                                  </p>
-
-                                  <p className="text-lg font-bold text-[#2D5398]">
-                                    {formatPrice(order.total_price)}
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
                   </div>
-                </div>
+
+
+                </>
               ) : (
                 <>
                   <div className="mt-7 grid grid-cols-2 rounded-2xl border border-slate-200 bg-slate-100/80 p-1 shadow-inner">
@@ -712,12 +696,35 @@ export const AccountPage = () => {
 
                     <AuthInput
                       icon={<FiLock />}
-                      type="password"
+                      type={showPassword ? "text" : "password"}
                       required
                       placeholder="Contraseña"
                       value={password}
                       onChange={setPassword}
+                      showPassword={showPassword}
+                      togglePassword={() =>
+                        setShowPassword((current) => !current)
+                      }
                     />
+
+                    {mode === "login" && (
+                      <div className="mt-5 text-right">
+                        <button
+                          type="button"
+                          onClick={handleForgotPassword}
+                          disabled={recoveringPassword}
+                          className="text-sm font-semibold text-[#2D5398] transition hover:text-[#243C78] disabled:opacity-60"
+                        >
+                          {recoveringPassword
+                            ? "Enviando recuperación..."
+                            : "¿Olvidaste tu contraseña?"}
+                        </button>
+
+                        <p className="mt-2 text-xs text-slate-500">
+                          Recibe un enlace seguro de recuperación en tu correo.
+                        </p>
+                      </div>
+                    )}
 
                     <button
                       type="submit"
@@ -744,6 +751,90 @@ export const AccountPage = () => {
           </div>
         </div>
       </div>
+
+
+      {customer && (
+        <section className="mt-8 rounded-[2rem] border border-blue-100/80 bg-white p-6 shadow-[0_24px_70px_rgba(15,23,42,0.10)] md:p-8">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-bold uppercase tracking-[0.16em] text-[#2D5398]">
+                Historial de compras
+              </p>
+
+              <h2 className="mt-2 text-2xl font-bold text-slate-900">
+                Mis pedidos recientes
+              </h2>
+
+              <p className="mt-2 text-sm text-slate-500">
+                Consulta tus compras realizadas, estados de pago y valores registrados.
+              </p>
+            </div>
+
+            <span className="w-fit rounded-full bg-blue-50 px-4 py-2 text-xs font-bold text-[#2D5398]">
+              {orders.length} pedidos
+            </span>
+          </div>
+
+          {loadingOrders ? (
+            <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-5 text-sm font-medium text-slate-600">
+              Cargando historial...
+            </div>
+          ) : orders.length === 0 ? (
+            <div className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">
+              Aún no tienes pedidos asociados a esta cuenta.
+            </div>
+          ) : (
+            <div className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-2">
+              {orders.map((order) => (
+                <div
+                  key={order.id}
+                  className="rounded-2xl border border-slate-200 bg-slate-50 p-5 transition hover:border-blue-200 hover:bg-white hover:shadow-[0_12px_35px_rgba(45,83,152,0.10)]"
+                >
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm text-slate-500">Pedido</p>
+
+                      <h3 className="mt-1 text-base font-bold text-slate-900">
+                        {order.order_number}
+                      </h3>
+
+                      <p className="mt-2 text-sm text-slate-500">
+                        {formatDate(order.created_at)}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-3 sm:justify-end">
+                      <span
+                        className={`rounded-full px-3 py-1 text-xs font-bold ${
+                          order.status === "pagado"
+                            ? "bg-emerald-100 text-emerald-700"
+                            : order.status === "cancelado"
+                              ? "bg-red-100 text-red-700"
+                              : "bg-amber-100 text-amber-700"
+                        }`}
+                      >
+                        {order.status}
+                      </span>
+
+                      <span className="rounded-full bg-slate-200 px-3 py-1 text-xs font-semibold text-slate-700">
+                        {order.payment_method || "sin método"}
+                      </span>
+
+                      <div className="min-w-28 text-left sm:text-right">
+                        <p className="text-xs text-slate-500">Total</p>
+
+                        <p className="text-lg font-bold text-[#2D5398]">
+                          {formatPrice(order.total_price)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       <div className="mt-10">
         <h2 className="border-l-4 border-[#2D5398] pl-4 text-2xl font-bold text-slate-900">

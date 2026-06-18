@@ -9,7 +9,7 @@ import { prepareProducts } from "../helpers";
 import { supabase } from "../lib/supabase";
 
 export const HomePage = () => {
-  const [connectionStatus, setConnectionStatus] = useState<
+  const [, setConnectionStatus] = useState<
     "loading" | "success" | "error"
   >("loading");
 

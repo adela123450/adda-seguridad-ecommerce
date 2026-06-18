@@ -8,6 +8,10 @@ interface IssuerProfile {
   issuer_type: string;
   legal_name: string;
   commercial_name: string | null;
+  position_title: string | null;
+  professional_title: string | null;
+  specialty: string | null;
+  signature_url: string | null;
   document_type: string | null;
   document_number: string | null;
   tax_responsibility: string | null;
@@ -29,6 +33,10 @@ type IssuerProfileForm = {
   issuer_type: string;
   legal_name: string;
   commercial_name: string;
+  position_title: string;
+  professional_title: string;
+  specialty: string;
+  signature_url: string;
   document_type: string;
   document_number: string;
   tax_responsibility: string;
@@ -49,6 +57,10 @@ const initialForm: IssuerProfileForm = {
   issuer_type: "persona_natural",
   legal_name: "",
   commercial_name: "ADDA SEGURIDAD",
+  position_title: "Representante comercial",
+  professional_title: "",
+  specialty: "",
+  signature_url: "",
   document_type: "CC",
   document_number: "",
   tax_responsibility: "No responsable de IVA",
@@ -70,6 +82,10 @@ const buildFormFromProfile = (profile: IssuerProfile): IssuerProfileForm => ({
   issuer_type: profile.issuer_type ?? "persona_natural",
   legal_name: profile.legal_name ?? "",
   commercial_name: profile.commercial_name ?? "",
+  position_title: profile.position_title ?? "",
+  professional_title: profile.professional_title ?? "",
+  specialty: profile.specialty ?? "",
+  signature_url: profile.signature_url ?? "",
   document_type: profile.document_type ?? "CC",
   document_number: profile.document_number ?? "",
   tax_responsibility: profile.tax_responsibility ?? "",
@@ -237,6 +253,10 @@ export const AdminIssuerProfilesPage = () => {
       issuer_type: form.issuer_type.trim() || "persona_natural",
       legal_name: form.legal_name.trim(),
       commercial_name: cleanText(form.commercial_name),
+      position_title: cleanText(form.position_title),
+      professional_title: cleanText(form.professional_title),
+      specialty: cleanText(form.specialty),
+      signature_url: cleanText(form.signature_url),
       document_type: cleanText(form.document_type),
       document_number: cleanText(form.document_number),
       tax_responsibility: cleanText(form.tax_responsibility),
@@ -416,6 +436,24 @@ export const AdminIssuerProfilesPage = () => {
 
                 <div className="rounded-2xl bg-slate-50 p-4">
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    Perfil profesional
+                  </p>
+
+                  <p className="mt-2 text-sm font-medium text-slate-700">
+                    {profile.position_title ?? "Sin cargo registrado"}
+                  </p>
+
+                  <p className="mt-1 text-sm text-slate-500">
+                    {profile.professional_title ?? "Sin profesión registrada"}
+                  </p>
+
+                  <p className="mt-1 text-sm text-slate-500">
+                    {profile.specialty ?? "Sin especialidad registrada"}
+                  </p>
+                </div>
+
+                <div className="rounded-2xl bg-slate-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                     Documento
                   </p>
 
@@ -467,6 +505,30 @@ export const AdminIssuerProfilesPage = () => {
                 <p className="mt-2 text-sm leading-relaxed text-slate-600">
                   {profile.footer_notes ?? "Sin nota comercial registrada."}
                 </p>
+              </div>
+
+              <div className="mt-4 rounded-2xl bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Firma digital
+                </p>
+
+                {profile.signature_url ? (
+                  <div className="mt-3 flex items-center gap-4">
+                    <img
+                      src={profile.signature_url}
+                      alt={`Firma de ${profile.legal_name}`}
+                      className="h-16 max-w-48 rounded-xl border border-slate-200 bg-white object-contain p-2"
+                    />
+
+                    <p className="break-all text-xs text-slate-500">
+                      {profile.signature_url}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="mt-2 text-sm text-slate-500">
+                    Sin firma digital registrada.
+                  </p>
+                )}
               </div>
             </article>
           ))}
@@ -561,6 +623,48 @@ export const AdminIssuerProfilesPage = () => {
                   }
                   className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
                   placeholder="ADDA Seguridad"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                  Cargo / rol comercial
+                </label>
+                <input
+                  value={form.position_title}
+                  onChange={(event) =>
+                    handleChange("position_title", event.target.value)
+                  }
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
+                  placeholder="Ej: Representante comercial / Director técnico"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                  Profesión
+                </label>
+                <input
+                  value={form.professional_title}
+                  onChange={(event) =>
+                    handleChange("professional_title", event.target.value)
+                  }
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
+                  placeholder="Ej: Ingeniero de Sistemas"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                  Especialidad / línea profesional
+                </label>
+                <input
+                  value={form.specialty}
+                  onChange={(event) =>
+                    handleChange("specialty", event.target.value)
+                  }
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
+                  placeholder="Ej: Especialista CCTV, redes, intrusión y automatización"
                 />
               </div>
 
@@ -711,6 +815,24 @@ export const AdminIssuerProfilesPage = () => {
                   className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
                   placeholder="URL pública del logo"
                 />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                  URL de firma digital del emisor
+                </label>
+                <input
+                  value={form.signature_url}
+                  onChange={(event) =>
+                    handleChange("signature_url", event.target.value)
+                  }
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#2D5398] focus:bg-white"
+                  placeholder="URL pública de la firma digital"
+                />
+
+                <p className="mt-2 text-xs leading-relaxed text-slate-500">
+                  Recomendado: imagen PNG/WebP con fondo transparente, cargada en Supabase Storage o CDN público.
+                </p>
               </div>
 
               <div className="md:col-span-2">
