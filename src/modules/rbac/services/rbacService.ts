@@ -29,13 +29,18 @@ export type RolePermissionMatrixRow = {
   role_description: string | null;
   is_system: boolean;
   role_is_active: boolean;
-
   permission_id: string;
   permission_code: string;
   permission_module: string;
   permission_description: string | null;
-
   assigned: boolean;
+};
+
+export type CreateAdminUserPayload = {
+  full_name: string;
+  email: string;
+  temporary_password: string;
+  role: string;
 };
 
 export const getRoles = async () => {
@@ -45,8 +50,48 @@ export const getRoles = async () => {
     .order("name");
 
   if (error) throw error;
-
   return (data ?? []) as Role[];
+};
+
+export const createRole = async (name: string, description: string) => {
+  const { data, error } = await supabase.rpc("create_role_admin", {
+    _name: name,
+    _description: description || null,
+  });
+
+  if (error) throw error;
+  return data as string;
+};
+
+export const updateRole = async (
+  roleId: string,
+  description: string,
+  isActive: boolean
+) => {
+  const { error } = await supabase.rpc("update_role_admin", {
+    _role_id: roleId,
+    _description: description || null,
+    _is_active: isActive,
+  });
+
+  if (error) throw error;
+};
+
+export const getCurrentUserRole = async () => {
+  const { data, error } = await supabase.rpc("get_current_user_role");
+
+  if (error) throw error;
+  return (data ?? null) as string | null;
+};
+
+export const getCurrentUserPermissions = async () => {
+  const { data, error } = await supabase.rpc("get_current_user_permissions");
+
+  if (error) throw error;
+
+  return ((data ?? []) as { permission_code: string }[]).map(
+    (row) => row.permission_code
+  );
 };
 
 export const getUsersWithRoles = async () => {
@@ -56,7 +101,6 @@ export const getUsersWithRoles = async () => {
     .order("full_name");
 
   if (error) throw error;
-
   return (data ?? []) as AdminUserRole[];
 };
 
@@ -67,23 +111,10 @@ export const getRolePermissionsMatrix = async () => {
     .order("role_name");
 
   if (error) throw error;
-
   return (data ?? []) as RolePermissionMatrixRow[];
 };
-export const createRole = async (name: string, description: string) => {
-  const { data, error } = await supabase.rpc("create_role_admin", {
-    _name: name,
-    _description: description || null,
-  });
 
-  if (error) throw error;
-
-  return data as string;
-};
-export const assignRoleToUser = async (
-  userId: string,
-  role: string
-) => {
+export const assignRoleToUser = async (userId: string, role: string) => {
   const { error } = await supabase.rpc("assign_role_to_user", {
     _user_id: userId,
     _role: role,
@@ -100,14 +131,7 @@ export const getRolesForSelect = async () => {
     .order("name");
 
   if (error) throw error;
-
   return data ?? [];
-};
-export type CreateAdminUserPayload = {
-  full_name: string;
-  email: string;
-  temporary_password: string;
-  role: string;
 };
 
 export const createAdminUser = async (payload: CreateAdminUserPayload) => {

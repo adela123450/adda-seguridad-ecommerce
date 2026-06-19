@@ -1,4 +1,4 @@
-import { createBrowserRouter } from "react-router-dom";
+import { createBrowserRouter, Navigate } from "react-router-dom";
 import { RootLayout } from "../layouts/RootLayout";
 
 import {
@@ -37,6 +37,25 @@ import { AdminLayout } from "../layouts/AdminLayout";
 import { ProtectedRoute } from "../components/admin/ProtectedRoute";
 import { AdminSettingsPage } from "../pages/AdminSettingsPage";
 import { AdminMultimediaMigrationPage } from "../pages/AdminMultimediaMigrationPage";
+import { usePermissions } from "../modules/rbac/hooks/usePermissions";
+
+const AdminIndexRedirect = () => {
+  const { role, loading, isSuperAdmin } = usePermissions();
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center text-sm text-slate-500">
+        Validando permisos...
+      </div>
+    );
+  }
+
+  if (isSuperAdmin || role === "admin") {
+    return <AdminDashboardPage />;
+  }
+
+  return <Navigate to="/admin/quotes" replace />;
+};
 
 export const router = createBrowserRouter([
   {
@@ -69,70 +88,134 @@ export const router = createBrowserRouter([
       {
         path: "admin",
         element: (
-          <ProtectedRoute allowedRoles={["super_admin", "admin", "editor"]}>
+          <ProtectedRoute
+            allowedRoles={[
+              "super_admin",
+              "admin",
+              "editor",
+              "tecnico_cctv",
+              "vendedor",
+            ]}
+          >
             <AdminLayout />
           </ProtectedRoute>
         ),
         children: [
           {
             index: true,
-            element: <AdminDashboardPage />,
+            element: <AdminIndexRedirect />,
           },
           {
             path: "products",
-            element: <AdminProductsPage />,
+            element: (
+              <ProtectedRoute requiredPermission="products.read">
+                <AdminProductsPage />
+              </ProtectedRoute>
+            ),
           },
           {
             path: "multimedia-migration",
-            element: <AdminMultimediaMigrationPage />,
+            element: (
+              <ProtectedRoute requiredPermission="products.read">
+                <AdminMultimediaMigrationPage />
+              </ProtectedRoute>
+            ),
           },
           {
             path: "orders",
-            element: <AdminOrdersPage />,
+            element: (
+              <ProtectedRoute requiredPermission="orders.read">
+                <AdminOrdersPage />
+              </ProtectedRoute>
+            ),
           },
           {
             path: "finance",
-            element: <AdminFinancePage />,
+            element: (
+              <ProtectedRoute requiredPermission="finance.read">
+                <AdminFinancePage />
+              </ProtectedRoute>
+            ),
           },
           {
             path: "expenses",
-            element: <AdminExpensesPage />,
+            element: (
+              <ProtectedRoute requiredPermission="expenses.read">
+                <AdminExpensesPage />
+              </ProtectedRoute>
+            ),
           },
           {
             path: "settings",
-            element: <AdminSettingsPage />,
+            element: (
+              <ProtectedRoute requiredPermission="settings.read">
+                <AdminSettingsPage />
+              </ProtectedRoute>
+            ),
           },
           {
             path: "templates",
-            element: <AdminTemplatesPage />,
+            element: (
+              <ProtectedRoute requiredPermission="quotes.read">
+                <AdminTemplatesPage />
+              </ProtectedRoute>
+            ),
           },
           {
             path: "issuer-profiles",
-            element: <AdminIssuerProfilesPage />,
+            element: (
+              <ProtectedRoute requiredPermission="quotes.read">
+                <AdminIssuerProfilesPage />
+              </ProtectedRoute>
+            ),
           },
           {
             path: "quotes",
-            element: <AdminQuotesPage />,
+            element: (
+              <ProtectedRoute requiredPermission="quotes.read">
+                <AdminQuotesPage />
+              </ProtectedRoute>
+            ),
           },
           {
             path: "quotes/:quoteId",
-            element: <AdminQuoteEditorPage />,
+            element: (
+              <ProtectedRoute requiredPermission="quotes.read">
+                <AdminQuoteEditorPage />
+              </ProtectedRoute>
+            ),
           },
           {
             path: "customers",
-            element: <AdminCustomersPage />,
+            element: (
+              <ProtectedRoute requiredPermission="orders.read">
+                <AdminCustomersPage />
+              </ProtectedRoute>
+            ),
           },
           {
             path: "security/roles",
-            element: <AdminRolesPage />,
+            element: (
+              <ProtectedRoute requiredPermission="roles.manage">
+                <AdminRolesPage />
+              </ProtectedRoute>
+            ),
           },
           {
             path: "security/users",
-            element: <AdminUsersPage />,
+            element: (
+              <ProtectedRoute requiredPermission="roles.assign">
+                <AdminUsersPage />
+              </ProtectedRoute>
+            ),
           },
           {
             path: "security/permissions",
-            element: <AdminPermissionsPage />,
+            element: (
+              <ProtectedRoute requiredPermission="permissions.read">
+                <AdminPermissionsPage />
+              </ProtectedRoute>
+            ),
           },
         ],
       },

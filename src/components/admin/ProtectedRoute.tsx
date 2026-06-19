@@ -2,54 +2,82 @@ import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { supabaseAdmin } from "../../lib/supabase";
 
+import {
+  getCurrentUserPermissions,
+  getCurrentUserRole,
+} from "../../modules/rbac/services/rbacService";
+
 type ProtectedRouteProps = {
   allowedRoles?: string[];
+  requiredPermission?: string;
   children: React.ReactNode;
 };
 
 export const ProtectedRoute = ({
-  allowedRoles = ["super_admin", "admin", "editor"],
+  allowedRoles,
+  requiredPermission,
   children,
 }: ProtectedRouteProps) => {
   const [status, setStatus] = useState<
-    "loading" | "allowed" | "no-session"
+    "loading" | "allowed" | "no-session" | "forbidden"
   >("loading");
 
   useEffect(() => {
     let isMounted = true;
 
     const validateAccess = async () => {
-      const { data: sessionData } = await supabaseAdmin.auth.getSession();
+      try {
+        const { data: sessionData } = await supabaseAdmin.auth.getSession();
 
-      if (!isMounted) return;
+        if (!isMounted) return;
 
-      if (!sessionData.session) {
+        if (!sessionData.session) {
+          setStatus("no-session");
+          return;
+        }
+
+        const user = sessionData.session.user;
+
+        const { data: profile, error } = await supabaseAdmin
+          .from("profiles")
+          .select("role, is_active")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        if (!isMounted) return;
+
+        if (error || !profile || !profile.is_active) {
+          setStatus("no-session");
+          return;
+        }
+
+        const currentRole = await getCurrentUserRole();
+        const role = currentRole ?? profile.role;
+
+        if (role === "super_admin") {
+          setStatus("allowed");
+          return;
+        }
+
+        if (allowedRoles && !allowedRoles.includes(role)) {
+          setStatus("forbidden");
+          return;
+        }
+
+        if (requiredPermission) {
+          const permissions = await getCurrentUserPermissions();
+
+          if (!permissions.includes(requiredPermission)) {
+            setStatus("forbidden");
+            return;
+          }
+        }
+
+        setStatus("allowed");
+      } catch (error) {
+        console.error("Error validando acceso protegido:", error);
         setStatus("no-session");
-        return;
       }
-
-      const user = sessionData.session.user;
-
-      const { data: profile, error } = await supabaseAdmin
-        .from("profiles")
-        .select("role, is_active")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      if (!isMounted) return;
-
-      if (error || !profile || !profile.is_active) {
-       
-        setStatus("no-session");
-        return;
-      }
-
-      if (!allowedRoles.includes(profile.role)) {
-        setStatus("no-session");
-        return;
-      }
-
-      setStatus("allowed");
     };
 
     validateAccess();
@@ -57,7 +85,7 @@ export const ProtectedRoute = ({
     return () => {
       isMounted = false;
     };
-  }, [allowedRoles]);
+  }, [allowedRoles, requiredPermission]);
 
   if (status === "loading") {
     return (
@@ -69,6 +97,10 @@ export const ProtectedRoute = ({
 
   if (status === "no-session") {
     return <Navigate to="/admin/login" replace />;
+  }
+
+  if (status === "forbidden") {
+    return <Navigate to="/admin" replace />;
   }
 
   return children;

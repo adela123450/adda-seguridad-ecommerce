@@ -1,12 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { supabaseAdmin } from "../lib/supabase";
+import { usePermissions } from "../modules/rbac/hooks/usePermissions";
 
 type NavItem = {
   label: string;
   to: string;
   end?: boolean;
   icon: string;
+  permission?: string;
 };
 
 type NavSection = {
@@ -18,56 +20,150 @@ const navSections: NavSection[] = [
   {
     title: "Principal",
     items: [
-      { label: "Dashboard", to: "/admin", end: true, icon: "⌂" },
-      { label: "Productos", to: "/admin/products", icon: "▣" },
-      { label: "Cotizaciones", to: "/admin/quotes", icon: "▤" },
-      { label: "Plantillas", to: "/admin/templates", icon: "◫" },
-      { label: "Perfiles emisores", to: "/admin/issuer-profiles", icon: "◎" },
+      {
+        label: "Dashboard",
+        to: "/admin",
+        end: true,
+        icon: "⌂",
+        permission: "dashboard.view",
+      },
+      {
+        label: "Productos",
+        to: "/admin/products",
+        icon: "▣",
+        permission: "products.read",
+      },
+      {
+        label: "Cotizaciones",
+        to: "/admin/quotes",
+        icon: "▤",
+        permission: "quotes.read",
+      },
+      {
+        label: "Plantillas",
+        to: "/admin/templates",
+        icon: "◫",
+        permission: "quotes.read",
+      },
+      {
+        label: "Perfiles emisores",
+        to: "/admin/issuer-profiles",
+        icon: "◎",
+        permission: "quotes.read",
+      },
     ],
   },
   {
     title: "Operaciones",
     items: [
-      { label: "Pedidos", to: "/admin/orders", icon: "□" },
-      { label: "Clientes", to: "/admin/customers", icon: "◉" },
+      {
+        label: "Pedidos",
+        to: "/admin/orders",
+        icon: "□",
+        permission: "orders.read",
+      },
+      {
+        label: "Clientes",
+        to: "/admin/customers",
+        icon: "◉",
+        permission: "orders.read",
+      },
       {
         label: "Multimedia cloud",
         to: "/admin/multimedia-migration",
         icon: "▧",
+        permission: "products.read",
       },
     ],
   },
   {
     title: "Finanzas",
     items: [
-      { label: "Finanzas", to: "/admin/finance", icon: "◈" },
-      { label: "Gastos operativos", to: "/admin/expenses", icon: "◇" },
+      {
+        label: "Finanzas",
+        to: "/admin/finance",
+        icon: "◈",
+        permission: "finance.read",
+      },
+      {
+        label: "Gastos operativos",
+        to: "/admin/expenses",
+        icon: "◇",
+        permission: "expenses.read",
+      },
     ],
   },
   {
-  title: "Seguridad",
-  items: [
-    { label: "Roles", to: "/admin/security/roles", icon: "◬" },
-    { label: "Usuarios y roles", to: "/admin/security/users", icon: "◉" },
-    { label: "Permisos", to: "/admin/security/permissions", icon: "▦" },
-  ],
-},
+    title: "Seguridad",
+    items: [
+      {
+        label: "Roles",
+        to: "/admin/security/roles",
+        icon: "◬",
+        permission: "roles.manage",
+      },
+      {
+        label: "Usuarios y roles",
+        to: "/admin/security/users",
+        icon: "◉",
+        permission: "roles.assign",
+      },
+      {
+        label: "Permisos",
+        to: "/admin/security/permissions",
+        icon: "▦",
+        permission: "permissions.read",
+      },
+    ],
+  },
   {
     title: "Configuración",
-    items: [{ label: "Configuración", to: "/admin/settings", icon: "⚙" }],
+    items: [
+      {
+        label: "Configuración",
+        to: "/admin/settings",
+        icon: "⚙",
+        permission: "settings.read",
+      },
+    ],
   },
 ];
+
+const getRoleLabel = (role: string | null) => {
+  const labels: Record<string, string> = {
+    super_admin: "Super administrador",
+    admin: "Administrador",
+    tecnico_cctv: "Técnico CCTV",
+    vendedor: "Vendedor",
+    editor: "Editor",
+  };
+
+  return labels[role ?? ""] ?? "Usuario";
+};
 
 export const AdminLayout = () => {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  const { role, loading, errorMessage, hasPermission } = usePermissions();
+
+  const roleLabel = getRoleLabel(role);
+
   useEffect(() => {
     supabaseAdmin.auth.getUser().then(({ data }) => {
       setEmail(data.user?.email ?? "");
     });
   }, []);
+
+  const visibleNavSections = useMemo(() => {
+    return navSections
+      .map((section) => ({
+        ...section,
+        items: section.items.filter((item) => hasPermission(item.permission)),
+      }))
+      .filter((section) => section.items.length > 0);
+  }, [hasPermission]);
 
   const handleLogout = async () => {
     await supabaseAdmin.auth.signOut();
@@ -126,33 +222,47 @@ export const AdminLayout = () => {
         </div>
 
         <nav className="sidebar-scroll flex-1 space-y-5 overflow-y-auto px-3 py-5">
-          {navSections.map((section) => (
-            <div key={section.title}>
-              <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-[0.18em] text-blue-100/50">
-                {section.title}
-              </p>
-
-              <div className="space-y-1">
-                {section.items.map((item) => (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    end={item.end}
-                    onClick={() => setSidebarOpen(false)}
-                    className={navLinkClass}
-                  >
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/10 text-base">
-                      {item.icon}
-                    </span>
-                    <span className="truncate">{item.label}</span>
-                  </NavLink>
-                ))}
-              </div>
+          {loading ? (
+            <div className="rounded-xl bg-white/10 px-4 py-3 text-sm text-blue-50/80">
+              Cargando permisos...
             </div>
-          ))}
+          ) : errorMessage ? (
+            <div className="rounded-xl bg-red-500/20 px-4 py-3 text-sm text-red-50">
+              {errorMessage}
+            </div>
+          ) : (
+            visibleNavSections.map((section) => (
+              <div key={section.title}>
+                <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-[0.18em] text-blue-100/50">
+                  {section.title}
+                </p>
+
+                <div className="space-y-1">
+                  {section.items.map((item) => (
+                    <NavLink
+                      key={item.to}
+                      to={item.to}
+                      end={item.end}
+                      onClick={() => setSidebarOpen(false)}
+                      className={navLinkClass}
+                    >
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/10 text-base">
+                        {item.icon}
+                      </span>
+                      <span className="truncate">{item.label}</span>
+                    </NavLink>
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
         </nav>
 
         <div className="border-t border-white/10 p-3">
+          <div className="mb-3 rounded-xl bg-white/10 px-3 py-2 text-center text-xs font-semibold uppercase tracking-[0.14em] text-blue-50">
+            {roleLabel}
+          </div>
+
           <button
             type="button"
             onClick={handleLogout}
@@ -189,7 +299,7 @@ export const AdminLayout = () => {
             <div className="flex items-center gap-3">
               <div className="hidden text-right sm:block">
                 <p className="text-sm font-semibold text-slate-900">
-                  Administrador
+                  {roleLabel}
                 </p>
                 <p className="max-w-[220px] truncate text-xs text-slate-500">
                   {email}
