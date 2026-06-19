@@ -66,7 +66,7 @@ export const createRole = async (name: string, description: string) => {
 export const updateRole = async (
   roleId: string,
   description: string,
-  isActive: boolean
+  isActive: boolean,
 ) => {
   const { error } = await supabase.rpc("update_role_admin", {
     _role_id: roleId,
@@ -90,7 +90,7 @@ export const getCurrentUserPermissions = async () => {
   if (error) throw error;
 
   return ((data ?? []) as { permission_code: string }[]).map(
-    (row) => row.permission_code
+    (row) => row.permission_code,
   );
 };
 
@@ -146,4 +146,27 @@ export const createAdminUser = async (payload: CreateAdminUserPayload) => {
   }
 
   return data;
+};
+export const assignPermissionToRole = async (
+  role: string,
+  permissionCode: string,
+) => {
+  const { error } = await supabase.rpc("assign_permission_to_role", {
+    _role: role,
+    _permission_code: permissionCode,
+  });
+
+  if (error) throw error;
+};
+
+export const removePermissionFromRole = async (
+  role: string,
+  permissionCode: string,
+) => {
+  const { error } = await supabase.rpc("remove_permission_from_role", {
+    _role: role,
+    _permission_code: permissionCode,
+  });
+
+  if (error) throw error;
 };
