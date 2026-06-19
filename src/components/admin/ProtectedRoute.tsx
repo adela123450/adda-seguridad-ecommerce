@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { supabaseAdmin } from "../../lib/supabase";
-
 import {
   getCurrentUserPermissions,
   getCurrentUserRole,
@@ -18,6 +17,8 @@ export const ProtectedRoute = ({
   requiredPermission,
   children,
 }: ProtectedRouteProps) => {
+  const navigate = useNavigate();
+
   const [status, setStatus] = useState<
     "loading" | "allowed" | "no-session" | "forbidden"
   >("loading");
@@ -47,6 +48,7 @@ export const ProtectedRoute = ({
         if (!isMounted) return;
 
         if (error || !profile || !profile.is_active) {
+          await supabaseAdmin.auth.signOut();
           setStatus("no-session");
           return;
         }
@@ -87,6 +89,11 @@ export const ProtectedRoute = ({
     };
   }, [allowedRoles, requiredPermission]);
 
+  const handleLogout = async () => {
+    await supabaseAdmin.auth.signOut();
+    navigate("/admin/login", { replace: true });
+  };
+
   if (status === "loading") {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-100 text-slate-600">
@@ -100,7 +107,32 @@ export const ProtectedRoute = ({
   }
 
   if (status === "forbidden") {
-    return <Navigate to="/admin" replace />;
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
+        <div className="max-w-md rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#2D5398]">
+            Acceso restringido
+          </p>
+
+          <h1 className="mt-3 text-2xl font-bold text-slate-900">
+            No tienes permiso para acceder a esta página
+          </h1>
+
+          <p className="mt-3 text-sm text-slate-500">
+            Tu rol no tiene autorización para usar este módulo. Si crees que
+            esto es un error, solicita al administrador que revise tus permisos.
+          </p>
+
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="mt-6 rounded-2xl bg-[#2D5398] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#243C78]"
+          >
+            Cerrar sesión
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return children;

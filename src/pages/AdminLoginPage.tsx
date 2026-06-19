@@ -101,11 +101,11 @@ export const AdminLoginPage = () => {
         </p>
 
         <h1 className="mt-2 text-3xl font-bold text-slate-800">
-          Acceso administrador
+          Acceso al panel
         </h1>
 
         <p className="mt-2 text-slate-500">
-          Panel privado para gestión del ecommerce.
+          Panel privado de gestión ADDA Seguridad.
         </p>
 
         {loggedEmail && (
@@ -156,7 +156,7 @@ export const AdminLoginPage = () => {
             <input
               type="email"
               required
-              placeholder="Correo administrador"
+              placeholder="Correo electrónico"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-[#2D5398]"

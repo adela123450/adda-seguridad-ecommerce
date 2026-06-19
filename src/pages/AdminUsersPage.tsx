@@ -4,6 +4,7 @@ import {
   createAdminUser,
   getRolesForSelect,
   getUsersWithRoles,
+  updateUserActiveStatus,
   type AdminUserRole,
 } from "../modules/rbac/services/rbacService";
 
@@ -61,9 +62,41 @@ export const AdminUsersPage = () => {
       await assignRoleToUser(userId, role);
       setSuccessMessage(`Rol "${role}" asignado correctamente.`);
       await loadData();
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      setErrorMessage(error?.message ?? "No fue posible asignar el rol.");
+      setErrorMessage(
+        error instanceof Error ? error.message : "No fue posible asignar el rol."
+      );
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const handleToggleUserStatus = async (
+    userId: string,
+    currentStatus: boolean
+  ) => {
+    try {
+      setSaving(userId);
+      setErrorMessage("");
+      setSuccessMessage("");
+
+      await updateUserActiveStatus(userId, !currentStatus);
+
+      setSuccessMessage(
+        currentStatus
+          ? "Usuario desactivado correctamente."
+          : "Usuario activado correctamente."
+      );
+
+      await loadData();
+    } catch (error) {
+      console.error(error);
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "No fue posible actualizar el usuario."
+      );
     } finally {
       setSaving(null);
     }
@@ -84,9 +117,11 @@ export const AdminUsersPage = () => {
       setShowCreateForm(false);
 
       await loadData();
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      setErrorMessage(error?.message ?? "No fue posible crear el usuario.");
+      setErrorMessage(
+        error instanceof Error ? error.message : "No fue posible crear el usuario."
+      );
     } finally {
       setCreatingUser(false);
     }
@@ -109,8 +144,8 @@ export const AdminUsersPage = () => {
           </h1>
 
           <p className="mt-2 max-w-2xl text-sm text-slate-500">
-            Administración de usuarios y asignación de roles dentro del sistema
-            ADDA Seguridad.
+            Administración de usuarios, asignación de roles y control de acceso
+            dentro del sistema ADDA Seguridad.
           </p>
         </div>
 
@@ -260,7 +295,7 @@ export const AdminUsersPage = () => {
           </h2>
 
           <p className="mt-1 text-sm text-slate-500">
-            Gestión de usuarios y asignación de roles RBAC.
+            Gestión de usuarios, estado de acceso y asignación de roles RBAC.
           </p>
         </div>
 
@@ -290,64 +325,111 @@ export const AdminUsersPage = () => {
                   <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500">
                     Asignar rol
                   </th>
+                  <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Acceso
+                  </th>
                 </tr>
               </thead>
 
               <tbody className="divide-y divide-slate-100 bg-white">
-                {users.map((user) => (
-                  <tr key={user.profile_id} className="hover:bg-slate-50/80">
-                    <td className="px-6 py-4">
-                      <div className="font-semibold text-slate-900">
-                        {user.full_name || "Sin nombre"}
-                      </div>
-                    </td>
+                {users.map((user) => {
+                  const isProtected = user.assigned_role === "super_admin";
+                  const isSaving = saving === user.user_id;
 
-                    <td className="px-6 py-4 text-sm text-slate-600">
-                      {user.email}
-                    </td>
+                  return (
+                    <tr key={user.profile_id} className="hover:bg-slate-50/80">
+                      <td className="px-6 py-4">
+                        <div className="font-semibold text-slate-900">
+                          {user.full_name || "Sin nombre"}
+                        </div>
+                      </td>
 
-                    <td className="px-6 py-4">
-                      <span className="rounded-xl bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700">
-                        {user.assigned_role || "Sin rol"}
-                      </span>
-                    </td>
+                      <td className="px-6 py-4 text-sm text-slate-600">
+                        {user.email}
+                      </td>
 
-                    <td className="px-6 py-4">
-                      <span
-                        className={[
-                          "rounded-full px-3 py-1 text-xs font-bold",
-                          user.profile_is_active
-                            ? "bg-emerald-50 text-emerald-700"
-                            : "bg-red-50 text-red-700",
-                        ].join(" ")}
-                      >
-                        {user.profile_is_active ? "Activo" : "Inactivo"}
-                      </span>
-                    </td>
+                      <td className="px-6 py-4">
+                        <span className="rounded-xl bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700">
+                          {user.assigned_role || "Sin rol"}
+                        </span>
+                      </td>
 
-                    <td className="px-6 py-4">
-                      <select
-                        defaultValue=""
-                        disabled={saving === user.user_id}
-                        onChange={(event) => {
-                          const role = event.target.value;
-                          if (!role) return;
-                          handleAssignRole(user.user_id, role);
-                        }}
-                        className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
-                      >
-                        <option value="">Seleccionar...</option>
-                        {roles
-                          .filter((role) => role.name !== user.assigned_role)
-                          .map((role) => (
-                            <option key={role.name} value={role.name}>
-                              {role.name}
-                            </option>
-                          ))}
-                      </select>
-                    </td>
-                  </tr>
-                ))}
+                      <td className="px-6 py-4">
+                        <span
+                          className={[
+                            "rounded-full px-3 py-1 text-xs font-bold",
+                            user.profile_is_active
+                              ? "bg-emerald-50 text-emerald-700"
+                              : "bg-red-50 text-red-700",
+                          ].join(" ")}
+                        >
+                          {user.profile_is_active ? "Activo" : "Inactivo"}
+                        </span>
+                      </td>
+
+                      <td className="px-6 py-4">
+                        <select
+                          defaultValue=""
+                          disabled={isSaving || isProtected}
+                          onChange={(event) => {
+                            const role = event.target.value;
+                            if (!role) return;
+                            handleAssignRole(user.user_id, role);
+                          }}
+                          className={[
+                            "rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm",
+                            isSaving || isProtected
+                              ? "cursor-not-allowed opacity-60"
+                              : "",
+                          ].join(" ")}
+                        >
+                          <option value="">
+                            {isProtected ? "Protegido" : "Seleccionar..."}
+                          </option>
+                          {roles
+                            .filter((role) => role.name !== user.assigned_role)
+                            .map((role) => (
+                              <option key={role.name} value={role.name}>
+                                {role.name}
+                              </option>
+                            ))}
+                        </select>
+                      </td>
+
+                      <td className="px-6 py-4">
+                        {isProtected ? (
+                          <span className="text-xs font-semibold text-slate-400">
+                            Protegido
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={isSaving}
+                            onClick={() =>
+                              handleToggleUserStatus(
+                                user.user_id,
+                                user.profile_is_active
+                              )
+                            }
+                            className={[
+                              "rounded-xl px-4 py-2 text-sm font-semibold transition",
+                              user.profile_is_active
+                                ? "bg-red-50 text-red-700 hover:bg-red-100"
+                                : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100",
+                              isSaving ? "cursor-not-allowed opacity-60" : "",
+                            ].join(" ")}
+                          >
+                            {isSaving
+                              ? "Guardando..."
+                              : user.profile_is_active
+                              ? "Desactivar"
+                              : "Activar"}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

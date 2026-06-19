@@ -170,3 +170,14 @@ export const removePermissionFromRole = async (
 
   if (error) throw error;
 };
+export const updateUserActiveStatus = async (
+  userId: string,
+  isActive: boolean,
+) => {
+  const { error } = await supabase.rpc("update_user_active_status", {
+    _user_id: userId,
+    _is_active: isActive,
+  });
+
+  if (error) throw error;
+};
