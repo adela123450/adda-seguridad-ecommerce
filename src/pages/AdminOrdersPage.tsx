@@ -5,6 +5,7 @@ import { EnterpriseTable } from "../components/admin/EnterpriseTable";
 import { MetricCard } from "../components/admin/MetricCard";
 import { PageHero } from "../components/admin/PageHero";
 import { StatusBadge } from "../components/admin/StatusBadge";
+import { getCurrentUserPermissions } from "../modules/rbac/services/rbacService";
 
 type OrderStatus =
   | "pendiente"
@@ -27,6 +28,10 @@ type Order = {
   status: OrderStatus;
   stock_discounted: boolean;
   created_at: string;
+  tracking_number: string | null;
+  shipping_notes: string | null;
+  shipping_evidence_url: string | null;
+  shipping_updated_at: string | null;
 };
 
 type OrderItem = {
@@ -89,11 +94,23 @@ export const AdminOrdersPage = () => {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [loadingPermissions, setLoadingPermissions] = useState(true);
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
+  const [trackingNumber, setTrackingNumber] = useState("");
+  const [shippingNotes, setShippingNotes] = useState("");
+  const [shippingEvidenceUrl, setShippingEvidenceUrl] = useState("");
+  const [savingShipping, setSavingShipping] = useState(false);
+  const [currentPermissions, setCurrentPermissions] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<"todos" | OrderStatus>(
-    "todos"
+    "todos",
   );
+
+  const canReadOrders = currentPermissions.includes("orders.read");
+  const canUpdateShipping = currentPermissions.includes("orders.update_shipping");
+  const canAddTracking = currentPermissions.includes("shipping.add_tracking");
+  const canAddNotes = currentPermissions.includes("shipping.add_notes");
+  const canManageShippingInfo = canUpdateShipping || canAddTracking || canAddNotes;
 
   const getOrders = async () => {
     setLoading(true);
@@ -101,7 +118,7 @@ export const AdminOrdersPage = () => {
     const { data, error } = await supabaseAdmin
       .from("orders")
       .select(
-        "id, order_number, customer_name, phone, email, address, city, notes, total_price, status, stock_discounted, created_at"
+        "id, order_number, customer_name, phone, email, address, city, notes, total_price, status, stock_discounted, created_at, tracking_number, shipping_notes, shipping_evidence_url, shipping_updated_at",
       )
       .order("created_at", { ascending: false });
 
@@ -116,7 +133,23 @@ export const AdminOrdersPage = () => {
   };
 
   useEffect(() => {
-    getOrders();
+    const loadInitialData = async () => {
+      setLoadingPermissions(true);
+
+      try {
+        const permissions = await getCurrentUserPermissions();
+        setCurrentPermissions(permissions);
+      } catch (error) {
+        console.error("Error cargando permisos RBAC:", error);
+        setCurrentPermissions([]);
+      } finally {
+        setLoadingPermissions(false);
+      }
+
+      await getOrders();
+    };
+
+    loadInitialData();
   }, []);
 
   const filteredOrders = useMemo(() => {
@@ -129,7 +162,8 @@ export const AdminOrdersPage = () => {
         order.customer_name.toLowerCase().includes(normalizedSearch) ||
         order.phone.toLowerCase().includes(normalizedSearch) ||
         order.city.toLowerCase().includes(normalizedSearch) ||
-        (order.email ?? "").toLowerCase().includes(normalizedSearch);
+        (order.email ?? "").toLowerCase().includes(normalizedSearch) ||
+        (order.tracking_number ?? "").toLowerCase().includes(normalizedSearch);
 
       const matchesStatus =
         statusFilter === "todos" || order.status === statusFilter;
@@ -139,7 +173,7 @@ export const AdminOrdersPage = () => {
   }, [orders, searchTerm, statusFilter]);
 
   const ordersToManage = orders.filter((order) =>
-    managementStatuses.includes(order.status)
+    managementStatuses.includes(order.status),
   ).length;
 
   const paidSales = orders
@@ -147,11 +181,11 @@ export const AdminOrdersPage = () => {
     .reduce((total, order) => total + Number(order.total_price ?? 0), 0);
 
   const shippedOrders = orders.filter(
-    (order) => order.status === "enviado"
+    (order) => order.status === "enviado",
   ).length;
 
   const canceledOrders = orders.filter(
-    (order) => order.status === "cancelado"
+    (order) => order.status === "cancelado",
   ).length;
 
   const getOrderItems = async (orderId: string) => {
@@ -181,7 +215,7 @@ export const AdminOrdersPage = () => {
 
       if (error) {
         throw new Error(
-          `No fue posible validar el producto "${item.product_name}".`
+          `No fue posible validar el producto "${item.product_name}".`,
         );
       }
 
@@ -196,13 +230,13 @@ export const AdminOrdersPage = () => {
 
     if (productByNameError) {
       throw new Error(
-        `No fue posible buscar el producto "${item.product_name}" por nombre.`
+        `No fue posible buscar el producto "${item.product_name}" por nombre.`,
       );
     }
 
     if (!productByName) {
       throw new Error(
-        `No se encontró el producto "${item.product_name}" en el catálogo real de Supabase.`
+        `No se encontró el producto "${item.product_name}" en el catálogo real de Supabase.`,
       );
     }
 
@@ -216,7 +250,7 @@ export const AdminOrdersPage = () => {
 
       if (updateItemError) {
         throw new Error(
-          `No fue posible corregir el ID del producto "${item.product_name}" en el pedido.`
+          `No fue posible corregir el ID del producto "${item.product_name}" en el pedido.`,
         );
       }
     }
@@ -235,7 +269,7 @@ export const AdminOrdersPage = () => {
 
       if (newStock < 0) {
         throw new Error(
-          `Stock insuficiente para "${product.name}". Stock actual: ${currentStock}, solicitado: ${quantity}.`
+          `Stock insuficiente para "${product.name}". Stock actual: ${currentStock}, solicitado: ${quantity}.`,
         );
       }
 
@@ -272,8 +306,13 @@ export const AdminOrdersPage = () => {
 
   const handleStatusChange = async (
     orderId: string,
-    newStatus: OrderStatus
+    newStatus: OrderStatus,
   ) => {
+    if (!canUpdateShipping) {
+      alert("No tienes permiso para actualizar el estado logístico del pedido.");
+      return;
+    }
+
     const currentOrder = orders.find((order) => order.id === orderId);
     if (!currentOrder) return;
 
@@ -299,6 +338,7 @@ export const AdminOrdersPage = () => {
         .update({
           status: newStatus,
           stock_discounted: nextStockDiscounted,
+          shipping_updated_at: new Date().toISOString(),
         })
         .eq("id", orderId);
 
@@ -311,9 +351,10 @@ export const AdminOrdersPage = () => {
                 ...order,
                 status: newStatus,
                 stock_discounted: nextStockDiscounted,
+                shipping_updated_at: new Date().toISOString(),
               }
-            : order
-        )
+            : order,
+        ),
       );
 
       setSelectedOrder((current) =>
@@ -322,15 +363,16 @@ export const AdminOrdersPage = () => {
               ...current,
               status: newStatus,
               stock_discounted: nextStockDiscounted,
+              shipping_updated_at: new Date().toISOString(),
             }
-          : current
+          : current,
       );
     } catch (error) {
       console.error("Error actualizando estado:", error);
       alert(
         error instanceof Error
           ? error.message
-          : "No fue posible actualizar el estado del pedido."
+          : "No fue posible actualizar el estado del pedido.",
       );
     } finally {
       setUpdatingOrderId(null);
@@ -340,6 +382,9 @@ export const AdminOrdersPage = () => {
   const handleOpenDetail = async (order: Order) => {
     setSelectedOrder(order);
     setOrderItems([]);
+    setTrackingNumber(order.tracking_number ?? "");
+    setShippingNotes(order.shipping_notes ?? "");
+    setShippingEvidenceUrl(order.shipping_evidence_url ?? "");
     setLoadingDetail(true);
 
     const { data, error } = await supabaseAdmin
@@ -358,10 +403,91 @@ export const AdminOrdersPage = () => {
     setLoadingDetail(false);
   };
 
+  const handleSaveShippingInfo = async () => {
+    if (!selectedOrder) return;
+
+    if (!canManageShippingInfo) {
+      alert("No tienes permisos para guardar información logística.");
+      return;
+    }
+
+    const nextTrackingNumber = canAddTracking
+      ? trackingNumber.trim() || null
+      : selectedOrder.tracking_number;
+
+    const nextShippingNotes = canAddNotes
+      ? shippingNotes.trim() || null
+      : selectedOrder.shipping_notes;
+
+    const nextEvidenceUrl = canUpdateShipping
+      ? shippingEvidenceUrl.trim() || null
+      : selectedOrder.shipping_evidence_url;
+
+    setSavingShipping(true);
+
+    try {
+      const shippingUpdatedAt = new Date().toISOString();
+
+      const { error } = await supabaseAdmin
+        .from("orders")
+        .update({
+          tracking_number: nextTrackingNumber,
+          shipping_notes: nextShippingNotes,
+          shipping_evidence_url: nextEvidenceUrl,
+          shipping_updated_at: shippingUpdatedAt,
+        })
+        .eq("id", selectedOrder.id);
+
+      if (error) throw new Error(error.message);
+
+      const updatedOrder: Order = {
+        ...selectedOrder,
+        tracking_number: nextTrackingNumber,
+        shipping_notes: nextShippingNotes,
+        shipping_evidence_url: nextEvidenceUrl,
+        shipping_updated_at: shippingUpdatedAt,
+      };
+
+      setSelectedOrder(updatedOrder);
+
+      setOrders((currentOrders) =>
+        currentOrders.map((order) =>
+          order.id === selectedOrder.id ? updatedOrder : order,
+        ),
+      );
+
+      alert("Gestión logística actualizada correctamente.");
+    } catch (error) {
+      console.error("Error guardando información logística:", error);
+      alert(
+        error instanceof Error
+          ? error.message
+          : "No fue posible guardar la información logística.",
+      );
+    } finally {
+      setSavingShipping(false);
+    }
+  };
+
   const handleCloseDetail = () => {
     setSelectedOrder(null);
     setOrderItems([]);
+    setTrackingNumber("");
+    setShippingNotes("");
+    setShippingEvidenceUrl("");
   };
+
+  if (!loadingPermissions && !canReadOrders) {
+    return (
+      <section className="space-y-8">
+        <PageHero
+          eyebrow="Acceso restringido"
+          title="No tienes permiso para ver pedidos"
+          description="Solicita al administrador que revise tus permisos RBAC para acceder a este módulo."
+        />
+      </section>
+    );
+  }
 
   return (
     <section className="space-y-8">
@@ -420,7 +546,7 @@ export const AdminOrdersPage = () => {
               type="text"
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Buscar por pedido, cliente, celular, correo o ciudad..."
+              placeholder="Buscar por pedido, cliente, celular, correo, ciudad o guía..."
               className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398] focus:bg-white focus:ring-4 focus:ring-[#2D5398]/10"
             />
 
@@ -441,7 +567,7 @@ export const AdminOrdersPage = () => {
           </div>
         </div>
 
-        {loading ? (
+        {loading || loadingPermissions ? (
           <p className="rounded-2xl bg-slate-50 p-6 text-sm text-slate-500">
             Cargando pedidos...
           </p>
@@ -462,6 +588,7 @@ export const AdminOrdersPage = () => {
                       <th className="px-4 py-4">Total</th>
                       <th className="px-4 py-4">Estado</th>
                       <th className="px-4 py-4">Stock</th>
+                      <th className="px-4 py-4">Guía</th>
                       <th className="px-4 py-4">Cambiar estado</th>
                       <th className="px-4 py-4">Fecha</th>
                       <th className="px-4 py-4 text-right">Acción</th>
@@ -518,14 +645,26 @@ export const AdminOrdersPage = () => {
                           />
                         </td>
 
+                        <td className="px-4 py-4 text-xs text-slate-600">
+                          {order.tracking_number ? (
+                            <span className="font-semibold text-slate-800">
+                              {order.tracking_number}
+                            </span>
+                          ) : (
+                            "Sin guía"
+                          )}
+                        </td>
+
                         <td className="px-4 py-4">
                           <select
                             value={order.status}
-                            disabled={updatingOrderId === order.id}
+                            disabled={
+                              updatingOrderId === order.id || !canUpdateShipping
+                            }
                             onChange={(event) =>
                               handleStatusChange(
                                 order.id,
-                                event.target.value as OrderStatus
+                                event.target.value as OrderStatus,
                               )
                             }
                             className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs capitalize outline-none transition focus:border-[#2D5398] focus:ring-2 focus:ring-[#2D5398]/10 disabled:cursor-not-allowed disabled:opacity-60"
@@ -598,6 +737,10 @@ export const AdminOrdersPage = () => {
                       {order.stock_discounted ? "descontado" : "pendiente"}
                     </p>
                     <p>
+                      <span className="font-semibold">Guía:</span>{" "}
+                      {order.tracking_number || "Sin guía"}
+                    </p>
+                    <p>
                       <span className="font-semibold">Fecha:</span>{" "}
                       {formatDate(order.created_at)}
                     </p>
@@ -606,14 +749,14 @@ export const AdminOrdersPage = () => {
                   <div className="mt-4 grid gap-3">
                     <select
                       value={order.status}
-                      disabled={updatingOrderId === order.id}
+                      disabled={updatingOrderId === order.id || !canUpdateShipping}
                       onChange={(event) =>
                         handleStatusChange(
                           order.id,
-                          event.target.value as OrderStatus
+                          event.target.value as OrderStatus,
                         )
                       }
-                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm capitalize outline-none transition focus:border-[#2D5398]"
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm capitalize outline-none transition focus:border-[#2D5398] disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {statusOptions.map((status) => (
                         <option key={status} value={status}>
@@ -723,14 +866,16 @@ export const AdminOrdersPage = () => {
 
                 <select
                   value={selectedOrder.status}
-                  disabled={updatingOrderId === selectedOrder.id}
+                  disabled={
+                    updatingOrderId === selectedOrder.id || !canUpdateShipping
+                  }
                   onChange={(event) =>
                     handleStatusChange(
                       selectedOrder.id,
-                      event.target.value as OrderStatus
+                      event.target.value as OrderStatus,
                     )
                   }
-                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm capitalize outline-none transition focus:border-[#2D5398]"
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm capitalize outline-none transition focus:border-[#2D5398] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {statusOptions.map((status) => (
                     <option key={status} value={status}>
@@ -738,6 +883,12 @@ export const AdminOrdersPage = () => {
                     </option>
                   ))}
                 </select>
+
+                {!canUpdateShipping && (
+                  <p className="mt-2 text-xs text-slate-500">
+                    No tienes permiso para actualizar el estado logístico.
+                  </p>
+                )}
 
                 <div className="mt-5 border-t border-slate-200 pt-4">
                   <p className="text-sm text-slate-500">Total pedido</p>
@@ -747,6 +898,114 @@ export const AdminOrdersPage = () => {
                 </div>
               </article>
             </div>
+
+            <article className="mt-6 rounded-3xl border border-slate-200 bg-white p-5">
+              <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#2D5398]">
+                    Gestión logística
+                  </p>
+                  <h3 className="mt-1 text-lg font-black text-slate-900">
+                    Guía, observaciones y evidencia
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Registra la información operativa del envío o entrega del pedido.
+                  </p>
+                </div>
+
+                {selectedOrder.shipping_updated_at && (
+                  <p className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                    Actualizado: {formatDate(selectedOrder.shipping_updated_at)}
+                  </p>
+                )}
+              </div>
+
+              <div className="mt-5 grid gap-4 md:grid-cols-2">
+                <label className="block">
+                  <span className="text-sm font-semibold text-slate-700">
+                    Número de guía
+                  </span>
+                  <input
+                    type="text"
+                    value={trackingNumber}
+                    onChange={(event) => setTrackingNumber(event.target.value)}
+                    disabled={!canAddTracking}
+                    placeholder="Ej: SERV-123456789"
+                    className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398] focus:ring-2 focus:ring-[#2D5398]/10 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:opacity-70"
+                  />
+                  {!canAddTracking && (
+                    <span className="mt-1 block text-xs text-slate-500">
+                      Requiere permiso shipping.add_tracking.
+                    </span>
+                  )}
+                </label>
+
+                <label className="block">
+                  <span className="text-sm font-semibold text-slate-700">
+                    URL de evidencia
+                  </span>
+                  <input
+                    type="url"
+                    value={shippingEvidenceUrl}
+                    onChange={(event) => setShippingEvidenceUrl(event.target.value)}
+                    disabled={!canUpdateShipping}
+                    placeholder="https://..."
+                    className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398] focus:ring-2 focus:ring-[#2D5398]/10 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:opacity-70"
+                  />
+                  {!canUpdateShipping && (
+                    <span className="mt-1 block text-xs text-slate-500">
+                      Requiere permiso orders.update_shipping.
+                    </span>
+                  )}
+                </label>
+
+                <label className="block md:col-span-2">
+                  <span className="text-sm font-semibold text-slate-700">
+                    Observaciones logísticas
+                  </span>
+                  <textarea
+                    value={shippingNotes}
+                    onChange={(event) => setShippingNotes(event.target.value)}
+                    disabled={!canAddNotes}
+                    rows={4}
+                    placeholder="Ej: Se entrega cámara configurada, se valida conexión WiFi y se explica uso básico al cliente."
+                    className="mt-2 w-full resize-none rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-[#2D5398] focus:ring-2 focus:ring-[#2D5398]/10 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:opacity-70"
+                  />
+                  {!canAddNotes && (
+                    <span className="mt-1 block text-xs text-slate-500">
+                      Requiere permiso shipping.add_notes.
+                    </span>
+                  )}
+                </label>
+              </div>
+
+              {shippingEvidenceUrl.trim() && (
+                <div className="mt-4 rounded-2xl bg-slate-50 p-4">
+                  <p className="text-sm font-semibold text-slate-700">
+                    Evidencia registrada
+                  </p>
+                  <a
+                    href={shippingEvidenceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-1 block break-all text-sm font-semibold text-[#2D5398] hover:underline"
+                  >
+                    {shippingEvidenceUrl}
+                  </a>
+                </div>
+              )}
+
+              <div className="mt-5 flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleSaveShippingInfo}
+                  disabled={savingShipping || !canManageShippingInfo}
+                  className="rounded-xl bg-[#2D5398] px-5 py-3 text-sm font-bold text-white shadow-md shadow-blue-200 transition hover:-translate-y-0.5 hover:bg-[#234684] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {savingShipping ? "Guardando..." : "Guardar gestión logística"}
+                </button>
+              </div>
+            </article>
 
             <article className="mt-6 rounded-3xl border border-slate-200 bg-white p-5">
               <h3 className="text-lg font-black text-slate-900">

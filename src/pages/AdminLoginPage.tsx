@@ -63,7 +63,37 @@ export const AdminLoginPage = () => {
       return;
     }
 
-    navigate("/admin/products", { replace: true });
+    const { data: userData } = await supabaseAdmin.auth.getUser();
+
+    if (!userData.user) {
+      setError("No fue posible obtener la sesión.");
+      setLoading(false);
+      return;
+    }
+
+    const { data: userRole, error: roleError } = await supabaseAdmin
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userData.user.id)
+      .maybeSingle();
+
+    if (roleError || !userRole) {
+      setError("No tienes un rol asignado.");
+      await supabaseAdmin.auth.signOut();
+      setLoading(false);
+      return;
+    }
+
+    const destinationMap: Record<string, string> = {
+      super_admin: "/admin",
+      admin: "/admin",
+      tecnico_cctv: "/admin/orders",
+      vendedor: "/admin/quotes",
+    };
+
+    navigate(destinationMap[userRole.role] ?? "/admin", {
+      replace: true,
+    });
   };
 
   const handleRecovery = async (e: FormEvent<HTMLFormElement>) => {
@@ -119,7 +149,7 @@ export const AdminLoginPage = () => {
             <div className="mt-4 flex gap-2">
               <button
                 type="button"
-                onClick={() => navigate("/admin/products")}
+                onClick={() => navigate("/admin")}
                 className="rounded-xl bg-[#2D5398] px-4 py-2 text-sm font-semibold text-white"
               >
                 Ir al panel
