@@ -181,3 +181,14 @@ export const updateUserActiveStatus = async (
 
   if (error) throw error;
 };
+
+
+export const deleteRole = async (roleId: string) => {
+  const { error } = await supabase.rpc("delete_role_admin", {
+    _role_id: roleId,
+  });
+
+  if (error) {
+    throw new Error(error.message || "No fue posible eliminar el rol.");
+  }
+};

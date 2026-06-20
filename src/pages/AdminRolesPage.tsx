@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   createRole,
+  deleteRole,
   getRoles,
   updateRole,
   type Role,
@@ -16,6 +17,7 @@ export const AdminRolesPage = () => {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [deletingRoleId, setDeletingRoleId] = useState<string | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
 
   const [roleName, setRoleName] = useState("");
@@ -117,6 +119,32 @@ export const AdminRolesPage = () => {
       );
     } finally {
       setUpdating(false);
+    }
+  };
+
+  const handleDeleteRole = async (role: Role) => {
+    const confirmed = window.confirm(
+      `¿Deseas eliminar el rol "${role.name}"?`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setDeletingRoleId(role.id);
+      setErrorMessage("");
+      setSuccessMessage("");
+
+      await deleteRole(role.id);
+
+      setSuccessMessage(`Rol "${role.name}" eliminado correctamente.`);
+      await loadRoles();
+    } catch (error) {
+      console.error("Error eliminando rol:", error);
+      setErrorMessage(
+        getErrorMessage(error, "No fue posible eliminar el rol.")
+      );
+    } finally {
+      setDeletingRoleId(null);
     }
   };
 
@@ -261,7 +289,7 @@ export const AdminRolesPage = () => {
 
               <tbody className="divide-y divide-slate-100 bg-white">
                 {roles.map((role) => {
-                  const isProtected = role.name === "super_admin";
+                  const isProtected = role.is_system;
 
                   return (
                     <tr key={role.id} className="hover:bg-slate-50/80">
@@ -306,19 +334,34 @@ export const AdminRolesPage = () => {
                       </td>
 
                       <td className="whitespace-nowrap px-6 py-4">
-                        <button
-                          type="button"
-                          onClick={() => handleOpenEditModal(role)}
-                          disabled={isProtected}
-                          className={[
-                            "rounded-2xl px-4 py-2 text-xs font-bold transition",
-                            isProtected
-                              ? "cursor-not-allowed bg-slate-100 text-slate-400"
-                              : "bg-[#2D5398] text-white shadow-sm hover:bg-[#24457f]",
-                          ].join(" ")}
-                        >
-                          {isProtected ? "Protegido" : "Editar"}
-                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditModal(role)}
+                            disabled={isProtected}
+                            className={[
+                              "rounded-2xl px-4 py-2 text-xs font-bold transition",
+                              isProtected
+                                ? "cursor-not-allowed bg-slate-100 text-slate-400"
+                                : "bg-[#2D5398] text-white shadow-sm hover:bg-[#24457f]",
+                            ].join(" ")}
+                          >
+                            {isProtected ? "Protegido" : "Editar"}
+                          </button>
+
+                          {!role.is_system && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteRole(role)}
+                              disabled={deletingRoleId === role.id}
+                              className="rounded-2xl bg-red-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {deletingRoleId === role.id
+                                ? "Eliminando..."
+                                : "Eliminar"}
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
