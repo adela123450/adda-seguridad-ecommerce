@@ -160,6 +160,38 @@ const defaultExclusionsText = `Esta cotización NO incluye:
 • Multitomas
 • Elementos adicionales no especificados.`;
 
+const INSTALLATION_SERVICES_GROUP = "installation_services_consumables";
+
+const installationServicesKeywords = [
+  "ABRAZADERA",
+  "TORNILLOS CHAZOS",
+  "TORNILLO",
+  "CHAZO",
+  "CAUCHO TERMOENCOGIBLE",
+  "TERMOENCOGIBLE",
+  "CABLE UTP",
+  "CABLE DÚPLEX",
+  "CABLE DUPLEX",
+  "CABLE NEOPRENO",
+  "MANO DE OBRA",
+];
+
+const shouldGroupAsInstallationServices = (value: string | null | undefined) => {
+  const normalizedValue = (value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase();
+
+  return installationServicesKeywords.some((keyword) =>
+    normalizedValue.includes(
+      keyword
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toUpperCase(),
+    ),
+  );
+};
+
 const parseNumber = (value: string) => {
   const cleanValue = value.replace(/\./g, "").replace(",", ".");
   const numberValue = Number(cleanValue);
@@ -759,6 +791,10 @@ export const AdminQuoteEditorPage = () => {
     setErrorMessage("");
     setSuccessMessage("");
 
+    const isInstallationServicesGroup = shouldGroupAsInstallationServices(
+      itemForm.item_name,
+    );
+
     try {
       await createManualQuoteItem({
         quote_id: quote.id,
@@ -774,6 +810,10 @@ export const AdminQuoteEditorPage = () => {
         profit,
         margin_percentage: marginPercentage,
         notes: itemForm.notes.trim() || null,
+        public_group: isInstallationServicesGroup
+          ? INSTALLATION_SERVICES_GROUP
+          : null,
+        visible_to_customer: !isInstallationServicesGroup,
       });
 
       setSuccessMessage("Ítem agregado correctamente.");
@@ -828,6 +868,10 @@ export const AdminQuoteEditorPage = () => {
         .filter(Boolean)
         .join(" | ") || null;
 
+    const isInstallationServicesGroup = shouldGroupAsInstallationServices(
+      selectedCatalogProduct.name,
+    );
+
     try {
       await createCatalogQuoteItem({
         quote_id: quote.id,
@@ -849,6 +893,10 @@ export const AdminQuoteEditorPage = () => {
         profit: pricingSnapshot.profit,
         margin_percentage: pricingSnapshot.marginPercentage,
         notes: itemNotes,
+        public_group: isInstallationServicesGroup
+          ? INSTALLATION_SERVICES_GROUP
+          : null,
+        visible_to_customer: !isInstallationServicesGroup,
       });
 
       setSuccessMessage("Producto del catálogo agregado correctamente.");

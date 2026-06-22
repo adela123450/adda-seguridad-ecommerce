@@ -41,6 +41,12 @@ type QuoteTermsSource = QuoteDetail & {
   exclusions_terms?: string | null;
 };
 
+type PdfLineItem = QuoteItem & {
+  is_summary_group?: boolean;
+};
+
+const INSTALLATION_SUMMARY_GROUP = "installation_services_consumables";
+
 const DEFAULT_WARRANTY = `Se otorga una garantía de 2 meses sobre la instalación realizada.`;
 
 const DEFAULT_CONDITIONS = `• No aplica garantía sobre equipos suministrados por el cliente.\n• No cubre daños ocasionados por:\n  ✓ Fluctuaciones o picos de energía.\n  ✓ Manipulación indebida por terceros.\n  ✓ Cambios posteriores en ubicación o configuración del sistema.`;
@@ -48,6 +54,20 @@ const DEFAULT_CONDITIONS = `• No aplica garantía sobre equipos suministrados 
 const DEFAULT_NOTES = `• La presente cotización tiene una vigencia de 7 días calendario a partir de su fecha de emisión.\n• Los precios indicados están sujetos a cambios según disponibilidad y fluctuaciones de precios de nuestros proveedores.\n• Tiempo estimado de ejecución del servicio: entre 1 y 2 días, según condiciones técnicas del lugar.\n• Disponibilidad para programación del servicio: sábados, domingos, lunes y martes.\n• Forma de pago: 60 % al iniciar el trabajo y 40 % al finalizar la instalación.`;
 
 const DEFAULT_EXCLUSIONS = `Esta cotización NO incluye:\n• Video balunes\n• Fuentes de poder\n• Caja de paso (10x10)\n• Multitomas\n• Elementos adicionales no especificados\n\nEn caso de que algún equipo suministrado por el cliente no funcione, sea incompatible o presente fallas durante la instalación, se notificará al cliente y su reposición tendrá un costo adicional.`;
+
+const DEFAULT_SUMMARY_GROUP_TITLE =
+  "Servicios de instalación y materiales consumibles";
+
+const DEFAULT_SUMMARY_GROUP_DESCRIPTION =
+  "Incluye la mano de obra técnica, materiales consumibles y elementos menores requeridos para la instalación, fijación, conexión, protección y organización del sistema, tales como tornillería, chazos, abrazaderas, cintas, terminales y accesorios de cableado eléctrico y de datos.";
+
+const getCleanText = (value?: string | null) => {
+  const normalizedValue = value?.trim();
+
+  return normalizedValue && normalizedValue.length > 0
+    ? normalizedValue
+    : undefined;
+};
 
 const getIssuerSnapshot = (quote: QuoteDetail): IssuerSnapshot => {
   const snapshot = quote.issuer_snapshot;
@@ -99,7 +119,7 @@ const getItemTypeLabel = (itemType: QuoteItem["item_type"]) => {
     technical_catalog: "Catálogo técnico",
     labor: "Mano de obra",
     logistics: "Logística",
-    manual: "Ítem manual",
+    manual: "Ítem",
   };
 
   return labels[itemType] ?? "Ítem";
@@ -178,7 +198,76 @@ export const QuotePdfTemplate = ({
     "Villeta Cundinamarca",
   ].join(" / ");
 
-  const hasDiscount = items.some((item) => Number(item.discount ?? 0) > 0);
+  const summaryGroupTitle =
+    getCleanText(quote.summary_group_title) ?? DEFAULT_SUMMARY_GROUP_TITLE;
+  const summaryGroupDescription =
+    getCleanText(quote.summary_group_description) ??
+    DEFAULT_SUMMARY_GROUP_DESCRIPTION;
+
+  const summaryGroupItems = items.filter(
+    (item) => item.public_group === INSTALLATION_SUMMARY_GROUP,
+  );
+  const visibleItems = items.filter(
+    (item) =>
+      item.public_group !== INSTALLATION_SUMMARY_GROUP &&
+      item.visible_to_customer !== false,
+  );
+
+  const summaryGroupSubtotal = summaryGroupItems.reduce(
+    (sum, item) => sum + Number(item.subtotal ?? 0),
+    0,
+  );
+  const summaryGroupDiscount = summaryGroupItems.reduce(
+    (sum, item) => sum + Number(item.discount ?? 0),
+    0,
+  );
+  const summaryGroupTotalCost = summaryGroupItems.reduce(
+    (sum, item) => sum + Number(item.total_cost ?? 0),
+    0,
+  );
+
+  const summaryLineItem: PdfLineItem | null =
+    summaryGroupItems.length > 0
+      ? {
+          id: "summary-installation-services-consumables",
+          quote_id: quote.id,
+          item_type: "manual",
+          item_name: summaryGroupTitle,
+          item_description: summaryGroupDescription,
+          sku: null,
+          quantity: 1,
+          unit_cost: summaryGroupTotalCost,
+          unit_price: summaryGroupSubtotal + summaryGroupDiscount,
+          discount: summaryGroupDiscount,
+          subtotal: summaryGroupSubtotal,
+          total_cost: summaryGroupTotalCost,
+          profit: summaryGroupSubtotal - summaryGroupTotalCost,
+          margin_percentage:
+            summaryGroupSubtotal > 0
+              ? ((summaryGroupSubtotal - summaryGroupTotalCost) /
+                  summaryGroupSubtotal) *
+                100
+              : 0,
+          notes: null,
+          unit_type: "servicio",
+          quote_unit: "servicio",
+          purchase_unit: null,
+          unit_content: null,
+          proportional_enabled: false,
+          visible_to_customer: true,
+          public_group: INSTALLATION_SUMMARY_GROUP,
+          created_at: summaryGroupItems[0]?.created_at ?? "",
+          is_summary_group: true,
+        }
+      : null;
+
+  const printableItems: PdfLineItem[] = summaryLineItem
+    ? [...visibleItems, summaryLineItem]
+    : visibleItems;
+
+  const hasDiscount = printableItems.some(
+    (item) => Number(item.discount ?? 0) > 0,
+  );
 
   useEffect(() => {
     const previousTitle = document.title;
@@ -189,16 +278,24 @@ export const QuotePdfTemplate = ({
     };
   }, [printTitle]);
 
-  const warranty = termsSource.warranty_terms || DEFAULT_WARRANTY;
-  const conditions = termsSource.conditions_terms || DEFAULT_CONDITIONS;
+  const warranty =
+    getCleanText(quote.warranty_text) ??
+    getCleanText(termsSource.warranty_terms) ??
+    DEFAULT_WARRANTY;
+  const conditions =
+    getCleanText(quote.conditions_text) ??
+    getCleanText(termsSource.conditions_terms) ??
+    DEFAULT_CONDITIONS;
   const notes =
-    termsSource.notes_terms ||
-    termsSource.commercial_terms ||
-    issuer.footer_notes ||
+    getCleanText(quote.important_notes_text) ??
+    getCleanText(termsSource.notes_terms) ??
+    getCleanText(termsSource.commercial_terms) ??
+    getCleanText(issuer.footer_notes) ??
     DEFAULT_NOTES;
   const exclusions =
-    termsSource.exclusions_terms ||
-    termsSource.exclusions ||
+    getCleanText(quote.exclusions_text) ??
+    getCleanText(termsSource.exclusions_terms) ??
+    getCleanText(termsSource.exclusions) ??
     DEFAULT_EXCLUSIONS;
 
   return (
@@ -252,17 +349,20 @@ export const QuotePdfTemplate = ({
         }
 
         .pdf-repeat-foot-cell {
-          height: 15mm;
+          height: 16mm;
           background: #ffffff;
           vertical-align: bottom;
         }
 
         .pdf-page {
-          min-height: 276mm;
-          padding: 8mm 8mm 6mm;
-          box-sizing: border-box;
-          position: relative;
-        }
+        min-height: calc(297mm - 23mm);
+        padding: 8mm 8mm 10mm;
+        box-sizing: border-box;
+        position: relative;
+        overflow: visible;
+        display: flex;
+        flex-direction: column;
+       }
 
         .pdf-top-ribbon {
           height: 5mm;
@@ -274,6 +374,12 @@ export const QuotePdfTemplate = ({
           height: 13mm;
           display: grid;
           grid-template-rows: 7mm 6mm;
+        }
+
+        .pdf-footer-spacer {
+          height: 19mm;
+          width: 100%;
+          background: transparent;
         }
 
         .pdf-bottom-ribbon {
@@ -720,11 +826,17 @@ export const QuotePdfTemplate = ({
           text-align: right;
         }
 
+        .pdf-closing-section {
+        margin-top: auto;
+        page-break-inside: avoid;
+        break-inside: avoid;
+        }
+
         .pdf-terms-grid {
           display: grid;
           grid-template-columns: repeat(4, 1fr);
           gap: 2.5mm;
-          margin-top: 5mm;
+          margin-top: 0;
           page-break-inside: avoid;
           break-inside: avoid;
         }
@@ -736,6 +848,8 @@ export const QuotePdfTemplate = ({
           padding: 3mm 3mm;
           box-sizing: border-box;
           page-break-inside: avoid;
+          break-inside: avoid;
+          overflow: visible;
         }
 
         .pdf-term-header {
@@ -773,10 +887,13 @@ export const QuotePdfTemplate = ({
           gap: 22mm;
           margin-top: 5mm;
           padding: 0 7mm;
+          page-break-inside: avoid;
+          break-inside: avoid;
+          overflow: visible;
         }
 
         .pdf-signatures-lower {
-          margin-top: 34mm;
+          margin-top: 18mm;
           align-items: start;
         }
 
@@ -849,6 +966,10 @@ export const QuotePdfTemplate = ({
           break-inside: avoid;
         }
 
+        .pdf-fixed-footer {
+          display: none;
+        }
+
         @media print {
           @page {
             size: A4;
@@ -895,22 +1016,38 @@ export const QuotePdfTemplate = ({
           }
 
           .pdf-repeat-foot-cell {
-            height: 0 !important;
+            height: 19mm !important;
             vertical-align: bottom !important;
           }
 
           .pdf-print-footer {
+            position: static !important;
+            height: 13mm !important;
+            z-index: 1 !important;
+          }
+
+          .pdf-footer-spacer {
+            height: 19mm !important;
+            width: 100% !important;
+            background: transparent !important;
+          }
+
+          .pdf-fixed-footer {
+            display: grid !important;
+            grid-template-rows: 7mm 6mm;
             position: fixed !important;
             left: 0 !important;
             right: 0 !important;
-            bottom: 8mm !important;
+            bottom: 5mm !important;
+            width: 210mm !important;
             height: 13mm !important;
-            z-index: 999 !important;
+            z-index: 9999 !important;
+            background: #ffffff !important;
           }
 
           .pdf-page {
             min-height: auto !important;
-            padding: 7mm 8mm 18mm !important;
+            padding: 7mm 8mm 9mm !important;
             page-break-after: auto;
             overflow: visible !important;
           }
@@ -924,13 +1061,16 @@ export const QuotePdfTemplate = ({
           .pdf-scope,
           .pdf-section-title,
           .pdf-terms-grid,
-          .pdf-signatures {
+          .pdf-signatures,
+          .pdf-closing-section,
+          .pdf-total-wrapper {
             position: relative;
             z-index: 1;
           }
 
           .pdf-table {
             page-break-inside: auto;
+            break-inside: auto;
           }
 
           .pdf-table thead {
@@ -942,30 +1082,56 @@ export const QuotePdfTemplate = ({
           }
 
           .pdf-table tr,
+          .pdf-table tbody tr,
+          .pdf-total-row,
+          .pdf-total-wrapper,
+          .pdf-total-box,
           .pdf-term-card,
           .pdf-card,
           .pdf-scope,
-          .pdf-total-box {
-            page-break-inside: avoid;
-            break-inside: avoid;
+          .pdf-signatures,
+          .pdf-closing-section {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
           }
 
           .pdf-total-wrapper {
-            page-break-inside: avoid;
-            break-inside: avoid;
-            margin-bottom: 8mm;
+            margin-bottom: 5mm;
           }
 
           .pdf-table tbody tr {
-            page-break-inside: avoid;
-            break-inside: avoid;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+
+          .pdf-item-description,
+          .pdf-item-notes {
+            orphans: 3;
+            widows: 3;
+          }
+
+          .pdf-closing-section {
+            margin-top: 6mm !important;
           }
 
           .pdf-terms-grid {
-            margin-top: 6mm !important;
+            margin-top: 0 !important;
+          }
+        }
+
+        @media screen {
+          .pdf-print-footer {
+            position: static;
           }
         }
       `}</style>
+
+      <div className="pdf-fixed-footer" aria-hidden="true">
+        <div className="pdf-bottom-ribbon">
+          Protección y confiabilidad a tu alcance
+        </div>
+        <div className="pdf-footer-contact-line">{footerContact}</div>
+      </div>
 
       <table className="pdf-print-shell">
         <thead className="pdf-repeat-head">
@@ -976,15 +1142,10 @@ export const QuotePdfTemplate = ({
           </tr>
         </thead>
 
-        <tfoot className="pdf-repeat-foot">
+        <tfoot className="pdf-repeat-foot" aria-hidden="true">
           <tr>
             <td className="pdf-repeat-foot-cell">
-              <div className="pdf-print-footer">
-                <div className="pdf-bottom-ribbon">
-                  Protección y confiabilidad a tu alcance
-                </div>
-                <div className="pdf-footer-contact-line">{footerContact}</div>
-              </div>
+              <div className="pdf-footer-spacer" />
             </td>
           </tr>
         </tfoot>
@@ -1180,7 +1341,7 @@ export const QuotePdfTemplate = ({
                       </tr>
                     </thead>
                     <tbody>
-                      {items.length === 0 ? (
+                      {printableItems.length === 0 ? (
                         <tr>
                           <td
                             colSpan={hasDiscount ? 6 : 5}
@@ -1190,7 +1351,7 @@ export const QuotePdfTemplate = ({
                           </td>
                         </tr>
                       ) : (
-                        items.map((item, index) => {
+                        printableItems.map((item, index) => {
                           const unit = getUnit(item);
                           const cleanNotes = (item.notes ?? "")
                             .split("\n")
@@ -1303,75 +1464,77 @@ export const QuotePdfTemplate = ({
                   </table>
                 </section>
 
-                <section className="pdf-terms-grid">
-                  <div className="pdf-term-card">
-                    <div className="pdf-term-header">
-                      <span className="pdf-term-icon">🛡</span>
-                      <span>Garantía</span>
+                <section className="pdf-closing-section">
+                  <div className="pdf-terms-grid">
+                    <div className="pdf-term-card">
+                      <div className="pdf-term-header">
+                        <span className="pdf-term-icon">🛡</span>
+                        <span>Garantía</span>
+                      </div>
+                      <div className="pdf-term-body">{warranty}</div>
                     </div>
-                    <div className="pdf-term-body">{warranty}</div>
+
+                    <div className="pdf-term-card">
+                      <div className="pdf-term-header">
+                        <span className="pdf-term-icon">☑</span>
+                        <span>Condiciones</span>
+                      </div>
+                      <div className="pdf-term-body">{conditions}</div>
+                    </div>
+
+                    <div className="pdf-term-card">
+                      <div className="pdf-term-header">
+                        <span className="pdf-term-icon">i</span>
+                        <span>Notas importantes</span>
+                      </div>
+                      <div className="pdf-term-body">{notes}</div>
+                    </div>
+
+                    <div className="pdf-term-card">
+                      <div className="pdf-term-header">
+                        <span className="pdf-term-icon">⚠</span>
+                        <span>Exclusiones importantes</span>
+                      </div>
+                      <div className="pdf-term-body">{exclusions}</div>
+                    </div>
                   </div>
 
-                  <div className="pdf-term-card">
-                    <div className="pdf-term-header">
-                      <span className="pdf-term-icon">☑</span>
-                      <span>Condiciones</span>
+                  <footer className="pdf-signatures pdf-page-break-safe pdf-signatures-lower">
+                    <div className="pdf-signature-line">
+                      {issuer.signature_url && (
+                        <img
+                          src={issuer.signature_url}
+                          alt={`Firma de ${issuerName}`}
+                          className="pdf-signature-image"
+                        />
+                      )}
+
+                      <span className="pdf-signature-name">{issuerName}</span>
+
+                      {issuerSignatureDetails.length > 0 && (
+                        <span className="pdf-signature-details">
+                          {issuerSignatureDetails.map((detail) => (
+                            <span key={detail}>{detail}</span>
+                          ))}
+                        </span>
+                      )}
                     </div>
-                    <div className="pdf-term-body">{conditions}</div>
-                  </div>
 
-                  <div className="pdf-term-card">
-                    <div className="pdf-term-header">
-                      <span className="pdf-term-icon">i</span>
-                      <span>Notas importantes</span>
-                    </div>
-                    <div className="pdf-term-body">{notes}</div>
-                  </div>
-
-                  <div className="pdf-term-card">
-                    <div className="pdf-term-header">
-                      <span className="pdf-term-icon">⚠</span>
-                      <span>Exclusiones importantes</span>
-                    </div>
-                    <div className="pdf-term-body">{exclusions}</div>
-                  </div>
-                </section>
-
-                <footer className="pdf-signatures pdf-page-break-safe pdf-signatures-lower">
-                  <div className="pdf-signature-line">
-                    {issuer.signature_url && (
-                      <img
-                        src={issuer.signature_url}
-                        alt={`Firma de ${issuerName}`}
-                        className="pdf-signature-image"
-                      />
-                    )}
-
-                    <span className="pdf-signature-name">{issuerName}</span>
-
-                    {issuerSignatureDetails.length > 0 && (
-                      <span className="pdf-signature-details">
-                        {issuerSignatureDetails.map((detail) => (
-                          <span key={detail}>{detail}</span>
-                        ))}
+                    <div className="pdf-signature-line">
+                      <span className="pdf-signature-name">
+                        Aceptación del cliente
                       </span>
-                    )}
-                  </div>
-
-                  <div className="pdf-signature-line">
-                    <span className="pdf-signature-name">
-                      Aceptación del cliente
-                    </span>
-                    <br />
-                    <span
-                      className="pdf-muted pdf-acceptance-note"
-                      style={{ fontWeight: 600, textTransform: "none" }}
-                    >
-                      Aceptación por firma, WhatsApp, correo electrónico, orden
-                      de servicio o pago de anticipo.
-                    </span>
-                  </div>
-                </footer>
+                      <br />
+                      <span
+                        className="pdf-muted pdf-acceptance-note"
+                        style={{ fontWeight: 600, textTransform: "none" }}
+                      >
+                        Aceptación por firma, WhatsApp, correo electrónico,
+                        orden de servicio o pago de anticipo.
+                      </span>
+                    </div>
+                  </footer>
+                </section>
               </div>
             </td>
           </tr>

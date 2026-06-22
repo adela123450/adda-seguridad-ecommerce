@@ -68,12 +68,6 @@ const navSections: NavSection[] = [
         icon: "◉",
         permission: "orders.read",
       },
-      {
-        label: "Multimedia cloud",
-        to: "/admin/multimedia-migration",
-        icon: "▧",
-        permission: "products.read",
-      },
     ],
   },
   {

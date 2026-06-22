@@ -38,6 +38,8 @@ export type QuoteDetail = {
   conditions_text?: string | null;
   important_notes_text?: string | null;
   exclusions_text?: string | null;
+  summary_group_title?: string | null;
+  summary_group_description?: string | null;
 };
 
 export type QuoteItem = {
@@ -56,6 +58,11 @@ export type QuoteItem = {
   profit: number;
   margin_percentage: number;
   notes: string | null;
+  visible_to_customer?: boolean | null;
+  public_group?: string | null;
+  name_internal?: string | null;
+  name_public?: string | null;
+  description?: string | null;
   unit_type?: string | null;
   quote_unit?: string | null;
   purchase_unit?: string | null;
@@ -86,6 +93,10 @@ export type CatalogProduct = {
   purchase_unit?: string | null;
   unit_content?: number | string | null;
   quote_by_unit?: boolean | null;
+  visible_to_customer?: boolean | null;
+  public_name?: string | null;
+  public_group?: string | null;
+  item_type?: string | null;
 };
 
 export type QuoteTemplateItemType =
@@ -220,6 +231,8 @@ export type QuoteHeaderUpdatePayload = {
   conditions_text?: string | null;
   important_notes_text?: string | null;
   exclusions_text?: string | null;
+  summary_group_title?: string | null;
+  summary_group_description?: string | null;
 };
 
 export type ManualQuoteItemPayload = {
@@ -237,6 +250,9 @@ export type ManualQuoteItemPayload = {
   margin_percentage: number;
   notes: string | null;
   unit_type?: string | null;
+  visible_to_customer?: boolean | null;
+  public_group?: string | null;
+  name_public?: string | null;
 };
 
 export type CatalogQuoteItemPayload = {
@@ -259,6 +275,10 @@ export type CatalogQuoteItemPayload = {
   purchase_unit?: string | null;
   unit_content?: number | null;
   proportional_enabled?: boolean;
+  visible_to_customer?: boolean | null;
+  public_group?: string | null;
+  name_public?: string | null;
+  product_id?: string | null;
 };
 
 export type QuoteItemSnapshotUpdatePayload = {
@@ -287,7 +307,7 @@ export const getQuoteById = async (quoteId: string) => {
   const { data, error } = await supabase
     .from("quotes")
     .select(
-      "id, quote_number, customer_name, customer_phone, customer_email, customer_city, project_address, technical_scope, status, subtotal, tax_amount, total, issue_date, expiration_date, commercial_terms, warranty_terms, exclusions, parent_quote_id, version_number, version_label, version_notes, issuer_profile_id, issuer_profile_name, issuer_snapshot, warranty_text, conditions_text, important_notes_text, exclusions_text",
+      "id, quote_number, customer_name, customer_phone, customer_email, customer_city, project_address, technical_scope, status, subtotal, tax_amount, total, issue_date, expiration_date, commercial_terms, warranty_terms, exclusions, parent_quote_id, version_number, version_label, version_notes, issuer_profile_id, issuer_profile_name, issuer_snapshot, warranty_text, conditions_text, important_notes_text, exclusions_text, summary_group_title, summary_group_description",
     )
     .eq("id", quoteId)
     .single();
@@ -301,7 +321,7 @@ export const getQuoteItems = async (quoteId: string) => {
   const { data, error } = await supabase
     .from("quote_items")
     .select(
-      "id, quote_id, item_type, item_name, item_description, sku, quantity, unit_type, unit_cost, unit_price, discount, subtotal, total_cost, profit, margin_percentage, notes, quote_unit, purchase_unit, unit_content, proportional_enabled, created_at",
+      "id, quote_id, item_type, item_name, item_description, sku, quantity, unit_type, unit_cost, unit_price, discount, subtotal, total_cost, profit, margin_percentage, notes, visible_to_customer, public_group, name_internal, name_public, description, quote_unit, purchase_unit, unit_content, proportional_enabled, created_at",
     )
     .eq("quote_id", quoteId)
     .order("created_at", { ascending: true });
@@ -367,7 +387,11 @@ export const searchQuoteCatalogProducts = async (searchTerm: string) => {
   quote_unit,
   purchase_unit,
   unit_content,
-  quote_by_unit
+  quote_by_unit,
+  visible_to_customer,
+  public_name,
+  public_group,
+  item_type
 `,
     )
     .eq("active", true)
@@ -387,7 +411,12 @@ export const createCatalogQuoteItem = async (
 ) => {
   const { error } = await supabase.from("quote_items").insert({
     ...payload,
+    product_id: payload.product_id ?? null,
     name_internal: payload.item_name,
+    name_public: payload.name_public ?? payload.item_name,
+    description: payload.item_description ?? null,
+    visible_to_customer: payload.visible_to_customer ?? true,
+    public_group: payload.public_group ?? null,
     unit_type: payload.unit_type ?? payload.quote_unit ?? "unidad",
     quote_unit: payload.quote_unit ?? "unidad",
     purchase_unit: payload.purchase_unit ?? null,
@@ -404,6 +433,10 @@ export const createManualQuoteItem = async (
   const { error } = await supabase.from("quote_items").insert({
     ...payload,
     name_internal: payload.item_name,
+    name_public: payload.name_public ?? payload.item_name,
+    description: payload.item_description ?? null,
+    visible_to_customer: payload.visible_to_customer ?? true,
+    public_group: payload.public_group ?? null,
     unit_type: payload.unit_type ?? "unidad",
     quote_unit: payload.unit_type ?? "unidad",
     proportional_enabled: false,
@@ -579,7 +612,7 @@ export const applyTemplateToQuote = async (
 ): Promise<ApplyTemplateResult> => {
   const { data: quote, error: quoteError } = await supabase
     .from("quotes")
-    .select("id, status, technical_scope, warranty_text, conditions_text, important_notes_text, exclusions_text")
+    .select("id, status, technical_scope, warranty_text, conditions_text, important_notes_text, exclusions_text, summary_group_title, summary_group_description")
     .eq("id", quoteId)
     .single();
 
@@ -640,6 +673,10 @@ export const applyTemplateToQuote = async (
       unit_content: null,
       proportional_enabled: false,
       name_internal: item.name_internal,
+      name_public: item.name_public ?? item.item_name,
+      description: item.description ?? item.item_description ?? null,
+      visible_to_customer: item.visible_to_customer ?? true,
+      public_group: item.public_group ?? null,
     }));
 
   if (itemsToInsert.length > 0) {
@@ -761,6 +798,8 @@ const duplicateQuote = async (quoteId: string) => {
       conditions_text: originalQuote.conditions_text ?? null,
       important_notes_text: originalQuote.important_notes_text ?? null,
       exclusions_text: originalQuote.exclusions_text ?? null,
+      summary_group_title: originalQuote.summary_group_title ?? null,
+      summary_group_description: originalQuote.summary_group_description ?? null,
     })
     .select("id, quote_number")
     .single();
@@ -789,6 +828,10 @@ const duplicateQuote = async (quoteId: string) => {
       unit_content: item.unit_content,
       proportional_enabled: item.proportional_enabled,
       name_internal: item.name_internal ?? item.item_name,
+      name_public: item.name_public ?? item.item_name,
+      description: item.description ?? item.item_description ?? null,
+      visible_to_customer: item.visible_to_customer ?? true,
+      public_group: item.public_group ?? null,
     }));
 
     const { error: cloneItemsError } = await supabase
@@ -887,6 +930,8 @@ const createQuoteVersion = async (quoteId: string) => {
       conditions_text: originalQuote.conditions_text ?? null,
       important_notes_text: originalQuote.important_notes_text ?? null,
       exclusions_text: originalQuote.exclusions_text ?? null,
+      summary_group_title: originalQuote.summary_group_title ?? null,
+      summary_group_description: originalQuote.summary_group_description ?? null,
     })
     .select("id, quote_number, version_number, version_label")
     .single();
@@ -915,6 +960,10 @@ const createQuoteVersion = async (quoteId: string) => {
       unit_content: item.unit_content,
       proportional_enabled: item.proportional_enabled,
       name_internal: item.name_internal ?? item.item_name,
+      name_public: item.name_public ?? item.item_name,
+      description: item.description ?? item.item_description ?? null,
+      visible_to_customer: item.visible_to_customer ?? true,
+      public_group: item.public_group ?? null,
     }));
 
     const { error: cloneItemsError } = await supabase
