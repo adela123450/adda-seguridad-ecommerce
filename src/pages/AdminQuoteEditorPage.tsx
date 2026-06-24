@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabaseAdmin as supabase } from "../lib/supabase";
@@ -17,6 +17,7 @@ import {
   updateQuoteItemSnapshot,
   applyTemplateToQuote,
   type CatalogProduct,
+  type ProductClassification,
   type QuoteDetail,
   type QuoteItem,
   type QuoteStatus,
@@ -45,6 +46,7 @@ type ItemForm = {
   unit_price: string;
   discount: string;
   notes: string;
+  product_classification: ProductClassification;
 };
 
 type CatalogItemForm = {
@@ -52,6 +54,10 @@ type CatalogItemForm = {
   discount: string;
   notes: string;
 };
+
+type CatalogClassificationFilter = ProductClassification | "all";
+type CatalogSortKey = "name_asc" | "price_asc" | "price_desc";
+type CatalogViewMode = "grid" | "list";
 
 type EditItemForm = {
   quantity: string;
@@ -112,6 +118,7 @@ const initialItemForm: ItemForm = {
   unit_price: "0",
   discount: "0",
   notes: "",
+  product_classification: "equipment",
 };
 
 const initialCatalogItemForm: CatalogItemForm = {
@@ -162,33 +169,82 @@ const defaultExclusionsText = `Esta cotización NO incluye:
 
 const INSTALLATION_SERVICES_GROUP = "installation_services_consumables";
 
-const installationServicesKeywords = [
-  "ABRAZADERA",
-  "TORNILLOS CHAZOS",
-  "TORNILLO",
-  "CHAZO",
-  "CAUCHO TERMOENCOGIBLE",
-  "TERMOENCOGIBLE",
-  "CABLE UTP",
-  "CABLE DÚPLEX",
-  "CABLE DUPLEX",
-  "CABLE NEOPRENO",
-  "MANO DE OBRA",
+const productClassificationOptions: ProductClassification[] = [
+  "equipment",
+  "supplied_material",
+  "installation_consumable",
+  "internal_cost",
 ];
 
-const shouldGroupAsInstallationServices = (value: string | null | undefined) => {
-  const normalizedValue = (value ?? "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toUpperCase();
+const productClassificationLabels: Record<ProductClassification, string> = {
+  equipment: "Equipo principal",
+  supplied_material: "Material suministrado",
+  installation_consumable: "Instalación y consumibles",
+  internal_cost: "Costo interno no visible",
+};
 
-  return installationServicesKeywords.some((keyword) =>
-    normalizedValue.includes(
-      keyword
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .toUpperCase(),
-    ),
+const productClassificationDescriptions: Record<ProductClassification, string> = {
+  equipment: "Visible individualmente en el PDF.",
+  supplied_material: "Visible individualmente como material relevante del proyecto.",
+  installation_consumable:
+    "Se agrupa en servicios de instalación y materiales consumibles.",
+  internal_cost: "Afecta costo, utilidad y margen, pero no aparece en el PDF.",
+};
+
+const catalogClassificationFilterOptions: Array<{
+  value: CatalogClassificationFilter;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "all",
+    label: "Todos",
+    description: "Ver catálogo completo",
+  },
+  {
+    value: "equipment",
+    label: "Equipo principal",
+    description: "Cámaras, DVR, NVR, UPS y equipos base",
+  },
+  {
+    value: "supplied_material",
+    label: "Material suministrado",
+    description: "Rack, canaleta, switch, gabinete y materiales visibles",
+  },
+  {
+    value: "installation_consumable",
+    label: "Instalación y consumibles",
+    description: "Mano de obra, abrazaderas, tornillos y elementos menores",
+  },
+  {
+    value: "internal_cost",
+    label: "Costo interno",
+    description: "Peajes, transporte, viáticos y logística no visible",
+  },
+];
+
+const normalizeProductClassification = (
+  value?: string | null,
+): ProductClassification => {
+  return productClassificationOptions.includes(value as ProductClassification)
+    ? (value as ProductClassification)
+    : "equipment";
+};
+
+const getPublicGroupFromClassification = (
+  classification: ProductClassification,
+) => {
+  return classification === "installation_consumable"
+    ? INSTALLATION_SERVICES_GROUP
+    : null;
+};
+
+const getCustomerVisibilityFromClassification = (
+  classification: ProductClassification,
+) => {
+  return (
+    classification !== "installation_consumable" &&
+    classification !== "internal_cost"
   );
 };
 
@@ -377,10 +433,18 @@ export const AdminQuoteEditorPage = () => {
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [itemForm, setItemForm] = useState<ItemForm>(initialItemForm);
   const [itemModalMode, setItemModalMode] = useState<"manual" | "catalog">(
-    "manual",
+    "catalog",
   );
   const [catalogSearch, setCatalogSearch] = useState("");
+  const [catalogClassificationFilter, setCatalogClassificationFilter] =
+    useState<CatalogClassificationFilter>("all");
   const [catalogProducts, setCatalogProducts] = useState<CatalogProduct[]>([]);
+  const [catalogSortKey, setCatalogSortKey] =
+    useState<CatalogSortKey>("name_asc");
+  const [catalogViewMode, setCatalogViewMode] =
+    useState<CatalogViewMode>("grid");
+  const [catalogPage, setCatalogPage] = useState(1);
+  const catalogItemsPerPage = 9;
   const [selectedCatalogProduct, setSelectedCatalogProduct] =
     useState<CatalogProduct | null>(null);
   const [catalogItemForm, setCatalogItemForm] = useState<CatalogItemForm>(
@@ -627,27 +691,28 @@ export const AdminQuoteEditorPage = () => {
     }));
   };
 
-  const handleSearchCatalogProducts = async () => {
+  const handleSearchCatalogProducts = async (
+    overrideClassification?: CatalogClassificationFilter,
+  ) => {
     const searchTerm = catalogSearch.trim();
-
-    if (searchTerm.length < 2) {
-      setItemError(
-        "Escribe mínimo 2 caracteres para buscar en el catálogo maestro.",
-      );
-      setCatalogProducts([]);
-      return;
-    }
+    const nextClassification =
+      overrideClassification ?? catalogClassificationFilter;
 
     setCatalogLoading(true);
     setItemError("");
 
     try {
-      const products = await searchQuoteCatalogProducts(searchTerm);
+      const products = await searchQuoteCatalogProducts(
+        searchTerm,
+        nextClassification,
+      );
       setCatalogProducts(products);
+      setSelectedCatalogProduct(null);
+      setCatalogPage(1);
 
       if (products.length === 0) {
         setItemError(
-          "No se encontraron productos activos con ese criterio de búsqueda.",
+          "No se encontraron productos activos con ese criterio de búsqueda o clasificación.",
         );
       }
     } catch (error) {
@@ -657,6 +722,15 @@ export const AdminQuoteEditorPage = () => {
     } finally {
       setCatalogLoading(false);
     }
+  };
+
+  const handleCatalogClassificationFilterChange = (
+    classification: CatalogClassificationFilter,
+  ) => {
+    setCatalogClassificationFilter(classification);
+    setCatalogPage(1);
+    setItemError("");
+    void handleSearchCatalogProducts(classification);
   };
 
   const handleSelectCatalogProduct = (product: CatalogProduct) => {
@@ -731,23 +805,32 @@ export const AdminQuoteEditorPage = () => {
   };
 
   const handleOpenItemModal = () => {
-    setItemModalMode("manual");
+    setItemModalMode("catalog");
     setItemForm(initialItemForm);
     setCatalogSearch("");
+    setCatalogClassificationFilter("all");
     setCatalogProducts([]);
+    setCatalogSortKey("name_asc");
+    setCatalogViewMode("grid");
+    setCatalogPage(1);
     setSelectedCatalogProduct(null);
     setCatalogItemForm(initialCatalogItemForm);
     setItemError("");
     setIsItemModalOpen(true);
+    void handleSearchCatalogProducts("all");
   };
 
   const handleCloseItemModal = () => {
     if (!savingItem) {
       setIsItemModalOpen(false);
-      setItemModalMode("manual");
+      setItemModalMode("catalog");
       setItemForm(initialItemForm);
       setCatalogSearch("");
+      setCatalogClassificationFilter("all");
       setCatalogProducts([]);
+      setCatalogSortKey("name_asc");
+      setCatalogViewMode("grid");
+      setCatalogPage(1);
       setSelectedCatalogProduct(null);
       setCatalogItemForm(initialCatalogItemForm);
       setItemError("");
@@ -791,8 +874,8 @@ export const AdminQuoteEditorPage = () => {
     setErrorMessage("");
     setSuccessMessage("");
 
-    const isInstallationServicesGroup = shouldGroupAsInstallationServices(
-      itemForm.item_name,
+    const productClassification = normalizeProductClassification(
+      itemForm.product_classification,
     );
 
     try {
@@ -810,10 +893,11 @@ export const AdminQuoteEditorPage = () => {
         profit,
         margin_percentage: marginPercentage,
         notes: itemForm.notes.trim() || null,
-        public_group: isInstallationServicesGroup
-          ? INSTALLATION_SERVICES_GROUP
-          : null,
-        visible_to_customer: !isInstallationServicesGroup,
+        public_group: getPublicGroupFromClassification(productClassification),
+        product_classification: productClassification,
+        visible_to_customer: getCustomerVisibilityFromClassification(
+          productClassification,
+        ),
       });
 
       setSuccessMessage("Ítem agregado correctamente.");
@@ -868,8 +952,11 @@ export const AdminQuoteEditorPage = () => {
         .filter(Boolean)
         .join(" | ") || null;
 
-    const isInstallationServicesGroup = shouldGroupAsInstallationServices(
-      selectedCatalogProduct.name,
+    const productClassification = normalizeProductClassification(
+      selectedCatalogProduct.product_classification,
+    );
+    const catalogPublicGroup = getPublicGroupFromClassification(
+      productClassification,
     );
 
     try {
@@ -893,17 +980,22 @@ export const AdminQuoteEditorPage = () => {
         profit: pricingSnapshot.profit,
         margin_percentage: pricingSnapshot.marginPercentage,
         notes: itemNotes,
-        public_group: isInstallationServicesGroup
-          ? INSTALLATION_SERVICES_GROUP
-          : null,
-        visible_to_customer: !isInstallationServicesGroup,
+        public_group: catalogPublicGroup,
+        product_classification: productClassification,
+        visible_to_customer: getCustomerVisibilityFromClassification(
+          productClassification,
+        ),
       });
 
       setSuccessMessage("Producto del catálogo agregado correctamente.");
       setIsItemModalOpen(false);
-      setItemModalMode("manual");
+      setItemModalMode("catalog");
       setCatalogSearch("");
+      setCatalogClassificationFilter("all");
       setCatalogProducts([]);
+      setCatalogSortKey("name_asc");
+      setCatalogViewMode("grid");
+      setCatalogPage(1);
       setSelectedCatalogProduct(null);
       setCatalogItemForm(initialCatalogItemForm);
       await refreshAll();
@@ -1046,6 +1138,46 @@ export const AdminQuoteEditorPage = () => {
       );
     }
   };
+
+  const sortedCatalogProducts = useMemo(() => {
+    return [...catalogProducts].sort((a, b) => {
+      if (catalogSortKey === "price_asc") {
+        return Number(a.price ?? 0) - Number(b.price ?? 0);
+      }
+
+      if (catalogSortKey === "price_desc") {
+        return Number(b.price ?? 0) - Number(a.price ?? 0);
+      }
+
+      return String(a.name ?? "").localeCompare(String(b.name ?? ""), "es");
+    });
+  }, [catalogProducts, catalogSortKey]);
+
+  const catalogTotalPages = Math.max(
+    1,
+    Math.ceil(sortedCatalogProducts.length / catalogItemsPerPage),
+  );
+
+  const paginatedCatalogProducts = useMemo(() => {
+    const safePage = Math.min(catalogPage, catalogTotalPages);
+    const startIndex = (safePage - 1) * catalogItemsPerPage;
+
+    return sortedCatalogProducts.slice(
+      startIndex,
+      startIndex + catalogItemsPerPage,
+    );
+  }, [
+    sortedCatalogProducts,
+    catalogPage,
+    catalogTotalPages,
+    catalogItemsPerPage,
+  ]);
+
+  useEffect(() => {
+    if (catalogPage > catalogTotalPages) {
+      setCatalogPage(catalogTotalPages);
+    }
+  }, [catalogPage, catalogTotalPages]);
 
   if (loading || settingsLoading) {
     return (
@@ -1703,7 +1835,7 @@ export const AdminQuoteEditorPage = () => {
 
       {isItemModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4">
-          <div className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-3xl bg-white p-6 shadow-xl">
+          <div className="max-h-[94vh] w-full max-w-7xl overflow-y-auto rounded-[1.75rem] bg-white p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-2xl font-bold text-slate-800">
@@ -1822,6 +1954,31 @@ export const AdminQuoteEditorPage = () => {
                   placeholder="Descuento"
                 />
 
+                <div className="md:col-span-2 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <label className="mb-2 block text-sm font-bold text-slate-700">
+                    Clasificación para cotización
+                  </label>
+                  <select
+                    value={itemForm.product_classification}
+                    onChange={(event) =>
+                      handleItemChange(
+                        "product_classification",
+                        event.target.value as ProductClassification,
+                      )
+                    }
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-[#2D5398]"
+                  >
+                    {productClassificationOptions.map((classification) => (
+                      <option key={classification} value={classification}>
+                        {productClassificationLabels[classification]}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-2 text-xs leading-5 text-slate-500">
+                    {productClassificationDescriptions[itemForm.product_classification]}
+                  </p>
+                </div>
+
                 <textarea
                   value={itemForm.notes}
                   onChange={(event) =>
@@ -1852,165 +2009,349 @@ export const AdminQuoteEditorPage = () => {
                 </div>
               </form>
             ) : (
-              <div className="mt-6 grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
-                <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
-                  <h3 className="text-lg font-bold text-slate-800">
-                    Buscar en catálogo maestro
-                  </h3>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Busca por nombre, SKU o categoría. No se filtra por
-                    visibilidad pública.
-                  </p>
-
-                  <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-                    <input
-                      value={catalogSearch}
-                      onChange={(event) => setCatalogSearch(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                          event.preventDefault();
-                          handleSearchCatalogProducts();
-                        }
-                      }}
-                      className="min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-[#2D5398]"
-                      placeholder="Ejemplo: cámara, DVR, mano de obra, SKU..."
-                    />
+              <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+                <div className="min-w-0">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+                    <div className="relative flex-1">
+                      <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg text-slate-400">
+                        🔎
+                      </span>
+                      <input
+                        value={catalogSearch}
+                        onChange={(event) => {
+                          setCatalogSearch(event.target.value);
+                          setCatalogPage(1);
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            handleSearchCatalogProducts();
+                          }
+                        }}
+                        className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-12 pr-4 text-sm outline-none transition focus:border-[#2D5398] focus:ring-4 focus:ring-[#2D5398]/10"
+                        placeholder="Buscar por nombre, SKU, categoría..."
+                      />
+                    </div>
 
                     <button
                       type="button"
-                      onClick={handleSearchCatalogProducts}
+                      onClick={() => handleSearchCatalogProducts()}
                       disabled={catalogLoading}
-                      className="rounded-2xl bg-[#2D5398] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#234684] disabled:opacity-60"
+                      className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 shadow-sm transition hover:border-[#2D5398]/50 hover:text-[#2D5398] disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      {catalogLoading ? "Buscando..." : "Buscar"}
+                      <span>▾</span>
+                      {catalogLoading ? "Buscando..." : "Filtros"}
                     </button>
                   </div>
 
-                  <div className="mt-4 flex max-h-80 flex-col gap-3 overflow-y-auto pr-1">
-                    {catalogProducts.map((product) => {
-                      const isSelected =
-                        selectedCatalogProduct?.id === product.id;
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                    {catalogClassificationFilterOptions.map((option) => {
+                      const isActive = catalogClassificationFilter === option.value;
+                      const optionIcon =
+                        option.value === "all"
+                          ? "▦"
+                          : option.value === "equipment"
+                            ? "📷"
+                            : option.value === "supplied_material"
+                              ? "▤"
+                              : option.value === "installation_consumable"
+                                ? "🔧"
+                                : "🚚";
 
                       return (
                         <button
-                          key={product.id}
+                          key={option.value}
                           type="button"
-                          onClick={() => handleSelectCatalogProduct(product)}
-                          className={`rounded-2xl border p-4 text-left transition ${
-                            isSelected
-                              ? "border-[#2D5398] bg-white shadow-sm"
-                              : "border-slate-200 bg-white hover:border-[#2D5398]/60"
-                          }`}
+                          onClick={() =>
+                            handleCatalogClassificationFilterChange(option.value)
+                          }
+                          disabled={catalogLoading}
+                          className={`min-h-[86px] rounded-2xl border p-3 text-left transition ${
+                            isActive
+                              ? "border-[#2D5398] bg-[#2D5398]/5 text-[#2D5398] shadow-sm ring-2 ring-[#2D5398]/10"
+                              : "border-slate-200 bg-white text-slate-700 hover:border-[#2D5398]/50 hover:bg-slate-50"
+                          } disabled:cursor-not-allowed disabled:opacity-60`}
                         >
-                          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                            <div>
-                              <p className="font-bold text-slate-800">
-                                {product.name}
-                              </p>
-                              <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                                {product.sku ?? "Sin SKU"} ·{" "}
-                                {product.category ?? "Sin categoría"}
-                              </p>
-                            </div>
-
-                            <span className="w-fit rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
-                              Stock: {product.stock ?? 0}
-                            </span>
-                          </div>
-
-                          <div className="mt-3 grid gap-2 text-sm text-slate-600 sm:grid-cols-2">
-                            <span>
-                              Costo:{" "}
-                              {moneyFormatter.format(
-                                Number(product.cost_price ?? 0),
-                              )}
+                          <div className="flex items-start gap-2">
+                            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-slate-100 text-base">
+                              {optionIcon}
                             </span>
                             <span>
-                              Precio:{" "}
-                              {moneyFormatter.format(
-                                Number(product.price ?? 0),
-                              )}
+                              <span className="block text-[11px] font-black uppercase leading-4 tracking-wide">
+                                {option.label}
+                              </span>
+                              <span className="mt-1 block text-[11px] leading-4 text-slate-500">
+                                {option.description}
+                              </span>
                             </span>
                           </div>
-
-                          {Boolean(
-                            (product as UnitAwareCatalogProduct).quote_by_unit,
-                          ) ? (
-                            <div className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
-                              Proporcional: compra por{" "}
-                              {(product as UnitAwareCatalogProduct)
-                                .purchase_unit ?? "unidad"}{" "}
-                              x{" "}
-                              {(product as UnitAwareCatalogProduct)
-                                .unit_content ?? 1}
-                              ; cotiza por{" "}
-                              {(product as UnitAwareCatalogProduct)
-                                .quote_unit ??
-                                (product as UnitAwareCatalogProduct)
-                                  .sale_unit ??
-                                "unidad"}
-                            </div>
-                          ) : (
-                            <div className="mt-3 rounded-xl bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-600">
-                              Producto unitario: la cantidad se toma como{" "}
-                              {(product as UnitAwareCatalogProduct)
-                                .quote_unit ??
-                                (product as UnitAwareCatalogProduct)
-                                  .public_sale_unit ??
-                                (product as UnitAwareCatalogProduct)
-                                  .sale_unit ??
-                                "unidad"}
-                              .
-                            </div>
-                          )}
                         </button>
                       );
                     })}
                   </div>
+
+                  <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-sm font-bold text-slate-700">
+                      {catalogProducts.length > 0
+                        ? `${catalogProducts.length} producto${catalogProducts.length === 1 ? "" : "s"} encontrado${catalogProducts.length === 1 ? "" : "s"}`
+                        : "Selecciona una clasificación o escribe una búsqueda"}
+                    </p>
+
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs font-bold text-slate-500">
+                        Ordenar por:
+                      </label>
+                      <select
+                        value={catalogSortKey}
+                        onChange={(event) => {
+                          setCatalogSortKey(event.target.value as CatalogSortKey);
+                          setCatalogPage(1);
+                        }}
+                        className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-[#2D5398]"
+                      >
+                        <option value="name_asc">Nombre A-Z</option>
+                        <option value="price_asc">Precio menor</option>
+                        <option value="price_desc">Precio mayor</option>
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => setCatalogViewMode("grid")}
+                        className={`grid h-9 w-9 place-items-center rounded-xl border transition ${
+                          catalogViewMode === "grid"
+                            ? "border-[#2D5398] bg-[#2D5398]/5 text-[#2D5398]"
+                            : "border-slate-200 bg-white text-slate-500 hover:border-[#2D5398]/40"
+                        }`}
+                        aria-label="Ver productos en tarjetas"
+                      >
+                        ▦
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCatalogViewMode("list")}
+                        className={`grid h-9 w-9 place-items-center rounded-xl border transition ${
+                          catalogViewMode === "list"
+                            ? "border-[#2D5398] bg-[#2D5398]/5 text-[#2D5398]"
+                            : "border-slate-200 bg-white text-slate-500 hover:border-[#2D5398]/40"
+                        }`}
+                        aria-label="Ver productos en lista compacta"
+                      >
+                        ☰
+                      </button>
+                    </div>
+                  </div>
+
+                  <div
+                    className={`mt-4 grid max-h-[52vh] gap-3 overflow-y-auto pr-1 ${
+                      catalogViewMode === "grid"
+                        ? "md:grid-cols-2 xl:grid-cols-3"
+                        : "grid-cols-1"
+                    }`}
+                  >
+                    {paginatedCatalogProducts.map((product) => {
+                      const isSelected =
+                        selectedCatalogProduct?.id === product.id;
+                      const classification = normalizeProductClassification(
+                        product.product_classification,
+                      );
+                      const productImageUrl =
+                        (product as CatalogProduct & { image_url?: string | null })
+                          .image_url ?? "";
+                      const badgeClass =
+                        classification === "equipment"
+                          ? "bg-blue-100 text-[#2D5398]"
+                          : classification === "supplied_material"
+                            ? "bg-emerald-100 text-emerald-700"
+                            : classification === "installation_consumable"
+                              ? "bg-amber-100 text-amber-700"
+                              : "bg-red-100 text-red-700";
+
+                      return (
+                        <article
+                          key={product.id}
+                          className={`rounded-2xl border bg-white p-3 shadow-sm transition ${
+                            isSelected
+                              ? "border-[#2D5398] ring-2 ring-[#2D5398]/10"
+                              : "border-slate-200 hover:border-[#2D5398]/50 hover:shadow-md"
+                          }`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => handleSelectCatalogProduct(product)}
+                            className="w-full text-left"
+                          >
+                            <div className="flex gap-3">
+                              <div className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-2xl bg-slate-50">
+                                {productImageUrl ? (
+                                  <img
+                                    src={productImageUrl}
+                                    alt={product.name}
+                                    className="h-full w-full object-contain p-2"
+                                    onError={(event) => {
+                                      event.currentTarget.style.display = "none";
+                                    }}
+                                  />
+                                ) : (
+                                  <span className="text-2xl text-slate-300">▣</span>
+                                )}
+                              </div>
+
+                              <div className="min-w-0 flex-1">
+                                <p className="line-clamp-2 text-sm font-black uppercase leading-5 text-slate-900">
+                                  {product.name}
+                                </p>
+                                <p className="mt-1 truncate text-xs font-semibold text-slate-500">
+                                  SKU: {product.sku ?? "Sin SKU"}
+                                </p>
+                                <span className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-[11px] font-black ${badgeClass}`}>
+                                  {productClassificationLabels[classification]}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="mt-3 flex items-end justify-between gap-3">
+                              <div>
+                                <p className="text-sm font-black text-slate-900">
+                                  {moneyFormatter.format(Number(product.price ?? 0))}
+                                  <span className="font-semibold text-slate-500"> / unidad</span>
+                                </p>
+                                <p className="mt-2 text-xs font-semibold text-slate-500">
+                                  Stock: {product.stock ?? "N/A"}
+                                </p>
+                              </div>
+
+                              <span className="rounded-xl border border-[#2D5398] px-3 py-2 text-xs font-black text-[#2D5398]">
+                                + Seleccionar
+                              </span>
+                            </div>
+                          </button>
+                        </article>
+                      );
+                    })}
+                  </div>
+
+                  {sortedCatalogProducts.length > catalogItemsPerPage && (
+                    <div className="mt-4 flex items-center justify-center gap-2 text-sm font-bold text-slate-500">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setCatalogPage((current) => Math.max(1, current - 1))
+                        }
+                        disabled={catalogPage === 1}
+                        className="rounded-lg px-3 py-1.5 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        ‹
+                      </button>
+
+                      {Array.from({ length: catalogTotalPages }).map((_, index) => {
+                        const page = index + 1;
+
+                        if (
+                          page !== 1 &&
+                          page !== catalogTotalPages &&
+                          Math.abs(page - catalogPage) > 1
+                        ) {
+                          if (
+                            page === 2 ||
+                            page === catalogTotalPages - 1
+                          ) {
+                            return (
+                              <span key={page} className="px-2">
+                                ...
+                              </span>
+                            );
+                          }
+
+                          return null;
+                        }
+
+                        return (
+                          <button
+                            key={page}
+                            type="button"
+                            onClick={() => setCatalogPage(page)}
+                            className={`rounded-lg px-3 py-1.5 transition ${
+                              catalogPage === page
+                                ? "bg-[#2D5398] text-white"
+                                : "hover:bg-slate-100"
+                            }`}
+                          >
+                            {page}
+                          </button>
+                        );
+                      })}
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setCatalogPage((current) =>
+                            Math.min(catalogTotalPages, current + 1),
+                          )
+                        }
+                        disabled={catalogPage === catalogTotalPages}
+                        className="rounded-lg px-3 py-1.5 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        ›
+                      </button>
+                    </div>
+                  )}
                 </div>
 
-                <div className="rounded-3xl border border-slate-200 bg-white p-4">
-                  <h3 className="text-lg font-bold text-slate-800">
-                    Producto seleccionado
-                  </h3>
-
+                <aside className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
                   {selectedCatalogProduct ? (
-                    <div className="mt-4">
-                      <p className="text-xl font-bold text-slate-800">
-                        {selectedCatalogProduct.name}
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-[0.16em] text-[#2D5398]">
+                        Producto seleccionado
                       </p>
-                      <p className="mt-1 text-sm text-slate-500">
+                      <h3 className="mt-2 text-xl font-black uppercase leading-6 text-slate-900">
+                        {selectedCatalogProduct.name}
+                      </h3>
+                      <p className="mt-2 text-sm leading-6 text-slate-500">
                         {selectedCatalogProduct.description ??
                           "Sin descripción registrada."}
                       </p>
 
-                      <div className="mt-4 grid gap-3 text-sm">
-                        <div className="rounded-2xl bg-slate-50 p-3">
-                          <span className="font-semibold text-slate-500">
+                      <div className="mt-5 grid gap-3">
+                        <div className="rounded-2xl bg-slate-50 p-4">
+                          <span className="text-xs font-black uppercase tracking-wide text-slate-500">
                             SKU
                           </span>
-                          <p className="font-bold text-slate-800">
+                          <p className="mt-1 font-black text-slate-900">
                             {selectedCatalogProduct.sku ?? "No registrado"}
                           </p>
                         </div>
 
+                        <div className="rounded-2xl bg-blue-50 p-4">
+                          <span className="text-xs font-black uppercase tracking-wide text-[#2D5398]">
+                            Clasificación
+                          </span>
+                          <p className="mt-1 font-black text-[#2D5398]">
+                            {
+                              productClassificationLabels[
+                                normalizeProductClassification(
+                                  selectedCatalogProduct.product_classification,
+                                )
+                              ]
+                            }
+                          </p>
+                        </div>
+
                         <div className="grid gap-3 sm:grid-cols-2">
-                          <div className="rounded-2xl bg-slate-50 p-3">
-                            <span className="font-semibold text-slate-500">
+                          <div className="rounded-2xl bg-slate-50 p-4">
+                            <span className="text-xs font-black uppercase tracking-wide text-slate-500">
                               Costo base
                             </span>
-                            <p className="font-bold text-slate-800">
+                            <p className="mt-1 font-black text-slate-900">
                               {moneyFormatter.format(
                                 Number(selectedCatalogProduct.cost_price ?? 0),
                               )}
                             </p>
                           </div>
 
-                          <div className="rounded-2xl bg-slate-50 p-3">
-                            <span className="font-semibold text-slate-500">
+                          <div className="rounded-2xl bg-slate-50 p-4">
+                            <span className="text-xs font-black uppercase tracking-wide text-slate-500">
                               Precio base
                             </span>
-                            <p className="font-bold text-slate-800">
+                            <p className="mt-1 font-black text-slate-900">
                               {moneyFormatter.format(
                                 Number(selectedCatalogProduct.price ?? 0),
                               )}
@@ -2019,115 +2360,29 @@ export const AdminQuoteEditorPage = () => {
                         </div>
 
                         {selectedCatalogPricing && (
-                          <div
-                            className={`mt-3 rounded-2xl border p-4 ${
-                              selectedCatalogPricing.isProportional
-                                ? "border-emerald-200 bg-emerald-50"
-                                : "border-slate-200 bg-slate-50"
-                            }`}
-                          >
+                          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                             <div className="flex flex-wrap items-center justify-between gap-2">
-                              <span
-                                className={`text-xs font-bold uppercase tracking-wide ${
-                                  selectedCatalogPricing.isProportional
-                                    ? "text-emerald-700"
-                                    : "text-slate-600"
-                                }`}
-                              >
+                              <span className="text-xs font-black uppercase tracking-wide text-slate-600">
                                 {selectedCatalogPricing.isProportional
-                                  ? "Consumo proporcional activo"
+                                  ? "Consumo proporcional"
                                   : "Producto unitario"}
                               </span>
-
                               <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-700 shadow-sm">
-                                Cantidad en{" "}
-                                {getUnitDisplayName(
-                                  selectedCatalogPricing.quoteUnit,
-                                )}
+                                Cantidad en {getUnitDisplayName(selectedCatalogPricing.quoteUnit)}
                               </span>
                             </div>
-
-                            <div className="mt-3 rounded-2xl bg-white p-3 text-sm font-semibold text-slate-700">
-                              {selectedCatalogPricing.isProportional ? (
-                                <p>
-                                  Vas a cotizar{" "}
-                                  {selectedCatalogPricing.quantity}{" "}
-                                  {getUnitDisplayName(
-                                    selectedCatalogPricing.quoteUnit,
-                                  )}
-                                  , no{" "}
-                                  {getUnitDisplayName(
-                                    selectedCatalogPricing.purchaseUnit,
-                                  )}{" "}
-                                  completos.
-                                </p>
-                              ) : (
-                                <p>
-                                  Este producto está configurado como unitario.
-                                  La cantidad representa{" "}
-                                  {getUnitDisplayName(
-                                    selectedCatalogPricing.quoteUnit,
-                                  )}
-                                  .
-                                </p>
-                              )}
-                            </div>
-
-                            <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
-                              <span>
-                                Costo por {selectedCatalogPricing.quoteUnit}:{" "}
-                                {moneyFormatter.format(
-                                  selectedCatalogPricing.unitCost,
-                                )}
-                              </span>
-                              <span>
-                                Precio por {selectedCatalogPricing.quoteUnit}:{" "}
-                                {moneyFormatter.format(
-                                  selectedCatalogPricing.unitPrice,
-                                )}
-                              </span>
-                              <span>
-                                Subtotal: {selectedCatalogPricing.quantity}{" "}
-                                {selectedCatalogPricing.quoteUnit} ×{" "}
-                                {moneyFormatter.format(
-                                  selectedCatalogPricing.unitPrice,
-                                )}{" "}
-                                ={" "}
-                                {moneyFormatter.format(
-                                  selectedCatalogPricing.subtotal,
-                                )}
-                              </span>
-                              <span>
-                                Utilidad:{" "}
-                                {moneyFormatter.format(
-                                  selectedCatalogPricing.profit,
-                                )}
-                              </span>
-                            </div>
-
-                            {selectedCatalogPricing.isProportional ? (
-                              <p className="mt-2 text-xs font-medium text-slate-600">
-                                Compra por {selectedCatalogPricing.purchaseUnit}{" "}
-                                x {selectedCatalogPricing.unitContent};
-                                ecommerce por{" "}
-                                {selectedCatalogPricing.publicSaleUnit};
-                                cotización por{" "}
-                                {selectedCatalogPricing.quoteUnit}.
-                              </p>
-                            ) : (
-                              <p className="mt-2 text-xs font-medium text-slate-600">
-                                Si este material debe cotizarse por metro,
-                                unidad suelta o tramo, primero actívale
-                                "Cotización proporcional" en Productos.
-                              </p>
-                            )}
+                            <p className="mt-3 rounded-2xl bg-white p-3 text-sm font-semibold leading-6 text-slate-700">
+                              {selectedCatalogPricing.isProportional
+                                ? `Vas a cotizar ${selectedCatalogPricing.quantity} ${getUnitDisplayName(selectedCatalogPricing.quoteUnit)}.`
+                                : `Este producto está configurado como unitario.`}
+                            </p>
                           </div>
                         )}
                       </div>
 
-                      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      <div className="mt-5 grid gap-3 sm:grid-cols-2">
                         <div>
-                          <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                          <label className="mb-2 block text-xs font-black uppercase tracking-wide text-slate-500">
                             {getQuantityLabel(selectedCatalogPricing)}
                           </label>
                           <input
@@ -2145,17 +2400,10 @@ export const AdminQuoteEditorPage = () => {
                                 : "Cantidad"
                             }
                           />
-                          {selectedCatalogPricing?.isProportional && (
-                            <p className="mt-1 text-xs font-medium text-emerald-700">
-                              Esta cantidad se tomará como{" "}
-                              {selectedCatalogPricing.quoteUnit}, no como{" "}
-                              {selectedCatalogPricing.purchaseUnit} completo.
-                            </p>
-                          )}
                         </div>
 
                         <div>
-                          <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                          <label className="mb-2 block text-xs font-black uppercase tracking-wide text-slate-500">
                             Descuento
                           </label>
                           <input
@@ -2187,7 +2435,7 @@ export const AdminQuoteEditorPage = () => {
                           type="button"
                           onClick={handleCloseItemModal}
                           disabled={savingItem}
-                          className="rounded-2xl bg-slate-100 px-5 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-200 disabled:opacity-60"
+                          className="rounded-2xl bg-slate-100 px-5 py-3 text-sm font-bold text-slate-600 hover:bg-slate-200 disabled:opacity-60"
                         >
                           Cancelar
                         </button>
@@ -2196,19 +2444,35 @@ export const AdminQuoteEditorPage = () => {
                           type="button"
                           onClick={handleCreateCatalogItem}
                           disabled={savingItem}
-                          className="rounded-2xl bg-[#2D5398] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#234684] disabled:opacity-60"
+                          className="rounded-2xl bg-[#2D5398] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#234684] disabled:opacity-60"
                         >
                           {savingItem ? "Agregando..." : "Agregar producto"}
                         </button>
                       </div>
                     </div>
                   ) : (
-                    <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm font-semibold text-slate-500">
-                      Selecciona un producto del listado para agregarlo a la
-                      cotización.
+                    <div className="flex min-h-[520px] flex-col items-center justify-center rounded-3xl bg-white text-center">
+                      <div className="relative grid h-32 w-32 place-items-center rounded-full bg-slate-50 text-6xl text-slate-400 ring-1 ring-slate-100">
+                        🛒
+                        <span className="absolute right-2 top-3 text-lg text-[#2D5398]">✦</span>
+                        <span className="absolute bottom-4 left-1 text-lg text-[#2D5398]">✦</span>
+                      </div>
+                      <h3 className="mt-8 text-xl font-black text-slate-900">
+                        Selecciona un producto
+                      </h3>
+                      <p className="mt-3 max-w-xs text-sm leading-6 text-slate-500">
+                        Elige un producto del catálogo para ver su información detallada aquí.
+                      </p>
+
+                      <div className="mt-8 rounded-2xl bg-slate-50 p-5 text-left">
+                        <p className="text-sm font-black text-[#2D5398]">💡 Consejo</p>
+                        <p className="mt-2 text-sm leading-6 text-slate-600">
+                          Usa los filtros de clasificación para encontrar más rápido el producto que necesitas.
+                        </p>
+                      </div>
                     </div>
                   )}
-                </div>
+                </aside>
               </div>
             )}
           </div>

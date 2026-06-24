@@ -9,6 +9,37 @@ export type QuoteStatus =
   | "rejected"
   | "expired";
 
+export type ProductClassification =
+  | "equipment"
+  | "supplied_material"
+  | "installation_consumable"
+  | "internal_cost";
+
+const INSTALLATION_SERVICES_GROUP = "installation_services_consumables";
+
+const productClassifications: ProductClassification[] = [
+  "equipment",
+  "supplied_material",
+  "installation_consumable",
+  "internal_cost",
+];
+
+const normalizeProductClassification = (
+  value?: string | null,
+): ProductClassification => {
+  return productClassifications.includes(value as ProductClassification)
+    ? (value as ProductClassification)
+    : "equipment";
+};
+
+const getProductClassificationFromPublicGroup = (
+  publicGroup?: string | null,
+): ProductClassification => {
+  return publicGroup === INSTALLATION_SERVICES_GROUP
+    ? "installation_consumable"
+    : "equipment";
+};
+
 export type QuoteDetail = {
   id: string;
   quote_number: string;
@@ -60,6 +91,7 @@ export type QuoteItem = {
   notes: string | null;
   visible_to_customer?: boolean | null;
   public_group?: string | null;
+  product_classification?: ProductClassification | string | null;
   name_internal?: string | null;
   name_public?: string | null;
   description?: string | null;
@@ -83,6 +115,7 @@ export type CatalogProduct = {
   category: string | null;
   subcategory: string | null;
   description: string | null;
+  image_url?: string | null;
   cost_price: number | string | null;
   price: number | string | null;
   stock: number | string | null;
@@ -96,6 +129,7 @@ export type CatalogProduct = {
   visible_to_customer?: boolean | null;
   public_name?: string | null;
   public_group?: string | null;
+  product_classification?: ProductClassification | string | null;
   item_type?: string | null;
 };
 
@@ -252,6 +286,7 @@ export type ManualQuoteItemPayload = {
   unit_type?: string | null;
   visible_to_customer?: boolean | null;
   public_group?: string | null;
+  product_classification?: ProductClassification | string | null;
   name_public?: string | null;
 };
 
@@ -277,6 +312,7 @@ export type CatalogQuoteItemPayload = {
   proportional_enabled?: boolean;
   visible_to_customer?: boolean | null;
   public_group?: string | null;
+  product_classification?: ProductClassification | string | null;
   name_public?: string | null;
   product_id?: string | null;
 };
@@ -321,7 +357,7 @@ export const getQuoteItems = async (quoteId: string) => {
   const { data, error } = await supabase
     .from("quote_items")
     .select(
-      "id, quote_id, item_type, item_name, item_description, sku, quantity, unit_type, unit_cost, unit_price, discount, subtotal, total_cost, profit, margin_percentage, notes, visible_to_customer, public_group, name_internal, name_public, description, quote_unit, purchase_unit, unit_content, proportional_enabled, created_at",
+      "id, quote_id, item_type, item_name, item_description, sku, quantity, unit_type, unit_cost, unit_price, discount, subtotal, total_cost, profit, margin_percentage, notes, visible_to_customer, public_group, product_classification, name_internal, name_public, description, quote_unit, purchase_unit, unit_content, proportional_enabled, created_at",
     )
     .eq("quote_id", quoteId)
     .order("created_at", { ascending: true });
@@ -363,12 +399,13 @@ export const updateQuoteFinancialTotals = async (
   if (error) throw error;
 };
 
-export const searchQuoteCatalogProducts = async (searchTerm: string) => {
+export const searchQuoteCatalogProducts = async (
+  searchTerm: string,
+  productClassification: ProductClassification | "all" = "all",
+) => {
   const normalizedSearch = searchTerm.trim();
 
-  if (normalizedSearch.length < 2) return [];
-
-  const { data, error } = await supabase
+  let query = supabase
     .from("products")
     .select(
       `
@@ -378,6 +415,7 @@ export const searchQuoteCatalogProducts = async (searchTerm: string) => {
   category,
   subcategory,
   description,
+  image_url,
   cost_price,
   price,
   stock,
@@ -391,15 +429,23 @@ export const searchQuoteCatalogProducts = async (searchTerm: string) => {
   visible_to_customer,
   public_name,
   public_group,
+  product_classification,
   item_type
 `,
     )
-    .eq("active", true)
-    .or(
+    .eq("active", true);
+
+  if (productClassification !== "all") {
+    query = query.eq("product_classification", productClassification);
+  }
+
+  if (normalizedSearch.length >= 2) {
+    query = query.or(
       `name.ilike.%${normalizedSearch}%,sku.ilike.%${normalizedSearch}%,category.ilike.%${normalizedSearch}%,subcategory.ilike.%${normalizedSearch}%`,
-    )
-    .order("name", { ascending: true })
-    .limit(20);
+    );
+  }
+
+  const { data, error } = await query.order("name", { ascending: true }).limit(40);
 
   if (error) throw error;
 
@@ -417,6 +463,9 @@ export const createCatalogQuoteItem = async (
     description: payload.item_description ?? null,
     visible_to_customer: payload.visible_to_customer ?? true,
     public_group: payload.public_group ?? null,
+    product_classification: normalizeProductClassification(
+      payload.product_classification,
+    ),
     unit_type: payload.unit_type ?? payload.quote_unit ?? "unidad",
     quote_unit: payload.quote_unit ?? "unidad",
     purchase_unit: payload.purchase_unit ?? null,
@@ -437,6 +486,9 @@ export const createManualQuoteItem = async (
     description: payload.item_description ?? null,
     visible_to_customer: payload.visible_to_customer ?? true,
     public_group: payload.public_group ?? null,
+    product_classification: normalizeProductClassification(
+      payload.product_classification,
+    ),
     unit_type: payload.unit_type ?? "unidad",
     quote_unit: payload.unit_type ?? "unidad",
     proportional_enabled: false,
@@ -677,6 +729,9 @@ export const applyTemplateToQuote = async (
       description: item.description ?? item.item_description ?? null,
       visible_to_customer: item.visible_to_customer ?? true,
       public_group: item.public_group ?? null,
+      product_classification: getProductClassificationFromPublicGroup(
+        item.public_group,
+      ),
     }));
 
   if (itemsToInsert.length > 0) {
@@ -832,6 +887,10 @@ const duplicateQuote = async (quoteId: string) => {
       description: item.description ?? item.item_description ?? null,
       visible_to_customer: item.visible_to_customer ?? true,
       public_group: item.public_group ?? null,
+      product_classification: normalizeProductClassification(
+        item.product_classification ??
+          getProductClassificationFromPublicGroup(item.public_group),
+      ),
     }));
 
     const { error: cloneItemsError } = await supabase
@@ -964,6 +1023,10 @@ const createQuoteVersion = async (quoteId: string) => {
       description: item.description ?? item.item_description ?? null,
       visible_to_customer: item.visible_to_customer ?? true,
       public_group: item.public_group ?? null,
+      product_classification: normalizeProductClassification(
+        item.product_classification ??
+          getProductClassificationFromPublicGroup(item.public_group),
+      ),
     }));
 
     const { error: cloneItemsError } = await supabase

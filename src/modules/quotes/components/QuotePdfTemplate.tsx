@@ -205,10 +205,16 @@ export const QuotePdfTemplate = ({
     DEFAULT_SUMMARY_GROUP_DESCRIPTION;
 
   const summaryGroupItems = items.filter(
-    (item) => item.public_group === INSTALLATION_SUMMARY_GROUP,
+    (item) =>
+      item.public_group === INSTALLATION_SUMMARY_GROUP ||
+      item.product_classification === "installation_consumable" ||
+      item.product_classification === "internal_cost",
   );
+
   const visibleItems = items.filter(
     (item) =>
+      item.product_classification !== "installation_consumable" &&
+      item.product_classification !== "internal_cost" &&
       item.public_group !== INSTALLATION_SUMMARY_GROUP &&
       item.visible_to_customer !== false,
   );

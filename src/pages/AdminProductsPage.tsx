@@ -2,6 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { supabaseAdmin } from "../lib/supabase";
 
+type ProductClassification =
+  | "equipment"
+  | "supplied_material"
+  | "installation_consumable"
+  | "internal_cost";
+
 type ProductRow = {
   id: string;
   name: string;
@@ -24,6 +30,9 @@ type ProductRow = {
   has_offer: boolean | null;
   offer_price: number | string | null;
   offer_label: string | null;
+  product_classification: ProductClassification | null;
+  public_group: string | null;
+  visible_to_customer: boolean | null;
   created_at: string | null;
 };
 
@@ -34,6 +43,7 @@ type ProductForm = {
   brand: string;
   category: string;
   subcategory: string;
+  product_classification: ProductClassification;
   price: string;
   cost_price: string;
   desired_margin: string;
@@ -96,6 +106,7 @@ const initialForm: ProductForm = {
   brand: "",
   category: "",
   subcategory: "",
+  product_classification: "equipment",
   price: "",
   cost_price: "0",
   desired_margin: "30",
@@ -118,6 +129,65 @@ const IVA_RATE = 0.19;
 const WOMPI_FEE_RATE = 0.032;
 const WOMPI_FIXED_FEE = 900;
 
+const INSTALLATION_SERVICES_GROUP = "installation_services_consumables";
+
+const PRODUCT_CLASSIFICATION_OPTIONS: Array<{
+  value: ProductClassification;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "equipment",
+    label: "Equipo principal",
+    description: "Visible en PDF con precio y descripción individual.",
+  },
+  {
+    value: "supplied_material",
+    label: "Material suministrado",
+    description: "Visible en PDF como material relevante del proyecto.",
+  },
+  {
+    value: "installation_consumable",
+    label: "Instalación y consumibles",
+    description: "Se agrupa en servicios de instalación y materiales consumibles.",
+  },
+  {
+    value: "internal_cost",
+    label: "Costo interno no visible",
+    description: "Afecta costo, utilidad y margen, pero no aparece al cliente.",
+  },
+];
+
+const getProductClassificationMeta = (classification?: string | null) => {
+  return (
+    PRODUCT_CLASSIFICATION_OPTIONS.find(
+      (option) => option.value === classification
+    ) ?? PRODUCT_CLASSIFICATION_OPTIONS[0]
+  );
+};
+
+const getProductVisibilityConfig = (
+  classification: ProductClassification
+): { public_group: string | null; visible_to_customer: boolean } => {
+  if (classification === "installation_consumable") {
+    return {
+      public_group: INSTALLATION_SERVICES_GROUP,
+      visible_to_customer: false,
+    };
+  }
+
+  if (classification === "internal_cost") {
+    return {
+      public_group: null,
+      visible_to_customer: false,
+    };
+  }
+
+  return {
+    public_group: null,
+    visible_to_customer: true,
+  };
+};
 
 const BRAND_OPTIONS = [
   "Hikvision",
@@ -133,21 +203,73 @@ const BRAND_OPTIONS = [
 ];
 
 const CATEGORY_OPTIONS = [
-  "Cámaras",
-  "Grabadores",
-  "Almacenamiento",
-  "Redes",
+  "CCTV",
+  "Canalización",
+  "Cableado estructurado",
   "Energía",
-  "Accesorios",
+  "Consumibles",
+  "Servicios técnicos",
+  "Montaje",
+  "Costos internos",
 ];
 
 const SUBCATEGORY_OPTIONS: Record<string, string[]> = {
-  Cámaras: ["Domo", "Bullet", "PTZ", "Solar", "Pinhole"],
-  Grabadores: ["DVR", "XVR", "NVR"],
-  Almacenamiento: ["Disco duro", "MicroSD", "SSD"],
-  Redes: ["Router", "Switch", "Access Point", "Cable UTP", "Patch Cord", "Fibra óptica"],
-  Energía: ["Fuente", "UPS", "Regulador"],
-  Accesorios: ["Balun", "Jack DC", "Caja de paso", "Bornera", "Cable"],
+  CCTV: [
+    "Bullet",
+    "Domo",
+    "Cámaras WiFi",
+    "Cámaras especiales",
+    "NVR",
+    "XVR",
+    "Disco duro",
+    "MicroSD",
+    "Balun",
+    "Video y conectividad",
+  ],
+  Canalización: [
+    "Accesorios de canalización",
+    "PVC",
+    "Cajas de paso",
+    "Canaletas",
+    "Racks",
+  ],
+  "Cableado estructurado": [
+    "Cable UTP",
+    "Conectores RJ45",
+    "Patch Cord",
+    "Accesorios de red",
+  ],
+  Energía: [
+    "Borneras",
+    "Fuentes",
+    "UPS",
+    "Estabilizadores",
+    "Cableado eléctrico",
+    "Tomas y multitomas",
+    "Cinta aislante",
+  ],
+  Consumibles: [
+    "Fijación",
+    "Conectividad",
+    "Protección",
+    "Soldadura",
+    "Consumibles generales",
+  ],
+  "Servicios técnicos": [
+    "Auxiliar técnico",
+    "Auxiliar alturas",
+    "Limpieza",
+    "Servicio eléctrico",
+  ],
+  Montaje: ["Brazo expansor"],
+  "Costos internos": [
+    "Transporte",
+    "Combustible",
+    "Peajes",
+    "Viáticos",
+    "Parqueaderos",
+    "Logística",
+  ],
 };
 
 const normalizeText = (text: string | null | undefined) => {
@@ -270,65 +392,119 @@ const detectCategoryFromText = (text: string) => {
 
   if (
     value.includes("camara") ||
+    value.includes("dahua") ||
+    value.includes("hikvision") ||
     value.includes("domo") ||
     value.includes("bullet") ||
     value.includes("ptz") ||
     value.includes("solar") ||
-    value.includes("pinhole")
-  ) {
-    return "Cámaras";
-  }
-
-  if (
+    value.includes("ranger") ||
+    value.includes("cruiser") ||
+    value.includes("ojo de pez") ||
     value.includes("dvr") ||
     value.includes("xvr") ||
     value.includes("nvr") ||
-    value.includes("grabador")
-  ) {
-    return "Grabadores";
-  }
-
-  if (
+    value.includes("grabador") ||
     value.includes("disco") ||
-    value.includes("micro") ||
-    value.includes("sd") ||
-    value.includes("ssd") ||
-    value.includes("almacenamiento")
+    value.includes("microsd") ||
+    value.includes("micro sd") ||
+    value.includes("balun") ||
+    value.includes("hdmi") ||
+    value.includes("vga")
   ) {
-    return "Almacenamiento";
+    return "CCTV";
   }
 
   if (
-    value.includes("router") ||
-    value.includes("switch") ||
-    value.includes("access") ||
-    value.includes("red") ||
+    value.includes("canaleta") ||
+    value.includes("tuberia") ||
+    value.includes("tubo") ||
+    value.includes("pvc") ||
+    value.includes("emt") ||
+    value.includes("rack") ||
+    value.includes("gabinete") ||
+    value.includes("caja de paso") ||
+    value.includes("caja electrica") ||
+    value.includes("brazo expansor") ||
+    value.includes("poste") ||
+    value.includes("posteria")
+  ) {
+    return "Canalización";
+  }
+
+  if (
     value.includes("utp") ||
+    value.includes("cat5") ||
+    value.includes("cat6") ||
+    value.includes("rj45") ||
     value.includes("patch cord") ||
     value.includes("fibra") ||
-    value.includes("cable de red") ||
-    value.includes("cable utp")
+    value.includes("router") ||
+    value.includes("switch") ||
+    value.includes("access point") ||
+    value.includes("repetidor")
   ) {
-    return "Redes";
+    return "Cableado estructurado";
   }
 
   if (
     value.includes("fuente") ||
     value.includes("ups") ||
+    value.includes("estabilizador") ||
     value.includes("regulador") ||
-    value.includes("energia")
+    value.includes("energia") ||
+    value.includes("eléctrico") ||
+    value.includes("electrico") ||
+    value.includes("bornera") ||
+    value.includes("multitoma") ||
+    value.includes("toma macho") ||
+    value.includes("toma hembra") ||
+    value.includes("cable duplex") ||
+    value.includes("cable dúplex") ||
+    value.includes("cable neopreno")
   ) {
     return "Energía";
   }
 
   if (
-    value.includes("balun") ||
-    value.includes("jack") ||
-    value.includes("caja") ||
-    value.includes("bornera") ||
-    value.includes("accesorio")
+    value.includes("abrazadera") ||
+    value.includes("tornillo") ||
+    value.includes("chazo") ||
+    value.includes("cinta") ||
+    value.includes("termoencogible") ||
+    value.includes("soldadura") ||
+    value.includes("terminal") ||
+    value.includes("bonera")
   ) {
-    return "Accesorios";
+    return "Consumibles";
+  }
+
+  if (
+    value.includes("auxiliar") ||
+    value.includes("mano de obra") ||
+    value.includes("servicio tecnico") ||
+    value.includes("servicio técnico") ||
+    value.includes("mantenimiento") ||
+    value.includes("limpieza")
+  ) {
+    return "Servicios técnicos";
+  }
+
+  if (value.includes("brazo") || value.includes("soporte") || value.includes("herraje")) {
+    return "Montaje";
+  }
+
+  if (
+    value.includes("transporte") ||
+    value.includes("combustible") ||
+    value.includes("peaje") ||
+    value.includes("viatico") ||
+    value.includes("viático") ||
+    value.includes("parqueadero") ||
+    value.includes("logistica") ||
+    value.includes("logística")
+  ) {
+    return "Costos internos";
   }
 
   return "all";
@@ -337,116 +513,224 @@ const detectCategoryFromText = (text: string) => {
 const detectCategoryAndSubcategoryFromText = (text: string) => {
   const value = normalizeText(text);
 
-  if (value.includes("domo")) {
-    return { category: "Cámaras", subcategory: "Domo" };
+  if (value.includes("bullet") || value.includes("bala")) {
+    return { category: "CCTV", subcategory: "Bullet" };
   }
 
-  if (value.includes("bullet")) {
-    return { category: "Cámaras", subcategory: "Bullet" };
+  if (value.includes("domo") || value.includes("torreta")) {
+    return { category: "CCTV", subcategory: "Domo" };
   }
 
-  if (value.includes("ptz")) {
-    return { category: "Cámaras", subcategory: "PTZ" };
+  if (
+    value.includes("ranger") ||
+    value.includes("cruiser") ||
+    value.includes("wifi") ||
+    value.includes("wi-fi")
+  ) {
+    return { category: "CCTV", subcategory: "Cámaras WiFi" };
   }
 
-  if (value.includes("solar")) {
-    return { category: "Cámaras", subcategory: "Solar" };
-  }
-
-  if (value.includes("pinhole")) {
-    return { category: "Cámaras", subcategory: "Pinhole" };
+  if (
+    value.includes("ptz") ||
+    value.includes("ojo de pez") ||
+    value.includes("solar")
+  ) {
+    return { category: "CCTV", subcategory: "Cámaras especiales" };
   }
 
   if (value.includes("camara")) {
-    return { category: "Cámaras", subcategory: "Domo" };
-  }
-
-  if (value.includes("dvr")) {
-    return { category: "Grabadores", subcategory: "DVR" };
-  }
-
-  if (value.includes("xvr")) {
-    return { category: "Grabadores", subcategory: "XVR" };
+    return { category: "CCTV", subcategory: "Bullet" };
   }
 
   if (value.includes("nvr")) {
-    return { category: "Grabadores", subcategory: "NVR" };
+    return { category: "CCTV", subcategory: "NVR" };
+  }
+
+  if (value.includes("dvr") || value.includes("xvr")) {
+    return { category: "CCTV", subcategory: "XVR" };
   }
 
   if (value.includes("disco")) {
-    return { category: "Almacenamiento", subcategory: "Disco duro" };
+    return { category: "CCTV", subcategory: "Disco duro" };
   }
 
-  if (value.includes("micro") || value.includes("sd")) {
-    return { category: "Almacenamiento", subcategory: "MicroSD" };
+  if (value.includes("microsd") || value.includes("micro sd")) {
+    return { category: "CCTV", subcategory: "MicroSD" };
   }
 
-  if (value.includes("ssd")) {
-    return { category: "Almacenamiento", subcategory: "SSD" };
+  if (value.includes("balun")) {
+    return { category: "CCTV", subcategory: "Balun" };
   }
 
-  if (value.includes("router")) {
-    return { category: "Redes", subcategory: "Router" };
+  if (value.includes("hdmi") || value.includes("vga")) {
+    return { category: "CCTV", subcategory: "Video y conectividad" };
   }
 
-  if (value.includes("switch")) {
-    return { category: "Redes", subcategory: "Switch" };
+  if (value.includes("canaleta")) {
+    return { category: "Canalización", subcategory: "Canaletas" };
   }
 
-  if (value.includes("access")) {
-    return { category: "Redes", subcategory: "Access Point" };
+  if (value.includes("pvc") || value.includes("tuberia") || value.includes("tubo")) {
+    return { category: "Canalización", subcategory: "PVC" };
+  }
+
+  if (value.includes("caja")) {
+    return { category: "Canalización", subcategory: "Cajas de paso" };
+  }
+
+  if (value.includes("rack") || value.includes("gabinete")) {
+    return { category: "Canalización", subcategory: "Racks" };
+  }
+
+  if (
+    value.includes("abrazadera") ||
+    value.includes("broca") ||
+    value.includes("puntilla") ||
+    value.includes("kit tension") ||
+    value.includes("kit tensión") ||
+    value.includes("espiral")
+  ) {
+    return {
+      category: "Canalización",
+      subcategory: "Accesorios de canalización",
+    };
   }
 
   if (
     value.includes("utp") ||
-    value.includes("cable utp") ||
+    value.includes("cat5") ||
+    value.includes("cat6") ||
     value.includes("cable de red")
   ) {
-    return { category: "Redes", subcategory: "Cable UTP" };
+    return { category: "Cableado estructurado", subcategory: "Cable UTP" };
+  }
+
+  if (value.includes("rj45")) {
+    return {
+      category: "Cableado estructurado",
+      subcategory: "Conectores RJ45",
+    };
   }
 
   if (value.includes("patch cord")) {
-    return { category: "Redes", subcategory: "Patch Cord" };
+    return { category: "Cableado estructurado", subcategory: "Patch Cord" };
   }
 
-  if (value.includes("fibra")) {
-    return { category: "Redes", subcategory: "Fibra óptica" };
+  if (
+    value.includes("router") ||
+    value.includes("switch") ||
+    value.includes("access") ||
+    value.includes("repetidor") ||
+    value.includes("capucha")
+  ) {
+    return {
+      category: "Cableado estructurado",
+      subcategory: "Accesorios de red",
+    };
   }
 
   if (value.includes("fuente")) {
-    return { category: "Energía", subcategory: "Fuente" };
+    return { category: "Energía", subcategory: "Fuentes" };
   }
 
   if (value.includes("ups")) {
     return { category: "Energía", subcategory: "UPS" };
   }
 
-  if (value.includes("regulador")) {
-    return { category: "Energía", subcategory: "Regulador" };
-  }
-
-  if (value.includes("balun")) {
-    return { category: "Accesorios", subcategory: "Balun" };
-  }
-
-  if (value.includes("jack")) {
-    return { category: "Accesorios", subcategory: "Jack DC" };
-  }
-
-  if (value.includes("caja")) {
-    return { category: "Accesorios", subcategory: "Caja de paso" };
-  }
-
-  if (value.includes("bornera")) {
-    return { category: "Accesorios", subcategory: "Bornera" };
+  if (value.includes("estabilizador") || value.includes("regulador")) {
+    return { category: "Energía", subcategory: "Estabilizadores" };
   }
 
   if (
-    value.includes("cable poder") ||
-    value.includes("cable energia") ||
-    value.includes("cable camara")
+    value.includes("cable duplex") ||
+    value.includes("cable dúplex") ||
+    value.includes("cable neopreno")
   ) {
-    return { category: "Accesorios", subcategory: "Cable" };
+    return { category: "Energía", subcategory: "Cableado eléctrico" };
+  }
+
+  if (
+    value.includes("toma macho") ||
+    value.includes("toma hembra") ||
+    value.includes("multitoma")
+  ) {
+    return { category: "Energía", subcategory: "Tomas y multitomas" };
+  }
+
+  if (value.includes("bornera")) {
+    return { category: "Energía", subcategory: "Borneras" };
+  }
+
+  if (value.includes("cinta aislante")) {
+    return { category: "Energía", subcategory: "Cinta aislante" };
+  }
+
+  if (
+    value.includes("tornillo") ||
+    value.includes("chazo") ||
+    value.includes("abrazadera") ||
+    value.includes("puntilla")
+  ) {
+    return { category: "Consumibles", subcategory: "Fijación" };
+  }
+
+  if (value.includes("terminal") || value.includes("bonera")) {
+    return { category: "Consumibles", subcategory: "Conectividad" };
+  }
+
+  if (value.includes("cinta") || value.includes("termoencogible")) {
+    return { category: "Consumibles", subcategory: "Protección" };
+  }
+
+  if (value.includes("soldadura")) {
+    return { category: "Consumibles", subcategory: "Soldadura" };
+  }
+
+  if (value.includes("auxiliar")) {
+    return { category: "Servicios técnicos", subcategory: "Auxiliar técnico" };
+  }
+
+  if (value.includes("alturas")) {
+    return { category: "Servicios técnicos", subcategory: "Auxiliar alturas" };
+  }
+
+  if (value.includes("limpieza") || value.includes("mantenimiento")) {
+    return { category: "Servicios técnicos", subcategory: "Limpieza" };
+  }
+
+  if (value.includes("electrico") || value.includes("eléctrico")) {
+    return {
+      category: "Servicios técnicos",
+      subcategory: "Servicio eléctrico",
+    };
+  }
+
+  if (value.includes("brazo") || value.includes("soporte") || value.includes("herraje")) {
+    return { category: "Montaje", subcategory: "Brazo expansor" };
+  }
+
+  if (value.includes("transporte")) {
+    return { category: "Costos internos", subcategory: "Transporte" };
+  }
+
+  if (value.includes("combustible")) {
+    return { category: "Costos internos", subcategory: "Combustible" };
+  }
+
+  if (value.includes("peaje")) {
+    return { category: "Costos internos", subcategory: "Peajes" };
+  }
+
+  if (value.includes("viatico") || value.includes("viático")) {
+    return { category: "Costos internos", subcategory: "Viáticos" };
+  }
+
+  if (value.includes("parqueadero")) {
+    return { category: "Costos internos", subcategory: "Parqueaderos" };
+  }
+
+  if (value.includes("logistica") || value.includes("logística")) {
+    return { category: "Costos internos", subcategory: "Logística" };
   }
 
   return { category: "", subcategory: "" };
@@ -548,7 +832,7 @@ export const AdminProductsPage = () => {
     const { data, error } = await supabaseAdmin
       .from("products")
       .select(
-        "id, name, slug, sku, brand, category, subcategory, price, cost_price, description, image_url, stock, sale_unit, public_sale_unit, quote_unit, purchase_unit, unit_content, quote_by_unit, has_offer, offer_price, offer_label, created_at"
+        "id, name, slug, sku, brand, category, subcategory, price, cost_price, description, image_url, stock, sale_unit, public_sale_unit, quote_unit, purchase_unit, unit_content, quote_by_unit, has_offer, offer_price, offer_label, product_classification, public_group, visible_to_customer, created_at"
       )
       .order("created_at", { ascending: false });
 
@@ -985,6 +1269,9 @@ export const AdminProductsPage = () => {
 
     setIsSaving(true);
 
+    const productClassification = form.product_classification || "equipment";
+    const visibilityConfig = getProductVisibilityConfig(productClassification);
+
     const payload = {
       name: form.name.trim(),
       slug: form.slug.trim(),
@@ -1004,6 +1291,9 @@ export const AdminProductsPage = () => {
       purchase_unit: form.purchase_unit || "unidad",
       unit_content: Number(form.unit_content || 1),
       quote_by_unit: form.quote_by_unit,
+      product_classification: productClassification,
+      public_group: visibilityConfig.public_group,
+      visible_to_customer: visibilityConfig.visible_to_customer,
       has_offer: form.has_offer,
       offer_price:
         form.has_offer && form.offer_price.trim()
@@ -1032,7 +1322,7 @@ export const AdminProductsPage = () => {
         .from("products")
         .insert(payload)
         .select(
-          "id, name, slug, sku, brand, category, subcategory, price, cost_price, description, image_url, stock, sale_unit, public_sale_unit, quote_unit, purchase_unit, unit_content, quote_by_unit, has_offer, offer_price, offer_label, created_at"
+          "id, name, slug, sku, brand, category, subcategory, price, cost_price, description, image_url, stock, sale_unit, public_sale_unit, quote_unit, purchase_unit, unit_content, quote_by_unit, has_offer, offer_price, offer_label, product_classification, public_group, visible_to_customer, created_at"
         )
         .single();
 
@@ -1081,6 +1371,7 @@ export const AdminProductsPage = () => {
       brand: product.brand ?? "",
       category: product.category ?? "",
       subcategory: product.subcategory ?? "",
+      product_classification: product.product_classification ?? "equipment",
       price: String(product.price ?? ""),
       cost_price: String(product.cost_price ?? 0),
       desired_margin: "30",
@@ -1721,6 +2012,29 @@ export const AdminProductsPage = () => {
                     <option key={subcategory} value={subcategory}>{subcategory}</option>
                   ))}
                 </select>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">Clasificación para cotizaciones</label>
+                <select
+                  value={form.product_classification}
+                  onChange={(e) =>
+                    handleChange(
+                      "product_classification",
+                      e.target.value as ProductClassification
+                    )
+                  }
+                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#2D5398]"
+                >
+                  {PRODUCT_CLASSIFICATION_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  {getProductClassificationMeta(form.product_classification).description}
+                </p>
               </div>
 
               <div className="md:col-span-2 xl:col-span-3">
@@ -2462,6 +2776,11 @@ export const AdminProductsPage = () => {
                                 } · Ecommerce: ${product.public_sale_unit ?? product.sale_unit ?? "unidad"} · Cotiza: ${product.quote_unit ?? product.sale_unit ?? "unidad"}`
                               : `Ecommerce: ${product.public_sale_unit ?? product.sale_unit ?? "unidad"}`}
                           </div>
+                          <div className="mt-2">
+                            <span className="inline-flex rounded-full bg-[#2D5398]/10 px-2.5 py-1 text-xs font-bold text-[#2D5398]">
+                              {getProductClassificationMeta(product.product_classification).label}
+                            </span>
+                          </div>
                         </td>
                         <td className="px-3 py-4">
                           {formatPrice(product.price)}
@@ -2609,6 +2928,9 @@ export const AdminProductsPage = () => {
                                 } · Ecommerce: ${product.public_sale_unit ?? product.sale_unit ?? "unidad"} · Cotiza: ${product.quote_unit ?? product.sale_unit ?? "unidad"}`
                               : `Ecommerce: ${product.public_sale_unit ?? product.sale_unit ?? "unidad"}`}
                           </p>
+                          <span className="mt-2 inline-flex rounded-full bg-[#2D5398]/10 px-2.5 py-1 text-xs font-bold text-[#2D5398]">
+                            {getProductClassificationMeta(product.product_classification).label}
+                          </span>
                         </div>
 
                         <div className="rounded-2xl bg-white p-3">
