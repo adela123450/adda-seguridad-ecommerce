@@ -539,8 +539,8 @@ export const AccountPage = () => {
                 </div>
 
                 <div className="rounded-2xl border border-white/10 bg-white/10 p-3 text-center backdrop-blur-sm">
-                  <p className="text-lg font-bold">ERP</p>
-                  <p className="mt-1 text-[11px] text-blue-100">Escalable</p>
+                  <p className="text-lg font-bold">INTRUSIÓN</p>
+                  <p className="mt-1 text-[11px] text-blue-100">Especializada</p>
                 </div>
               </div>
             </div>

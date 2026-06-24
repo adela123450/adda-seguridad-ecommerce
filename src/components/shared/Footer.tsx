@@ -1,93 +1,95 @@
-import { BiChevronRight } from "react-icons/bi";
 import { Link } from "react-router-dom";
 import { socialLinks } from "../../constants/links";
 
 export const Footer = () => {
   return (
-    <footer className="mt-10 flex flex-wrap justify-between gap-10 bg-gray-950 px-12 py-16 text-sm text-slate-200 md:flex-nowrap">
-      {/* LOGO -> INICIO */}
-      <Link to="/" className="flex flex-1 items-center">
-        <img
-          src="/brands/logo-adda.jpg"
-          alt="ADDA Seguridad S.A.S."
-          className="h-10 object-contain sm:h-18 md:h-22 lg:h-26"
-        />
-      </Link>
-
-      {/* SUSCRÍBETE */}
-      <div className="flex flex-1 flex-col gap-4">
-        <p className="font-semibold uppercase tracking-tighter">Suscríbete</p>
-
-        <p className="text-xs font-medium">
-          Recibe las últimas noticias y ofertas
-        </p>
-
-        <div className="flex items-center gap-2 rounded-full border border-gray-800 px-3 py-3">
-          <input
-            type="email"
-            placeholder="Tu correo electrónico"
-            className="w-full bg-gray-950 pl-2 text-slate-200 focus:outline-none"
-          />
-
-          <button className="text-slate-200 transition-colors hover:text-white">
-            <BiChevronRight size={20} />
-          </button>
+    <footer className="mt-10 bg-black text-sm text-slate-200">
+      <div className="mx-auto grid max-w-7xl items-center gap-8 px-6 py-6 md:grid-cols-[0.7fr_1.3fr_1fr_1fr] md:px-12">
+        {/* LOGO */}
+        <div className="flex items-center justify-center">
+          <Link to="/" className="inline-flex">
+            <img
+              src="/brands/logo-adda.jpg"
+              alt="ADDA Seguridad S.A.S."
+              className="h-18 object-contain"
+            />
+          </Link>
         </div>
-      </div>
 
-      {/* POLÍTICAS */}
-      <div className="flex flex-1 flex-col gap-4">
-        <p className="font-semibold uppercase tracking-tighter">Políticas</p>
+        {/* DESCRIPCIÓN */}
+        <div className="flex items-center justify-center text-center md:justify-start md:text-left">
+          <p className="max-w-sm text-xs leading-7 text-slate-400">
+            Soluciones en seguridad electrónica, videovigilancia CCTV,
+            instalación profesional y soporte técnico especializado.
+          </p>
+        </div>
 
-        <nav className="flex flex-col gap-2 text-xs font-medium">
-          <Link
-            to="/Equipos de seguridad"
-            className="text-slate-300 hover:text-white"
-          >
-            Productos
-          </Link>
+        {/* POLÍTICAS */}
+        <div className="flex flex-col gap-3 text-center md:text-left">
+          <p className="font-semibold uppercase tracking-tighter text-white">
+            Políticas
+          </p>
 
-          <Link
-            to="/politica-privacidad"
-            className="text-slate-300 hover:text-white"
-          >
-            Política de Privacidad
-          </Link>
-
-          <Link to="/terminos" className="text-slate-300 hover:text-white">
-            Términos de Servicio
-          </Link>
-
-          <Link
-            to="/devoluciones"
-            className="text-slate-300 hover:text-white"
-          >
-            Devoluciones
-          </Link>
-        </nav>
-      </div>
-
-      {/* REDES */}
-      <div className="flex flex-1 flex-col gap-4">
-        <p className="font-semibold uppercase tracking-tighter">Síguenos</p>
-
-        <p className="text-xs leading-6">
-          No te pierdas las novedades que ADDA Seguridad S.A.S. tiene para ti...
-        </p>
-
-        <div className="mt-4 flex gap-3">
-          {socialLinks.map((link) => (
-            <a
-              key={link.id}
-              href={link.href}
-              target="_blank"
-              rel="noreferrer"
-              className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-base text-white transition hover:bg-blue-700"
+          <nav className="flex flex-col gap-2 text-xs font-medium">
+            <Link
+              to="/Equipos de seguridad"
+              className="text-slate-300 transition hover:text-white"
             >
-              <link.icon />
-            </a>
-          ))}
+              Productos
+            </Link>
+
+            <Link
+              to="/politica-privacidad"
+              className="text-slate-300 transition hover:text-white"
+            >
+              Política de Privacidad
+            </Link>
+
+            <Link
+              to="/terminos"
+              className="text-slate-300 transition hover:text-white"
+            >
+              Términos de Servicio
+            </Link>
+
+            <Link
+              to="/devoluciones"
+              className="text-slate-300 transition hover:text-white"
+            >
+              Devoluciones
+            </Link>
+          </nav>
         </div>
+
+        {/* REDES */}
+        <div className="flex flex-col items-center gap-3 text-center md:items-start md:text-left">
+          <p className="font-semibold uppercase tracking-tighter text-white">
+            Síguenos
+          </p>
+
+          <p className="text-xs leading-6 text-slate-400">
+            Conoce nuestras novedades y contenidos sobre seguridad electrónica.
+          </p>
+
+          <div className="flex gap-3">
+            {socialLinks.map((link) => (
+              <a
+                key={link.id}
+                href={link.href}
+                target="_blank"
+                rel="noreferrer"
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-base text-white transition hover:bg-blue-700"
+              >
+                <link.icon />
+              </a>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* COPYRIGHT */}
+      <div className="border-t border-white/5 py-3 text-center text-xs text-slate-600">
+        ADDA Seguridad S.A.S. · Todos los derechos reservados.
       </div>
     </footer>
   );

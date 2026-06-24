@@ -74,9 +74,8 @@ export const AboutPage = () => {
 
           <div className="space-y-6 text-[15px] leading-8 text-slate-600">
             <p>
-              ADDA Seguridad es una empresa orientada al suministro,
-              instalación y acompañamiento técnico en soluciones de seguridad
-              electrónica.
+              ADDA Seguridad es una empresa orientada al suministro, instalación
+              y acompañamiento técnico en soluciones de seguridad electrónica.
             </p>
 
             <p>
@@ -227,36 +226,32 @@ export const AboutPage = () => {
       </div>
 
       {/* CTA FINAL */}
-      <div
-        className="mt-8 overflow-hidden rounded-3xl border border-blue-100 bg-cover bg-center shadow-xl"
-        style={{
-          backgroundImage: "url('/images/heroes/banner-inferior.webp')",
-        }}
-      >
-        <div className="bg-gradient-to-r from-white/70 via-white/35 to-transparent px-8 py-12 text-left md:px-12 md:py-14">
-          <div className="max-w-2xl">
-            <span className="inline-flex rounded-full border border-[#2D5398]/15 bg-white/85 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-[#2D5398] shadow-sm backdrop-blur">
-              ASESORÍA PROFESIONAL
-            </span>
+      <div className="relative mt-8 overflow-hidden rounded-3xl bg-gradient-to-r from-slate-950 via-[#101935] to-[#2D5398] px-8 py-10 text-center text-white shadow-xl">
+        <div className="absolute -right-10 top-0 h-40 w-40 rounded-full bg-white/10 blur-3xl" />
+        <div className="absolute -left-10 bottom-0 h-40 w-40 rounded-full bg-blue-300/10 blur-3xl" />
 
-            <h2 className="mt-5 text-2xl font-bold text-slate-950 md:text-3xl">
-              ¿Quieres cotizar una solución de seguridad?
-            </h2>
+        <div className="relative">
+          <span className="inline-flex rounded-full border border-white/15 bg-white/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-blue-50 backdrop-blur-sm">
+            ASESORÍA PROFESIONAL
+          </span>
 
-            <p className="mt-3 max-w-xl text-base leading-7 text-slate-700">
-              Te ayudamos a encontrar equipos y soluciones adecuadas para tu
-              hogar, negocio o proyecto institucional.
-            </p>
+          <h2 className="mt-5 text-2xl font-bold md:text-3xl">
+            ¿Quieres cotizar una solución de seguridad?
+          </h2>
 
-            <a
-              href="https://wa.me/573015068866?text=Hola,%20quiero%20más%20información%20sobre%20ADDA%20Seguridad%20S.A.S."
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-6 inline-flex rounded-xl bg-[#2D5398] px-6 py-3 text-sm font-semibold text-white shadow-md transition hover:bg-[#234684]"
-            >
-              Solicitar cotización por WhatsApp
-            </a>
-          </div>
+          <p className="mx-auto mt-3 max-w-2xl text-slate-300">
+            Te ayudamos a encontrar equipos y soluciones adecuadas para tu
+            hogar, negocio o proyecto institucional.
+          </p>
+
+          <a
+            href="https://wa.me/573015068866?text=Hola,%20quiero%20más%20información%20sobre%20ADDA%20Seguridad%20S.A.S."
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-6 inline-flex rounded-2xl bg-white px-6 py-3 text-sm font-bold text-[#2D5398] shadow-md transition hover:-translate-y-0.5 hover:bg-blue-50 hover:shadow-lg"
+          >
+            Solicitar cotización por WhatsApp
+          </a>
         </div>
       </div>
     </section>
