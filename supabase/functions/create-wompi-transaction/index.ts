@@ -3,19 +3,37 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
-
 const WOMPI_PUBLIC_KEY = Deno.env.get("WOMPI_PUBLIC_KEY") ?? "";
 const WOMPI_INTEGRITY_SECRET = Deno.env.get("WOMPI_INTEGRITY_SECRET") ?? "";
 const SUPABASE_URL = Deno.env.get("ADDA_SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY =
   Deno.env.get("ADDA_SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const SITE_URL = Deno.env.get("SITE_URL") ?? "";
+
+const getSiteOrigin = () => {
+  try {
+    return new URL(SITE_URL).origin;
+  } catch {
+    return "";
+  }
+};
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": getSiteOrigin(),
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  Vary: "Origin",
+};
+
+class RequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number
+  ) {
+    super(message);
+  }
+}
 
 type RequestBody = {
   order_id: string;
@@ -56,7 +74,7 @@ serve(async (req) => {
     const body = (await req.json()) as RequestBody;
 
     if (!body.order_id) {
-      throw new Error("order_id es obligatorio.");
+      throw new RequestError("order_id es obligatorio.", 400);
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -70,13 +88,16 @@ serve(async (req) => {
     if (settingsError) throw settingsError;
 
     if (settings?.payment_mode === "solo_transferencia") {
-      throw new Error("Wompi no está habilitado en la configuración de pagos.");
+      throw new RequestError(
+        "Wompi no está habilitado en la configuración de pagos.",
+        400
+      );
     }
 
     const { data: order, error: orderError } = await supabase
       .from("orders")
       .select(
-        "id, order_number, total_price, email, customer_name, payment_method, payment_status",
+        "id, order_number, total_price, email, customer_name, payment_method, payment_status"
       )
       .eq("id", body.order_id)
       .maybeSingle();
@@ -84,29 +105,31 @@ serve(async (req) => {
     if (orderError) throw orderError;
 
     if (!order) {
-      throw new Error("La orden no existe.");
+      throw new RequestError("La orden no existe.", 404);
     }
 
     if (order.payment_method !== "wompi") {
-      throw new Error("La orden no fue creada con método de pago Wompi.");
+      throw new RequestError(
+        "La orden no fue creada con método de pago Wompi.",
+        400
+      );
     }
 
     if (order.payment_status === "approved") {
-      throw new Error("Esta orden ya fue pagada.");
+      throw new RequestError("Esta orden ya fue pagada.", 409);
     }
 
     const amountInCents = Math.round(Number(order.total_price) * 100);
 
     if (amountInCents <= 0) {
-      throw new Error("El valor de la orden no es válido.");
+      throw new RequestError("El valor de la orden no es válido.", 400);
     }
 
     const reference = `${order.order_number}-${Date.now()}`;
     const currency = "COP";
 
-    // Wompi requiere firma de integridad con referencia + monto en centavos + moneda + secreto.
     const integritySignature = await createSha256(
-      `${reference}${amountInCents}${currency}${WOMPI_INTEGRITY_SECRET}`,
+      `${reference}${amountInCents}${currency}${WOMPI_INTEGRITY_SECRET}`
     );
 
     const redirectUrl = `${SITE_URL}/pago/wompi/resultado?reference=${reference}`;
@@ -128,20 +151,10 @@ serve(async (req) => {
           order_number: order.order_number,
         },
         p_raw_response: null,
-      },
+      }
     );
 
     if (rpcError) throw rpcError;
-    console.log("WOMPI DEBUG", {
-      publicKeyPrefix: WOMPI_PUBLIC_KEY.slice(0, 9),
-      integritySecretPrefix: WOMPI_INTEGRITY_SECRET.slice(0, 15),
-      reference,
-      amountInCents,
-      currency,
-      signatureBase: `${reference}${amountInCents}${currency}[SECRET]`,
-      integritySignature,
-      redirectUrl,
-    });
 
     return new Response(
       JSON.stringify({
@@ -153,12 +166,6 @@ serve(async (req) => {
         redirectUrl,
         customerEmail: order.email,
         customerName: order.customer_name,
-
-        debug: {
-          publicKeyPrefix: WOMPI_PUBLIC_KEY.slice(0, 12),
-          integritySecretPrefix: WOMPI_INTEGRITY_SECRET.slice(0, 20),
-          signatureBase: `${reference}${amountInCents}${currency}[SECRET]`,
-        },
       }),
       {
         status: 200,
@@ -166,23 +173,26 @@ serve(async (req) => {
           ...corsHeaders,
           "Content-Type": "application/json",
         },
-      },
+      }
     );
   } catch (error) {
+    console.error("CREATE_WOMPI_TRANSACTION_ERROR", error);
+
+    const isRequestError = error instanceof RequestError;
+
     return new Response(
       JSON.stringify({
-        error:
-          error instanceof Error
-            ? error.message
-            : "No fue posible crear la transacción Wompi.",
+        error: isRequestError
+          ? error.message
+          : "No fue posible crear la transacción Wompi.",
       }),
       {
-        status: 400,
+        status: isRequestError ? error.status : 500,
         headers: {
           ...corsHeaders,
           "Content-Type": "application/json",
         },
-      },
+      }
     );
   }
 });

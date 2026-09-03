@@ -47,9 +47,21 @@ const createSha256 = async (value: string) => {
     .join("");
 };
 
+const secureEqual = (left: string, right: string) => {
+  if (left.length !== right.length) return false;
+
+  let difference = 0;
+
+  for (let index = 0; index < left.length; index += 1) {
+    difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
+  }
+
+  return difference === 0;
+};
+
 const getValueByPath = (
   payload: WompiEventPayload,
-  path: string,
+  path: string
 ): string => {
   const parts = path.split(".");
   let currentValue: unknown = payload.data;
@@ -83,10 +95,10 @@ const validateWompiSignature = async (payload: WompiEventPayload) => {
     .join("");
 
   const calculatedChecksum = await createSha256(
-    `${concatenatedValues}${timestamp}${WOMPI_EVENTS_SECRET}`,
+    `${concatenatedValues}${timestamp}${WOMPI_EVENTS_SECRET}`
   );
 
-  return calculatedChecksum === checksum;
+  return secureEqual(calculatedChecksum, checksum.toLowerCase());
 };
 
 const mapWompiStatus = (status: string) => {
@@ -113,15 +125,21 @@ Deno.serve(async (req) => {
     ) {
       return jsonResponse(
         { error: "Faltan variables de entorno requeridas." },
-        500,
+        500
       );
     }
 
     const payload = (await req.json()) as WompiEventPayload;
 
+    const isValidSignature = await validateWompiSignature(payload);
+
+    if (!isValidSignature) {
+      return jsonResponse({ error: "Firma Wompi inválida." }, 401);
+    }
+
     const supabase = createClient(
       ADDA_SUPABASE_URL,
-      ADDA_SUPABASE_SERVICE_ROLE_KEY,
+      ADDA_SUPABASE_SERVICE_ROLE_KEY
     );
 
     const transaction = payload.data?.transaction;
@@ -149,27 +167,9 @@ Deno.serve(async (req) => {
 
     if (webhookLogError) {
       return jsonResponse(
-        {
-          error: "No fue posible registrar el webhook.",
-          detail: webhookLogError.message,
-        },
-        400,
+        { error: "No fue posible registrar el webhook." },
+        400
       );
-    }
-
-    const isValidSignature = await validateWompiSignature(payload);
-
-    if (!isValidSignature) {
-      await supabase
-        .from("webhook_logs")
-        .update({
-          status: "rejected",
-          error_message: "Firma Wompi inválida.",
-          processed_at: new Date().toISOString(),
-        })
-        .eq("id", webhookLog.id);
-
-      return jsonResponse({ error: "Firma Wompi inválida." }, 401);
     }
 
     if (!reference || !wompiTransactionId) {
@@ -184,7 +184,7 @@ Deno.serve(async (req) => {
 
       return jsonResponse(
         { error: "Webhook sin referencia o transaction_id." },
-        400,
+        400
       );
     }
 
@@ -207,7 +207,7 @@ Deno.serve(async (req) => {
 
       return jsonResponse(
         { error: "No se encontró la transacción financiera." },
-        404,
+        404
       );
     }
 
@@ -229,7 +229,7 @@ Deno.serve(async (req) => {
           p_order_id: paymentTransaction.order_id,
           p_wompi_transaction_id: wompiTransactionId,
           p_reference: reference,
-        },
+        }
       );
 
       if (approveError) throw approveError;
@@ -247,7 +247,7 @@ Deno.serve(async (req) => {
           p_wompi_transaction_id: wompiTransactionId,
           p_reference: reference,
           p_payment_status: paymentStatus,
-        },
+        }
       );
 
       if (notApprovedError) throw notApprovedError;
@@ -263,14 +263,11 @@ Deno.serve(async (req) => {
 
     return jsonResponse({ received: true });
   } catch (error) {
+    console.error("WOMPI_WEBHOOK_ERROR", error);
+
     return jsonResponse(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Error procesando webhook Wompi.",
-      },
-      500,
+      { error: "Error procesando webhook Wompi." },
+      500
     );
   }
 });
