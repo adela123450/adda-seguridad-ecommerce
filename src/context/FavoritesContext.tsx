@@ -1,33 +1,9 @@
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-
-export type FavoriteItem = {
-  slug: string;
-  name: string;
-  brand: string;
-  img: string;
-  formattedPrice: string;
-};
-
-type FavoritesContextType = {
-  favorites: FavoriteItem[];
-  addToFavorites: (product: FavoriteItem) => void;
-  removeFromFavorites: (slug: string) => void;
-  toggleFavorite: (product: FavoriteItem) => void;
-  isFavorite: (slug: string) => boolean;
-  clearFavorites: () => void;
-  totalFavorites: number;
-};
-
-const FavoritesContext = createContext<FavoritesContextType | undefined>(
-  undefined
-);
+import {
+  FavoritesContext,
+  type FavoriteItem,
+} from "./favoritesContextValue";
 
 type Props = {
   children: ReactNode;
@@ -54,8 +30,12 @@ export const FavoritesProvider = ({ children }: Props) => {
 
   const addToFavorites = (product: FavoriteItem) => {
     setFavorites((currentFavorites) => {
-      const exists = currentFavorites.some((item) => item.slug === product.slug);
+      const exists = currentFavorites.some(
+        (item) => item.slug === product.slug
+      );
+
       if (exists) return currentFavorites;
+
       return [...currentFavorites, product];
     });
   };
@@ -68,7 +48,9 @@ export const FavoritesProvider = ({ children }: Props) => {
 
   const toggleFavorite = (product: FavoriteItem) => {
     setFavorites((currentFavorites) => {
-      const exists = currentFavorites.some((item) => item.slug === product.slug);
+      const exists = currentFavorites.some(
+        (item) => item.slug === product.slug
+      );
 
       if (exists) {
         return currentFavorites.filter((item) => item.slug !== product.slug);
@@ -103,16 +85,4 @@ export const FavoritesProvider = ({ children }: Props) => {
       {children}
     </FavoritesContext.Provider>
   );
-};
-
-export const useFavoritesContext = () => {
-  const context = useContext(FavoritesContext);
-
-  if (!context) {
-    throw new Error(
-      "useFavoritesContext debe usarse dentro de FavoritesProvider"
-    );
-  }
-
-  return context;
 };

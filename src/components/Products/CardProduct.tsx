@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { FaHeart, FaRegHeart } from "react-icons/fa";
 import { useFavorites } from "../../hooks/useFavorites";
@@ -29,12 +29,14 @@ export const CardProduct = ({
   offerLabel,
 }: Props) => {
   const { toggleFavorite, isFavorite } = useFavorites();
-  const [imageSrc, setImageSrc] = useState<string>(PLACEHOLDER_IMAGE);
 
-  useEffect(() => {
-    const imageUrlFromDb = img && img.trim() !== "" ? img.trim() : "";
-    setImageSrc(imageUrlFromDb || PLACEHOLDER_IMAGE);
-  }, [img]);
+  const normalizedImageSrc = img?.trim() || PLACEHOLDER_IMAGE;
+  const [failedImageSrc, setFailedImageSrc] = useState<string | null>(null);
+
+  const imageSrc =
+    failedImageSrc === normalizedImageSrc
+      ? PLACEHOLDER_IMAGE
+      : normalizedImageSrc;
 
   const favoriteActive = isFavorite(slug);
 
@@ -53,8 +55,8 @@ export const CardProduct = ({
     stockLabel === "Agotado"
       ? "border-red-100 bg-red-50 text-red-600"
       : stockLabel === "Pocas unidades"
-      ? "border-amber-100 bg-amber-50 text-amber-600"
-      : "border-emerald-100 bg-emerald-50 text-emerald-600";
+        ? "border-amber-100 bg-amber-50 text-amber-600"
+        : "border-emerald-100 bg-emerald-50 text-emerald-600";
 
   return (
     <article className="group relative flex w-full max-w-[285px] flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-md transition duration-300 hover:-translate-y-1 hover:shadow-xl">
@@ -86,7 +88,7 @@ export const CardProduct = ({
             src={imageSrc}
             alt={name}
             className="h-full w-full object-contain p-4 transition duration-300 group-hover:scale-105"
-            onError={() => setImageSrc(PLACEHOLDER_IMAGE)}
+            onError={() => setFailedImageSrc(normalizedImageSrc)}
           />
         </div>
       </Link>

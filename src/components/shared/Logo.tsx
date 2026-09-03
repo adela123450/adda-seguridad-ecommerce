@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
-import logo from "../../../../brands/logo-adda.jpg";
+
+const LOGO_SRC = "/brands/logo-adda.jpg";
 
 type LogoProps = {
   compact?: boolean;
@@ -10,7 +11,7 @@ export const Logo = ({ compact = false }: LogoProps) => {
     return (
       <Link to="/" className="flex items-center justify-center">
         <img
-          src={logo}
+          src={LOGO_SRC}
           alt="ADDA Seguridad"
           className="h-11 w-11 object-cover object-top"
         />
@@ -21,7 +22,7 @@ export const Logo = ({ compact = false }: LogoProps) => {
   return (
     <Link to="/" className="flex items-center justify-center">
       <img
-        src={logo}
+        src={LOGO_SRC}
         alt="ADDA Seguridad"
         className="h-16 w-auto object-contain md:h-24"
       />

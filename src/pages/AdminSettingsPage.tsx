@@ -12,6 +12,30 @@ type BusinessSettings = {
   payment_mode: PaymentMode | null;
 };
 
+const getPaymentMode = (value: PaymentMode | null): PaymentMode => {
+  if (
+    value === "solo_transferencia" ||
+    value === "solo_wompi" ||
+    value === "hibrido"
+  ) {
+    return value;
+  }
+
+  return "hibrido";
+};
+
+const fetchBusinessSettings = async () => {
+  const { data, error } = await supabaseAdmin
+    .from("business_settings")
+    .select("id, company_name, tax_mode, tax_rate, payment_mode")
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  return (data as BusinessSettings | null) ?? null;
+};
+
 export const AdminSettingsPage = () => {
   const [settings, setSettings] = useState<BusinessSettings | null>(null);
   const [taxMode, setTaxMode] = useState<TaxMode>("sin_iva");
@@ -23,39 +47,51 @@ export const AdminSettingsPage = () => {
   const loadSettings = async () => {
     setLoading(true);
 
-    const { data, error } = await supabaseAdmin
-      .from("business_settings")
-      .select("id, company_name, tax_mode, tax_rate, payment_mode")
-      .limit(1)
-      .maybeSingle();
-
-    if (error) {
-      console.error("Error cargando configuración:", error.message);
-      setMessage("No fue posible cargar la configuración.");
-      setLoading(false);
-      return;
-    }
-
-    if (data) {
-      const current = data as BusinessSettings;
+    try {
+      const current = await fetchBusinessSettings();
       setSettings(current);
-      setTaxMode(current.tax_mode === "con_iva" ? "con_iva" : "sin_iva");
 
-      const currentPaymentMode: PaymentMode =
-        current.payment_mode === "solo_transferencia" ||
-        current.payment_mode === "solo_wompi" ||
-        current.payment_mode === "hibrido"
-          ? current.payment_mode
-          : "hibrido";
-
-      setPaymentMode(currentPaymentMode);
+      if (current) {
+        setTaxMode(current.tax_mode === "con_iva" ? "con_iva" : "sin_iva");
+        setPaymentMode(getPaymentMode(current.payment_mode));
+      }
+    } catch (error) {
+      console.error("Error cargando configuración:", error);
+      setMessage("No fue posible cargar la configuración.");
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   useEffect(() => {
-    loadSettings();
+    let active = true;
+
+    fetchBusinessSettings()
+      .then((current) => {
+        if (!active) return;
+
+        setSettings(current);
+
+        if (current) {
+          setTaxMode(
+            current.tax_mode === "con_iva" ? "con_iva" : "sin_iva"
+          );
+          setPaymentMode(getPaymentMode(current.payment_mode));
+        }
+
+        setLoading(false);
+      })
+      .catch((error) => {
+        if (!active) return;
+
+        console.error("Error cargando configuración:", error);
+        setMessage("No fue posible cargar la configuración.");
+        setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   const handleSave = async () => {

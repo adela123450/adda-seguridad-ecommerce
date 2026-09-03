@@ -13,7 +13,7 @@ type ProductColor = {
   color: string;
 };
 
-type Product = {
+export type Product = {
   id: string;
   name: string;
   brand: string;
@@ -119,6 +119,8 @@ export const prepareProducts = (products: Product[]) => {
     };
   });
 };
+
+export type PreparedProduct = ReturnType<typeof prepareProducts>[number];
 
 export const getPreparedProductBySlug = (
   products: Product[],

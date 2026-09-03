@@ -1,4 +1,4 @@
-import { createBrowserRouter, Navigate } from "react-router-dom";
+import { createBrowserRouter } from "react-router-dom";
 import { RootLayout } from "../layouts/RootLayout";
 
 import {
@@ -8,7 +8,6 @@ import {
   ProductPage,
   CartPage,
   AdminProductsPage,
-  AdminDashboardPage,
   AdminOrdersPage,
   AdminFinancePage,
   AdminExpensesPage,
@@ -37,25 +36,7 @@ import { AdminLayout } from "../layouts/AdminLayout";
 import { ProtectedRoute } from "../components/admin/ProtectedRoute";
 import { AdminSettingsPage } from "../pages/AdminSettingsPage";
 import { AdminMultimediaMigrationPage } from "../pages/AdminMultimediaMigrationPage";
-import { usePermissions } from "../modules/rbac/hooks/usePermissions";
-
-const AdminIndexRedirect = () => {
-  const { role, loading, isSuperAdmin } = usePermissions();
-
-  if (loading) {
-    return (
-      <div className="flex min-h-[60vh] items-center justify-center text-sm text-slate-500">
-        Validando permisos...
-      </div>
-    );
-  }
-
-  if (isSuperAdmin || role === "admin") {
-    return <AdminDashboardPage />;
-  }
-
-  return <Navigate to="/admin/quotes" replace />;
-};
+import { AdminIndexRedirect } from "../components/admin/AdminIndexRedirect";
 
 export const router = createBrowserRouter([
   {
