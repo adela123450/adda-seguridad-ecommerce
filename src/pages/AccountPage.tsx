@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -209,62 +209,62 @@ export const AccountPage = () => {
     setMessage("");
   };
 
-  const loadOrders = async (customerId: string) => {
-    setLoadingOrders(true);
+  const loadOrders = useCallback(async (customerId: string) => {
+  setLoadingOrders(true);
 
-    const { data, error } = await supabase
-      .from("orders")
-      .select(
-        "id, order_number, status, created_at, total_price, payment_method, payment_status",
-      )
-      .eq("customer_id", customerId)
-      .order("created_at", { ascending: false });
+  const { data, error } = await supabase
+    .from("orders")
+    .select(
+      "id, order_number, status, created_at, total_price, payment_method, payment_status"
+    )
+    .eq("customer_id", customerId)
+    .order("created_at", { ascending: false });
 
-    if (error) {
-      console.error("Error cargando pedidos:", error.message);
-      setOrders([]);
-      setLoadingOrders(false);
-      return;
-    }
-
-    setOrders((data ?? []) as Order[]);
+  if (error) {
+    console.error("Error cargando pedidos:", error.message);
+    setOrders([]);
     setLoadingOrders(false);
-  };
+    return;
+  }
 
-  const loadCustomer = async () => {
-    setLoadingSession(true);
+  setOrders((data ?? []) as Order[]);
+  setLoadingOrders(false);
+}, []);
 
-    const { data: sessionData } = await supabase.auth.getSession();
-    const user = sessionData.session?.user;
+const loadCustomer = useCallback(async () => {
+  setLoadingSession(true);
 
-    if (!user) {
-      setCustomer(null);
-      setOrders([]);
-      setLoadingSession(false);
-      return;
-    }
+  const { data: sessionData } = await supabase.auth.getSession();
+  const user = sessionData.session?.user;
 
-    const { data, error } = await supabase
-      .from("customers")
-      .select("*")
-      .eq("auth_user_id", user.id)
-      .maybeSingle();
-
-    if (error || !data) {
-      setCustomer(null);
-      setOrders([]);
-      setLoadingSession(false);
-      return;
-    }
-
-    setCustomer(data);
-    await loadOrders(data.id);
+  if (!user) {
+    setCustomer(null);
+    setOrders([]);
     setLoadingSession(false);
-  };
+    return;
+  }
 
-  useEffect(() => {
-    loadCustomer();
-  }, []);
+  const { data, error } = await supabase
+    .from("customers")
+    .select("*")
+    .eq("auth_user_id", user.id)
+    .maybeSingle();
+
+  if (error || !data) {
+    setCustomer(null);
+    setOrders([]);
+    setLoadingSession(false);
+    return;
+  }
+
+  setCustomer(data);
+  await loadOrders(data.id);
+  setLoadingSession(false);
+}, [loadOrders]);
+
+useEffect(() => {
+  loadCustomer();
+}, [loadCustomer]);
 
   const getRegisterErrorMessage = (supabaseMessage: string) => {
     if (supabaseMessage === "User already registered") {

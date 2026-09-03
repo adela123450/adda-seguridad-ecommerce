@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { supabaseAdmin } from "../lib/supabase";
 
@@ -775,9 +775,9 @@ export const AdminProductsPage = () => {
   const [isRemovingTechnicalSheet, setIsRemovingTechnicalSheet] =
     useState(false);
 
-  const showToast = (type: ToastType, message: string) => {
-    setToast({ type, message });
-  };
+  const showToast = useCallback((type: ToastType, message: string) => {
+  setToast({ type, message });
+}, []);
 
   useEffect(() => {
     document.documentElement.setAttribute("translate", "no");
@@ -825,7 +825,7 @@ export const AdminProductsPage = () => {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async () => {
     setIsLoading(true);
     setLoadError(null);
 
@@ -846,12 +846,12 @@ export const AdminProductsPage = () => {
     }
 
     setProducts((data as ProductRow[]) ?? []);
-    setIsLoading(false);
-  };
+setIsLoading(false);
+}, [showToast]);
 
   useEffect(() => {
-    fetchProducts();
-  }, []);
+  fetchProducts();
+}, [fetchProducts]);
 
   const resetForm = () => {
     setForm(initialForm);
@@ -1620,7 +1620,7 @@ export const AdminProductsPage = () => {
     stockFilter,
   ]);
 
-  const sortedProducts = useMemo(() => {
+  const sortedProducts = (() => {
     return [...filteredProducts].sort((a, b) => {
       const aValue = getSortValue(a, sortKey);
       const bValue = getSortValue(b, sortKey);
@@ -1633,7 +1633,7 @@ export const AdminProductsPage = () => {
         ? String(aValue).localeCompare(String(bValue), "es")
         : String(bValue).localeCompare(String(aValue), "es");
     });
-  }, [filteredProducts, sortKey, sortDirection]);
+  })();
 
   const totalPages = Math.max(1, Math.ceil(sortedProducts.length / itemsPerPage));
 

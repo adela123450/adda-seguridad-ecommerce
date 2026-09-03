@@ -1,10 +1,5 @@
 import { useEffect, useState } from "react";
-import {
-  Link,
-  NavLink,
-  useLocation,
-  useNavigate,
-} from "react-router-dom";
+import { Link, NavLink, useNavigate } from "react-router-dom";
 import { navbarLinks } from "../../constants/links";
 import {
   HiOutlineSearch,
@@ -38,19 +33,10 @@ export const Navbar = () => {
   const { totalItems } = useCart();
   const { totalFavorites } = useFavorites();
   const navigate = useNavigate();
-  const location = useLocation();
 
   const [searchTerm, setSearchTerm] = useState("");
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [customerName, setCustomerName] = useState("");
-
-  useEffect(() => {
-    const isCatalogPage = location.pathname === "/Equipos de seguridad";
-
-    if (!isCatalogPage) {
-      setSearchTerm("");
-    }
-  }, [location.pathname]);
 
   useEffect(() => {
     const loadCustomerName = async () => {

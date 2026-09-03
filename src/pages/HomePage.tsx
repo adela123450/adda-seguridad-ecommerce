@@ -4,7 +4,7 @@ import { Brands } from "../components/home/Brands";
 import { FeatureGrid } from "../components/home/FeatureGrid";
 import { ProductGrid } from "../components/home/ProducGrid";
 
-import { prepareProducts } from "../helpers";
+import { prepareProducts, type Product } from "../helpers";
 
 import { supabase } from "../lib/supabase";
 
@@ -13,7 +13,7 @@ export const HomePage = () => {
     "loading" | "success" | "error"
   >("loading");
 
-  const [products, setProducts] = useState<any[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
 
   useEffect(() => {
     const testConnection = async () => {
@@ -47,7 +47,7 @@ export const HomePage = () => {
         return;
       }
 
-      setProducts(data || []);
+      setProducts((data ?? []) as Product[]);
     };
 
     getProducts();

@@ -357,7 +357,7 @@ export const AdminFinancePage = () => {
   const averageTicket =
     realSalesOrders.length > 0 ? realIncome / realSalesOrders.length : 0;
 
-  const productProfitRows = useMemo(() => {
+  const productProfitRows = (() => {
     const rows = new Map<string, ProductProfitRow>();
 
     realSalesItems.forEach((item) => {
@@ -412,7 +412,7 @@ export const AdminFinancePage = () => {
     });
 
     return Array.from(rows.values());
-  }, [realSalesItems, productCostMap, taxMode, taxRate]);
+  })();
 
   const grossProfit = productProfitRows.reduce(
     (total, product) => total + product.profit,
@@ -474,7 +474,7 @@ export const AdminFinancePage = () => {
       .sort((a, b) => b.amount - a.amount);
   }, [filteredExpenses, totalExpenses]);
 
-  const monthlyProfitRows = useMemo(() => {
+  const monthlyProfitRows = (() => {
     const rows = new Map<
       string,
       {
@@ -575,14 +575,7 @@ export const AdminFinancePage = () => {
     return Array.from(rows.values()).sort((a, b) =>
       b.month.localeCompare(a.month)
     );
-  }, [
-    realSalesOrders,
-    realSalesItems,
-    filteredExpenses,
-    productCostMap,
-    taxMode,
-    taxRate,
-  ]);
+  })();
 
   const bestMonth = [...monthlyProfitRows].sort(
     (a, b) => b.netProfit - a.netProfit
